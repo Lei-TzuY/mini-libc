@@ -50,8 +50,15 @@ if [ "$errno_output" != "errno-ok" ]; then
     exit 1
 fi
 
+strtol_output="$(./build/strtol_probe)"
+if [ "$strtol_output" != "strtol-ok" ]; then
+    echo "unexpected strtol probe output: $strtol_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
+./build/strtol_differential
 
-echo "runtime, syscall, memory, string, atoi, errno, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, and differential probes passed"

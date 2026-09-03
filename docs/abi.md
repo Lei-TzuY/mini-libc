@@ -57,12 +57,19 @@ syscall wrappers still do not translate failures to `-1` or update libc
 
 ## errno storage ABI
 
-`<errno.h>` currently exposes `ERANGE` with the Linux value 34 and defines
-`errno` as a modifiable `int` lvalue backed by `__mini_errno_location()`.
-The accessor currently returns one process-global, zero-initialized BSS slot.
-This is deliberately not thread-local because mini-libc has no TLS runtime yet.
-Keeping access behind the implementation-reserved accessor allows a later TLS
-implementation without changing source code that uses the `errno` macro.
+`<errno.h>` currently exposes the Linux values `EINVAL = 22` and `ERANGE = 34`
+and defines `errno` as a modifiable `int` lvalue backed by
+`__mini_errno_location()`. The accessor currently returns one process-global,
+zero-initialized BSS slot. This is deliberately not thread-local because
+mini-libc has no TLS runtime yet. Keeping access behind the
+implementation-reserved accessor allows a later TLS implementation without
+changing source code that uses the `errno` macro.
+
+`strtol` uses `EINVAL` for unsupported bases and `ERANGE` for positive or
+negative range overflow. Successful conversions and valid-base no-conversion
+cases do not clear an existing errno value. Raw `mini_sys_*` calls remain
+separate from this libc error contract and continue to return negative kernel
+errno values directly.
 
 The current storage is suitable for the single-threaded runtime milestone only.
 Future threading/TLS work must preserve the `errno` lvalue contract while making

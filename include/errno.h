@@ -1,7 +1,8 @@
 #ifndef MINI_LIBC_ERRNO_H
 #define MINI_LIBC_ERRNO_H
 
-/* Linux x86-64 errno value used by range-reporting libc routines. */
+/* Linux x86-64 errno values used by implemented libc routines. */
+#define EINVAL 22
 #define ERANGE 34
 
 /*
