@@ -4,10 +4,11 @@
 /*
  * Raw Linux x86-64 syscall boundary.
  *
- * These functions deliberately expose kernel return values directly:
- * successful calls return their normal non-negative result, while failures
- * return -errno in the inclusive range [-4095, -1].  They are not POSIX libc
- * wrappers and do not set errno.
+ * These functions deliberately expose kernel return values directly. Most
+ * failures are negative errno values in [-4095, -1], but raw Linux brk is an
+ * important exception: it returns the resulting program break and reports a
+ * refused request by returning the unchanged break. None of these wrappers are
+ * POSIX libc wrappers, and none set errno.
  */
 
 long mini_sys_read(int fd, void *buf, unsigned long count);

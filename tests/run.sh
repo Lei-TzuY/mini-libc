@@ -62,10 +62,17 @@ if [ "$strtoul_output" != "strtoul-ok" ]; then
     exit 1
 fi
 
+allocator_output="$(./build/allocator_probe)"
+if [ "$allocator_output" != "allocator-ok" ]; then
+    echo "unexpected allocator probe output: $allocator_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
 ./build/strtol_differential
 ./build/strtoul_differential
+./build/allocator_failure_test
 
-echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, and differential probes passed"

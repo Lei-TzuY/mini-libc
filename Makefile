@@ -18,18 +18,22 @@ STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
 ATOI_RENAMES := -Datoi=mini_test_atoi
 STRTOL_RENAMES := -Dstrtol=mini_test_strtol
 STRTOUL_RENAMES := -Dstrtoul=mini_test_strtoul
+ALLOCATOR_RENAMES := -Dmalloc=mini_test_malloc -Dfree=mini_test_free \
+                     -Dmini_sys_brk=mini_test_brk
 
 BUILD := build
 LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
 LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
-            $(BUILD)/atoi.o $(BUILD)/strtol.o $(BUILD)/strtoul.o $(BUILD)/errno.o
+            $(BUILD)/atoi.o $(BUILD)/strtol.o $(BUILD)/strtoul.o \
+            $(BUILD)/allocator.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/atoi_probe \
-            $(BUILD)/errno_probe $(BUILD)/strtol_probe $(BUILD)/strtoul_probe
+            $(BUILD)/errno_probe $(BUILD)/strtol_probe $(BUILD)/strtoul_probe \
+            $(BUILD)/allocator_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
-              $(BUILD)/strtoul_differential
+              $(BUILD)/strtoul_differential $(BUILD)/allocator_failure_test
 
 .PHONY: all clean test inspect
 
@@ -60,6 +64,9 @@ $(BUILD)/strtol.o: src/stdlib/strtol.c include/stdlib.h include/errno.h | $(BUIL
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/strtoul.o: src/stdlib/strtoul.c include/stdlib.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/allocator.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/errno.o: src/errno/errno.c include/errno.h | $(BUILD)
@@ -125,6 +132,15 @@ $(BUILD)/strtoul_diff_impl.o: src/stdlib/strtoul.c include/stdlib.h include/errn
 $(BUILD)/strtoul_differential.o: tests/strtoul_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
+$(BUILD)/allocator_probe.o: tests/allocator_probe.c include/mini/syscall.h include/stdlib.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/allocator_test_impl.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(ALLOCATOR_RENAMES) -c $< -o $@
+
+$(BUILD)/allocator_failure_test.o: tests/allocator_failure_test.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
+
 $(BUILD)/hello: $(BUILD)/hello.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/hello.o $(CRT0) $(LIBC)
 
@@ -152,6 +168,9 @@ $(BUILD)/strtol_probe: $(BUILD)/strtol_probe.o $(CRT0) $(LIBC)
 $(BUILD)/strtoul_probe: $(BUILD)/strtoul_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/strtoul_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/allocator_probe: $(BUILD)/allocator_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/allocator_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
@@ -165,6 +184,9 @@ $(BUILD)/strtol_differential: $(BUILD)/strtol_differential.o $(BUILD)/strtol_dif
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/strtoul_differential: $(BUILD)/strtoul_differential.o $(BUILD)/strtoul_diff_impl.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+$(BUILD)/allocator_failure_test: $(BUILD)/allocator_failure_test.o $(BUILD)/allocator_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 test: all
