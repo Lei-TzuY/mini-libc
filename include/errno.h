@@ -2,6 +2,7 @@
 #define MINI_LIBC_ERRNO_H
 
 /* Linux x86-64 errno values used by implemented libc routines. */
+#define EIO 5
 #define ENOMEM 12
 #define EINVAL 22
 #define ERANGE 34

@@ -60,8 +60,8 @@ break rather than `-ENOMEM`. No raw wrapper updates libc `errno`.
 
 ## errno storage ABI
 
-`<errno.h>` currently exposes the Linux values `ENOMEM = 12`, `EINVAL = 22`, and
-`ERANGE = 34` and defines `errno` as a modifiable `int` lvalue backed by
+`<errno.h>` currently exposes the Linux values `EIO = 5`, `ENOMEM = 12`,
+`EINVAL = 22`, and `ERANGE = 34` and defines `errno` as a modifiable `int` lvalue backed by
 `__mini_errno_location()`. The accessor currently returns one process-global,
 zero-initialized BSS slot. This is deliberately not thread-local because
 mini-libc has no TLS runtime yet. Keeping access behind the
@@ -78,7 +78,11 @@ growth. `calloc` uses `ENOMEM` when `nmemb * size` would overflow. `realloc`
 uses `ENOMEM` when the requested size cannot be represented or when a required
 replacement allocation cannot be obtained. Successful allocation/resizing calls
 do not clear an existing errno value. Raw
-`mini_sys_*` calls remain separate from this libc error contract.
+`mini_sys_*` calls remain separate from this libc error contract. `putchar` and
+`puts` translate a negative raw `write` result to its positive libc `errno`
+value. A zero-progress write while bytes remain is treated as `EIO` to prevent
+an unbounded retry loop. Successful stdio writes do not clear an existing
+`errno` value.
 
 The current storage is suitable for the single-threaded runtime milestone only.
 Future threading/TLS work must preserve the `errno` lvalue contract while making
@@ -101,6 +105,29 @@ empty names, and names containing `=` return null. Lookups do not modify
 `errno`. The current surface intentionally does not expose POSIX `environ`,
 `setenv`, `putenv`, or `unsetenv`; adding mutation later must define how retained
 storage and returned pointers are updated or invalidated.
+
+## Write-only stdio ABI
+
+`<stdio.h>` currently defines only `EOF`, `putchar`, and `puts`. There is no
+`FILE` object model, `stdin`/`stdout`/`stderr` symbol, buffering, formatted I/O,
+or input API yet. The implemented functions target the Linux process standard
+output descriptor directly through raw `mini_sys_write(1, ...)`; this keeps the
+observable standard-output behavior real without pretending a stream layer
+exists.
+
+`putchar(c)` converts `c` to `unsigned char`, writes exactly that byte, and
+returns the byte converted back to `int` on success. `puts(s)` writes all bytes
+before the terminating null and then one newline; it returns zero on success,
+which satisfies the standard nonnegative-success contract. Positive short
+writes advance the buffer and retry the unwritten suffix. A negative raw return
+sets `errno` to the corresponding positive Linux errno value and returns `EOF`.
+A zero raw return while bytes remain sets `EIO` and returns `EOF`. Partial output
+may therefore be visible before a later failure, while the first failing raw
+operation determines the reported errno.
+
+These calls are deliberately unbuffered and single-operation-state-free.
+Adding `FILE`, stream error indicators, buffering, or formatted I/O requires a
+separate ABI design rather than silently changing this minimal surface.
 
 ## Allocator ABI and ownership
 

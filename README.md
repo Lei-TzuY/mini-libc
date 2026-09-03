@@ -6,7 +6,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 trying to recreate glibc.
 
 ## Current milestone: runtime, core libc primitives, integer conversion,
-allocation, and environment access
+allocation, environment access, and write-only stdio
 
 The repository builds real ELF executables through this path:
 
@@ -68,6 +68,16 @@ unsuccessful lookups leave `errno` unchanged. The returned value pointer
 aliases the process environment storage. mini-libc does not currently expose
 the POSIX `environ` global or environment mutation APIs.
 
+The minimal `stdio.h` surface provides `EOF`, `putchar`, and `puts` as
+unbuffered write-only standard-output operations. `putchar` writes the
+`unsigned char` conversion of its argument and returns that byte as an `int` on
+success. `puts` writes the complete string followed by a newline and returns a
+nonnegative value on success. Both routines retry positive short writes, map a
+negative raw `write` result to libc `errno`, and return `EOF` on failure. A
+zero-progress write is treated as `EIO` so the retry loop cannot stall forever.
+Successful calls leave an existing `errno` value unchanged. `FILE`, `stdout`,
+buffering, formatted I/O, and input routines are not exposed yet.
+
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
 raw `brk` boundary.
@@ -90,8 +100,8 @@ break once it has initialized; callers must not move the break directly while
 allocator state is live. As in C, invalid-pointer and double-free calls are
 outside the supported contract.
 
-The `errno.h` surface defines Linux `ENOMEM` as 12, `EINVAL` as 22, and `ERANGE`
-as 34 and provides the standard modifiable `errno` lvalue through
+The `errno.h` surface defines Linux `EIO` as 5, `ENOMEM` as 12, `EINVAL` as 22,
+and `ERANGE` as 34 and provides the standard modifiable `errno` lvalue through
 `__mini_errno_location()`. The backing slot is process-global and zero-initialized,
 not thread-local; mini-libc does not have TLS setup yet. The accessor indirection
 keeps the source-level `errno` contract stable when TLS support arrives.
@@ -113,7 +123,8 @@ status, direct syscall behavior, mmap/munmap, deterministic memory/string/intege
 conversion edge cases, allocator alignment/reuse/split/coalescing behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
 fixed-seed allocation/resize stress, startup-backed `getenv`
-exact-match/empty/missing semantics, and the errno lvalue/storage contract.
+exact-match/empty/missing semantics, write-only stdio success/short-write/error
+behavior, and the errno lvalue/storage contract.
 Separate hosted differential executables compare the production
 memory/string/conversion sources against host libc where the target contract is
 comparable. A test-only fake-`brk` allocator harness deterministically
@@ -134,6 +145,7 @@ src/crt/             process entry and startup
 src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/stdlib/          conversion, allocation, and environment utilities
+src/stdio/           unbuffered write-only standard I/O
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -143,17 +155,19 @@ docs/                ABI contracts and design notes
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
 memory/string routines, `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
-`getenv`, `malloc`, `calloc`, `realloc`, and `free`, and `errno.h` currently
-provides the errno lvalue contract plus `ENOMEM`, `EINVAL`, and `ERANGE`.
+`getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
+`putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
+contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With startup-backed environment lookup in place, the next useful bounded slice
-can begin a write-only stdio foundation with `putchar` and `puts`, a minimal
-`stdio.h`, and explicit short-write/error tests. Formatted I/O, buffering,
-`FILE`, environment mutation, threading, and mmap-backed large allocations
-should remain separate later slices. Cross-repository integration will wait
-until mini-libc is stable on the system assembler/linker bootstrap path.
+With the write-only stdio foundation in place, the next useful bounded libc
+slice can add `strstr` with focused empty-needle, prefix/suffix, overlapping
+candidate, and unsigned-byte regression coverage. Formatted I/O, buffering,
+`FILE`, input routines, environment mutation, threading, and mmap-backed large
+allocations should remain separate later slices. Cross-repository integration
+will wait until mini-libc is stable on the system assembler/linker bootstrap
+path.

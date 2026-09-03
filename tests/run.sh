@@ -87,11 +87,22 @@ if [ "$getenv_output" != "getenv-ok" ]; then
     exit 1
 fi
 
+stdio_output="$(./build/stdio_probe)"
+expected_stdio_output='AABC
+
+stdio-ok'
+if [ "$stdio_output" != "$expected_stdio_output" ]; then
+    echo "unexpected stdio probe output:" >&2
+    printf '%s\n' "$stdio_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
 ./build/strtol_differential
 ./build/strtoul_differential
 ./build/allocator_failure_test
+./build/stdio_write_test
 
-echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"
