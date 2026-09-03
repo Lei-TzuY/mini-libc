@@ -60,20 +60,22 @@ read-only. The routine does not allocate, does not perform locale lookup, and
 leaves an existing `errno` value unchanged.
 
 The minimal `ctype.h` surface currently provides `isalpha`, `isalnum`, `isdigit`,
-`islower`, `isspace`, `isupper`, `tolower`, and `toupper` with a fixed C-locale
-classification and case-conversion contract. `isalpha` recognizes only the ASCII
-letters `A` through `Z` and `a` through `z`; `isdigit` recognizes only the ASCII
-bytes `0` through `9`; `isalnum` recognizes exactly the union of those two
-classes. `islower` recognizes only `a` through `z`, while `isupper` recognizes
-only `A` through `Z`. `isspace` recognizes space plus `\t`, `\n`, `\v`, `\f`,
-and `\r`. `tolower` maps `A` through `Z` to the corresponding lowercase ASCII
-letters and otherwise returns its valid input unchanged; `toupper` maps `a`
-through `z` to uppercase and otherwise returns its valid input unchanged. Their
-defined argument domain follows ISO C: callers pass either `EOF` or a value
-representable as `unsigned char`. `EOF` and every byte outside a matching
-classification produce zero from the classifiers, while both conversion
-routines return `EOF` unchanged. The routines do not allocate, perform locale
-lookup, or modify `errno`.
+`isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `tolower`, and `toupper`
+with a fixed C-locale classification and case-conversion contract. `isalpha`
+recognizes only the ASCII letters `A` through `Z` and `a` through `z`; `isdigit`
+recognizes only the ASCII bytes `0` through `9`; `isalnum` recognizes exactly the
+union of those two classes. `isgraph` recognizes the graphical ASCII bytes `!`
+through `~`, while `isprint` additionally includes ASCII space and therefore
+recognizes bytes from space through `~`. `islower` recognizes only `a` through
+`z`, while `isupper` recognizes only `A` through `Z`. `isspace` recognizes space
+plus `\t`, `\n`, `\v`, `\f`, and `\r`. `tolower` maps `A` through `Z` to the
+corresponding lowercase ASCII letters and otherwise returns its valid input
+unchanged; `toupper` maps `a` through `z` to uppercase and otherwise returns its
+valid input unchanged. Their defined argument domain follows ISO C: callers pass
+either `EOF` or a value representable as `unsigned char`. `EOF` and every byte
+outside a matching classification produce zero from the classifiers, while both
+conversion routines return `EOF` unchanged. The routines do not allocate,
+perform locale lookup, or modify `errno`.
 
 The searches and scans compare byte representations directly without allocating
 or copying. Implementations stay deliberately simple so overlap direction,
@@ -167,26 +169,26 @@ status, direct syscall behavior, mmap/munmap, deterministic memory/string/intege
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
 membership-scan, counting-scan, stateful tokenization, deterministic error-
 message edge cases, and exhaustive C-locale alphabetic/alphanumeric/digit/
-lowercase/uppercase/whitespace classification plus ASCII case conversion,
-allocator alignment/reuse/split/coalescing behavior, `calloc` zeroing/overflow
-semantics, `realloc` in-place/move/failure semantics, fixed-seed allocation/
-resize stress, startup-backed `getenv` exact-match/empty/missing semantics,
-write-only stdio success/short-write/error behavior, and the errno lvalue/storage
-contract. The `strtok` probe covers leading delimiter runs, delimiter changes
-between continuation calls, empty input and delimiter sets, end-of-stream,
-high-byte delimiters, sequence reset, errno preservation, and fixed-seed model
-comparison. The `strerror` probe locks the four exposed errno messages,
-deterministic unknown-code behavior, stable static storage across later calls,
-and errno preservation. The `ctype` probe checks `EOF` plus every value in the
-complete `unsigned char` domain and verifies that all implemented classification
-and conversion routines preserve an existing `errno` value. Separate hosted
-differential executables compare the production memory/string/conversion sources
-against host libc where the target contract is comparable, including a state-
-isolated `strtok` differential. A test-only fake-`brk` allocator harness
-deterministically verifies heap-growth refusal and `ENOMEM` without linking the
-freestanding allocator to the host heap. Hosted oracles are test-only; all
-library probes, including `allocator_probe`, `strtok_probe`, `strerror_probe`,
-and `ctype_probe`, remain freestanding mini-libc executables.
+graphical/lowercase/printable/uppercase/whitespace classification plus ASCII
+case conversion, allocator alignment/reuse/split/coalescing behavior, `calloc`
+zeroing/overflow semantics, `realloc` in-place/move/failure semantics, fixed-seed
+allocation/resize stress, startup-backed `getenv` exact-match/empty/missing
+semantics, write-only stdio success/short-write/error behavior, and the errno
+lvalue/storage contract. The `strtok` probe covers leading delimiter runs,
+delimiter changes between continuation calls, empty input and delimiter sets,
+end-of-stream, high-byte delimiters, sequence reset, errno preservation, and
+fixed-seed model comparison. The `strerror` probe locks the four exposed errno
+messages, deterministic unknown-code behavior, stable static storage across
+later calls, and errno preservation. The `ctype` probe checks `EOF` plus every
+value in the complete `unsigned char` domain and verifies that all implemented
+classification and conversion routines preserve an existing `errno` value.
+Separate hosted differential executables compare the production memory/string/
+conversion sources against host libc where the target contract is comparable,
+including a state-isolated `strtok` differential. A test-only fake-`brk`
+allocator harness deterministically verifies heap-growth refusal and `ENOMEM`
+without linking the freestanding allocator to the host heap. Hosted oracles are
+test-only; all library probes, including `allocator_probe`, `strtok_probe`,
+`strerror_probe`, and `ctype_probe`, remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -211,25 +213,25 @@ docs/                ABI contracts and design notes
 
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
-`isdigit`, `islower`, `isspace`, `isupper`, `tolower`, and `toupper`; `string.h`
-declares only implemented memory/string routines including `memchr`, `strcat`,
-`strncat`, `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`;
-`stdlib.h` declares `atoi`, `strtol`, `strtoul`, `getenv`, `malloc`, `calloc`,
-`realloc`, and `free`; `stdio.h` provides `EOF`, `putchar`, and `puts`; and
-`errno.h` currently provides the errno lvalue contract plus `EIO`, `ENOMEM`,
-`EINVAL`, and `ERANGE`.
+`isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `tolower`, and
+`toupper`; `string.h` declares only implemented memory/string routines including
+`memchr`, `strcat`, `strncat`, `strstr`, `strspn`, `strcspn`, `strpbrk`,
+`strtok`, and `strerror`; `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
+`getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
+`putchar`, and `puts`; and `errno.h` currently provides the errno lvalue contract
+plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With fixed C-locale case conversion in place, the next bounded `ctype.h` slice
-can add paired `isprint` + `isgraph`, preserving the same explicit `EOF`/
-`unsigned char` argument-domain contract and exhaustive byte-domain tests while
-locking the distinction that space is printable but not graphical. `ispunct`,
-`iscntrl`, `isxdigit`, and locale-aware behavior should remain separate later
-slices. Locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`,
-input routines, environment mutation, threading/TLS, and mmap-backed large
-allocations should also remain separate. Cross-repository integration will wait
-until mini-libc is stable on the system assembler/linker bootstrap path.
+With printable/graphical classification in place, the next bounded `ctype.h`
+slice can add `isxdigit` only, preserving the same explicit `EOF`/`unsigned char`
+argument-domain contract and exhaustive byte-domain tests while recognizing only
+ASCII decimal digits plus `A-F` and `a-f`. `iscntrl`, `ispunct`, and locale-aware
+behavior should remain separate later slices. Locale-sensitive `strcoll`/
+`strxfrm`, formatted I/O, buffering, `FILE`, input routines, environment
+mutation, threading/TLS, and mmap-backed large allocations should also remain
+separate. Cross-repository integration will wait until mini-libc is stable on
+the system assembler/linker bootstrap path.

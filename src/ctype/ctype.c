@@ -15,9 +15,19 @@ int isalnum(int c)
     return isalpha(c) || isdigit(c);
 }
 
+int isgraph(int c)
+{
+    return c >= 0x21 && c <= 0x7e;
+}
+
 int islower(int c)
 {
     return c >= 'a' && c <= 'z';
+}
+
+int isprint(int c)
+{
+    return c >= 0x20 && c <= 0x7e;
 }
 
 int isspace(int c)
