@@ -2,6 +2,7 @@
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MINI_ALLOC_ALIGNMENT 16UL
 
@@ -9,7 +10,7 @@ struct mini_block {
     size_t size;
     struct mini_block *next;
     unsigned long is_free;
-    unsigned long reserved;
+    size_t requested_size;
 };
 
 _Static_assert(sizeof(struct mini_block) == 32,
@@ -65,12 +66,12 @@ static int initialize_heap(void)
     return 1;
 }
 
-static void split_block(struct mini_block *block, size_t size)
+static struct mini_block *split_block(struct mini_block *block, size_t size)
 {
     size_t remaining = block->size - size;
 
     if (remaining < sizeof(struct mini_block) + MINI_ALLOC_ALIGNMENT) {
-        return;
+        return (struct mini_block *)0;
     }
 
     {
@@ -80,12 +81,13 @@ static void split_block(struct mini_block *block, size_t size)
         split->size = remaining - sizeof(struct mini_block);
         split->next = block->next;
         split->is_free = 1;
-        split->reserved = 0;
+        split->requested_size = 0;
         block->size = size;
         block->next = split;
         if (block_tail == block) {
             block_tail = split;
         }
+        return split;
     }
 }
 
@@ -129,7 +131,7 @@ static struct mini_block *grow_heap(size_t size)
     block->size = size;
     block->next = (struct mini_block *)0;
     block->is_free = 0;
-    block->reserved = 0;
+    block->requested_size = 0;
 
     if (block_tail != (struct mini_block *)0) {
         block_tail->next = block;
@@ -156,8 +158,9 @@ void *malloc(size_t size)
 
     block = find_free_block(aligned);
     if (block != (struct mini_block *)0) {
-        split_block(block, aligned);
+        (void)split_block(block, aligned);
         block->is_free = 0;
+        block->requested_size = size;
         return (void *)(block + 1);
     }
 
@@ -166,6 +169,7 @@ void *malloc(size_t size)
         errno = ENOMEM;
         return (void *)0;
     }
+    block->requested_size = size;
     return (void *)(block + 1);
 }
 
@@ -218,4 +222,99 @@ void free(void *ptr)
         blocks_adjacent(previous, block)) {
         merge_with_next(previous);
     }
+}
+
+void *realloc(void *ptr, size_t size)
+{
+    struct mini_block *block;
+    struct mini_block *next;
+    struct mini_block *split;
+    size_t aligned;
+    size_t combined;
+    size_t copy_size;
+    void *replacement;
+
+    if (ptr == (void *)0) {
+        return malloc(size);
+    }
+    if (size == 0) {
+        free(ptr);
+        return (void *)0;
+    }
+
+    block = ((struct mini_block *)ptr) - 1;
+    if (!align_size(size, &aligned)) {
+        errno = ENOMEM;
+        return (void *)0;
+    }
+
+    if (aligned <= block->size) {
+        split = split_block(block, aligned);
+        if (split != (struct mini_block *)0) {
+            merge_with_next(split);
+        }
+        block->requested_size = size;
+        return ptr;
+    }
+
+    next = block->next;
+    if (next != (struct mini_block *)0 && next->is_free &&
+        blocks_adjacent(block, next) &&
+        next->size <= (size_t)-1 - sizeof(struct mini_block) &&
+        block->size <= (size_t)-1 - sizeof(struct mini_block) - next->size) {
+        combined = block->size + sizeof(struct mini_block) + next->size;
+        if (combined >= aligned) {
+            merge_with_next(block);
+            split = split_block(block, aligned);
+            if (split != (struct mini_block *)0) {
+                merge_with_next(split);
+            }
+            block->requested_size = size;
+            return ptr;
+        }
+
+        if (next == block_tail) {
+            size_t growth = aligned - combined;
+
+            if (heap_end <= (__UINTPTR_TYPE__)-1 - (__UINTPTR_TYPE__)growth) {
+                __UINTPTR_TYPE__ target = heap_end + (__UINTPTR_TYPE__)growth;
+                long result = mini_sys_brk((void *)target);
+
+                if ((__UINTPTR_TYPE__)result == target) {
+                    heap_end = target;
+                    merge_with_next(block);
+                    block->size = aligned;
+                    block_tail = block;
+                    block->requested_size = size;
+                    return ptr;
+                }
+            }
+        }
+    }
+
+    if (block == block_tail) {
+        size_t growth = aligned - block->size;
+
+        if (heap_end <= (__UINTPTR_TYPE__)-1 - (__UINTPTR_TYPE__)growth) {
+            __UINTPTR_TYPE__ target = heap_end + (__UINTPTR_TYPE__)growth;
+            long result = mini_sys_brk((void *)target);
+
+            if ((__UINTPTR_TYPE__)result == target) {
+                heap_end = target;
+                block->size = aligned;
+                block->requested_size = size;
+                return ptr;
+            }
+        }
+    }
+
+    replacement = malloc(size);
+    if (replacement == (void *)0) {
+        return (void *)0;
+    }
+
+    copy_size = block->requested_size < size ? block->requested_size : size;
+    memcpy(replacement, ptr, copy_size);
+    free(ptr);
+    return replacement;
 }

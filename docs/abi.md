@@ -73,8 +73,10 @@ an existing errno value. `strtoul` accepts a leading minus and, when the parsed
 magnitude is representable, returns the unsigned negation modulo the unsigned
 long range; magnitude overflow still returns `ULONG_MAX` and sets `ERANGE`.
 `malloc` uses `ENOMEM` for request-size overflow or when raw `brk` refuses heap
-growth. `calloc` uses `ENOMEM` when `nmemb * size` would overflow. Successful
-`malloc`/`calloc` calls do not clear an existing errno value. Raw
+growth. `calloc` uses `ENOMEM` when `nmemb * size` would overflow. `realloc`
+uses `ENOMEM` when the requested size cannot be represented or when a required
+replacement allocation cannot be obtained. Successful allocation/resizing calls
+do not clear an existing errno value. Raw
 `mini_sys_*` calls remain separate from this libc error contract.
 
 The current storage is suitable for the single-threaded runtime milestone only.
@@ -83,19 +85,28 @@ the backing slot thread-local.
 
 ## Allocator ABI and ownership
 
-`malloc`/`calloc`/`free` currently form a single-threaded `brk`-backed allocator
-for the x86-64 target. The allocator aligns its initial heap frontier upward to
-16 bytes, uses 32-byte in-band block headers, and returns payload addresses aligned to 16
-bytes. A compile-time assertion locks the header size required by that target
-layout.
+`malloc`/`calloc`/`realloc`/`free` currently form a single-threaded
+`brk`-backed allocator for the x86-64 target. The allocator aligns its initial
+heap frontier upward to 16 bytes, uses 32-byte in-band block headers, and returns
+payload addresses aligned to 16 bytes. Each allocated header records both the
+aligned payload capacity and the exact requested byte count; `realloc` uses the
+latter so a move copies only bytes belonging to the old allocation. A
+compile-time assertion locks the header size required by that target layout.
 
 `malloc(0)` returns null without changing `errno`. `calloc` also returns null
 without changing `errno` when either `nmemb` or `size` is zero. Before allocating,
 `calloc` checks multiplication against `SIZE_MAX`; overflow returns null and sets
 `ENOMEM`. Successful `calloc` allocations are zero-filled byte-for-byte.
+`realloc(NULL, n)` follows `malloc(n)`. For a non-null pointer, size zero frees
+the block and returns null without changing `errno`. Nonzero shrinking updates
+the requested size and splits a useful remainder in place. Growth reuses an
+adjacent free block when sufficient, can extend a tail allocation through raw
+`brk`, and otherwise allocates a replacement, copies
+`min(old_requested_size, new_size)` bytes, then frees the old block. If resize
+fails, the old allocation remains owned by the caller with its contents intact.
 Nonzero `malloc` requests are rounded up to 16-byte multiples with checked
-arithmetic. A request whose rounding, header addition, or program-break calculation would overflow returns null and
-sets `ENOMEM`. Heap growth succeeds only when raw `mini_sys_brk(target)` returns
+arithmetic. A request whose rounding, header addition, or program-break calculation would
+overflow returns null and sets `ENOMEM`. Heap growth succeeds only when raw `mini_sys_brk(target)` returns
 the requested target; an unchanged break is treated as allocation failure and
 also produces `ENOMEM`.
 
@@ -109,8 +120,8 @@ double-free are outside the supported C contract and are not diagnosed.
 Once allocator state is initialized it owns the process program break. Calling
 `mini_sys_brk` to move the break behind the allocator would invalidate its
 metadata and is unsupported. Querying the break with `mini_sys_brk(NULL)` does
-not mutate it and is safe. Thread safety, TLS-aware locking, `realloc`, and an
-mmap-backed large-allocation path are later milestones.
+not mutate it and is safe. Thread safety, TLS-aware locking, tail-page return,
+and an mmap-backed large-allocation path are later milestones.
 
 ## ELF expectations
 

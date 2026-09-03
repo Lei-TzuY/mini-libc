@@ -74,6 +74,12 @@ if [ "$calloc_output" != "calloc-ok" ]; then
     exit 1
 fi
 
+realloc_output="$(./build/realloc_probe)"
+if [ "$realloc_output" != "realloc-ok" ]; then
+    echo "unexpected realloc probe output: $realloc_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
@@ -81,4 +87,4 @@ fi
 ./build/strtoul_differential
 ./build/allocator_failure_test
 
-echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, realloc, and differential probes passed"
