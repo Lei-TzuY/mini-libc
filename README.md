@@ -5,7 +5,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: runtime plus memory primitives
+## Current milestone: runtime plus memory/string core
 
 The repository builds real ELF executables through this path:
 
@@ -28,10 +28,11 @@ The raw syscall layer currently implements `read`, `write`, `close`, `lseek`,
 POSIX wrappers and `errno` will be added only when their semantics can be
 implemented completely.
 
-The first standard-library surface is now present in `string.h`:
-`memcpy`, `memmove`, `memset`, and `memcmp`. The implementation is deliberately
-byte-oriented rather than optimized so overlap direction, unsigned-byte
-comparison, return values, and zero-length behavior stay easy to audit.
+The standard `string.h` surface now includes the memory primitives `memcpy`,
+`memmove`, `memset`, and `memcmp`, plus `strlen`, `strcmp`, `strncmp`, `strcpy`,
+`strncpy`, `strchr`, and `strrchr`. Implementations stay deliberately simple so
+overlap direction, unsigned-byte comparisons, termination/padding semantics,
+and search behavior remain easy to audit.
 
 ## Build and verify
 
@@ -46,14 +47,15 @@ make inspect
 ```
 
 `make test` verifies process-stack decoding, propagation of `main`'s return
-status, direct syscall behavior, mmap/munmap, deterministic memory edge cases,
-and fixed-seed randomized memory cases. It also builds a separate hosted
-`memory_differential` executable that recompiles the production memory source
-under test-only symbol names and compares it against the host libc. That hosted
-oracle is test-only; `memory_probe` remains a freestanding mini-libc executable.
+status, direct syscall behavior, mmap/munmap, deterministic memory/string edge
+cases, and fixed-seed randomized cases. Separate hosted differential executables
+recompile the production memory/string sources under test-only symbol names and
+compare them against the host libc. Those hosted oracles are test-only;
+`memory_probe` and `string_probe` remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
-symbols in every freestanding milestone executable, including `memory_probe`.
+symbols in every freestanding milestone executable, including both library
+probes.
 
 ## Layout
 
@@ -78,7 +80,7 @@ contract.
 
 ## Next
 
-The next bounded layer is the string core (`strlen`, `strcmp`, `strncmp`,
-`strcpy`, `strncpy`, `strchr`, and `strrchr`) with deterministic edge cases and
-host differential tests. Cross-repository integration will wait until mini-libc
-is stable on the system assembler/linker bootstrap path.
+The next bounded layer is basic integer conversion (`atoi`, then `strtol` and
+`strtoul`) with explicit overflow and invalid-input behavior. Cross-repository
+integration will wait until mini-libc is stable on the system assembler/linker
+bootstrap path.

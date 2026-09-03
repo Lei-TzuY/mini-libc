@@ -32,6 +32,13 @@ if [ "$memory_output" != "memory-ok" ]; then
     exit 1
 fi
 
-./build/memory_differential
+string_output="$(./build/string_probe)"
+if [ "$string_output" != "string-ok" ]; then
+    echo "unexpected string probe output: $string_output" >&2
+    exit 1
+fi
 
-echo "runtime, syscall, memory, and differential probes passed"
+./build/memory_differential
+./build/string_differential
+
+echo "runtime, syscall, memory, string, and differential probes passed"

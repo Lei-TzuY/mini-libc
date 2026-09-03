@@ -1,0 +1,93 @@
+#include <string.h>
+
+size_t strlen(const char *s)
+{
+    size_t n = 0;
+
+    while (s[n] != '\0') {
+        ++n;
+    }
+    return n;
+}
+
+int strcmp(const char *left, const char *right)
+{
+    const unsigned char *a = (const unsigned char *)left;
+    const unsigned char *b = (const unsigned char *)right;
+
+    while (*a != 0 && *a == *b) {
+        ++a;
+        ++b;
+    }
+    return (int)*a - (int)*b;
+}
+
+int strncmp(const char *left, const char *right, size_t n)
+{
+    const unsigned char *a = (const unsigned char *)left;
+    const unsigned char *b = (const unsigned char *)right;
+    size_t i;
+
+    for (i = 0; i < n; ++i) {
+        if (a[i] != b[i] || a[i] == 0) {
+            return (int)a[i] - (int)b[i];
+        }
+    }
+    return 0;
+}
+
+char *strcpy(char *restrict dest, const char *restrict src)
+{
+    size_t i = 0;
+
+    do {
+        dest[i] = src[i];
+    } while (src[i++] != '\0');
+    return dest;
+}
+
+char *strncpy(char *restrict dest, const char *restrict src, size_t n)
+{
+    size_t i = 0;
+
+    while (i < n && src[i] != '\0') {
+        dest[i] = src[i];
+        ++i;
+    }
+    while (i < n) {
+        dest[i] = '\0';
+        ++i;
+    }
+    return dest;
+}
+
+char *strchr(const char *s, int c)
+{
+    unsigned char target = (unsigned char)c;
+
+    for (;;) {
+        if ((unsigned char)*s == target) {
+            return (char *)s;
+        }
+        if (*s == '\0') {
+            return (char *)0;
+        }
+        ++s;
+    }
+}
+
+char *strrchr(const char *s, int c)
+{
+    unsigned char target = (unsigned char)c;
+    const char *last = (const char *)0;
+
+    for (;;) {
+        if ((unsigned char)*s == target) {
+            last = s;
+        }
+        if (*s == '\0') {
+            return (char *)last;
+        }
+        ++s;
+    }
+}
