@@ -65,11 +65,13 @@ mini-libc has no TLS runtime yet. Keeping access behind the
 implementation-reserved accessor allows a later TLS implementation without
 changing source code that uses the `errno` macro.
 
-`strtol` uses `EINVAL` for unsupported bases and `ERANGE` for positive or
-negative range overflow. Successful conversions and valid-base no-conversion
-cases do not clear an existing errno value. Raw `mini_sys_*` calls remain
-separate from this libc error contract and continue to return negative kernel
-errno values directly.
+`strtol` and `strtoul` use `EINVAL` for unsupported bases and `ERANGE` for range
+overflow. Successful conversions and valid-base no-conversion cases do not clear
+an existing errno value. `strtoul` accepts a leading minus and, when the parsed
+magnitude is representable, returns the unsigned negation modulo the unsigned
+long range; magnitude overflow still returns `ULONG_MAX` and sets `ERANGE`.
+Raw `mini_sys_*` calls remain separate from this libc error contract and continue
+to return negative kernel errno values directly.
 
 The current storage is suitable for the single-threaded runtime milestone only.
 Future threading/TLS work must preserve the `errno` lvalue contract while making

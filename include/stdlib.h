@@ -3,5 +3,6 @@
 
 int atoi(const char *nptr);
 long strtol(const char *restrict nptr, char **restrict endptr, int base);
+unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
 
 #endif
