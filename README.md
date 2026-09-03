@@ -32,9 +32,11 @@ not update libc `errno`.
 
 The standard `string.h` surface includes the memory primitives `memcpy`,
 `memmove`, `memset`, and `memcmp`, plus `strlen`, `strcmp`, `strncmp`, `strcpy`,
-`strncpy`, `strchr`, and `strrchr`. Implementations stay deliberately simple so
-overlap direction, unsigned-byte comparisons, termination/padding semantics,
-and search behavior remain easy to audit.
+`strncpy`, `strchr`, `strrchr`, and `strstr`. `strstr` returns the first matching
+substring, treats an empty needle as a match at the haystack start, and compares
+bytes directly without allocating or copying. Implementations stay deliberately
+simple so overlap direction, unsigned-byte comparisons, termination/padding
+semantics, and search behavior remain easy to audit.
 
 The current `stdlib.h` integer-conversion surface contains `atoi`, `strtol`, and
 `strtoul`. `atoi` skips the six C whitespace characters, accepts one optional
@@ -120,7 +122,8 @@ make inspect
 
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
-conversion edge cases, allocator alignment/reuse/split/coalescing behavior,
+conversion and string-search edge cases, allocator alignment/reuse/split/coalescing
+behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
 fixed-seed allocation/resize stress, startup-backed `getenv`
 exact-match/empty/missing semantics, write-only stdio success/short-write/error
@@ -154,7 +157,8 @@ docs/                ABI contracts and design notes
 
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
-memory/string routines, `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
+memory/string routines including `strstr`, `stdlib.h` declares `atoi`, `strtol`,
+`strtoul`,
 `getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
 `putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
 contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
@@ -164,9 +168,9 @@ contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With the write-only stdio foundation in place, the next useful bounded libc
-slice can add `strstr` with focused empty-needle, prefix/suffix, overlapping
-candidate, and unsigned-byte regression coverage. Formatted I/O, buffering,
+With `strstr` in place, the next useful bounded string slice can add the paired
+`strspn` and `strcspn` counting scans with empty-set, repeated-byte, high-byte,
+and early-termination regression coverage. `strpbrk`, formatted I/O, buffering,
 `FILE`, input routines, environment mutation, threading, and mmap-backed large
 allocations should remain separate later slices. Cross-repository integration
 will wait until mini-libc is stable on the system assembler/linker bootstrap

@@ -11,6 +11,7 @@ char *mini_test_strcpy(char *restrict dest, const char *restrict src);
 char *mini_test_strncpy(char *restrict dest, const char *restrict src, size_t n);
 char *mini_test_strchr(const char *s, int c);
 char *mini_test_strrchr(const char *s, int c);
+char *mini_test_strstr(const char *haystack, const char *needle);
 
 static unsigned long rng_state = 0xe7037ed1a0b428dbUL;
 static char *(*volatile host_strncpy_fn)(char *, const char *, size_t) = strncpy;
@@ -61,6 +62,17 @@ int main(void)
         }
     }
 
+    {
+        const char high_text[] = {(char)0x80, (char)0xff, 'x', (char)0x80,
+                                  (char)0xff, 'y', '\0'};
+        const char high_needle[] = {(char)0x80, (char)0xff, 'y', '\0'};
+
+        if (pointer_offset(high_text, mini_test_strstr(high_text, high_needle)) !=
+            pointer_offset(high_text, strstr(high_text, high_needle))) {
+            return 9;
+        }
+    }
+
     for (case_no = 0; case_no < RANDOM_CASES; ++case_no) {
         size_t n;
         int c;
@@ -107,6 +119,12 @@ int main(void)
         host_ptr = strrchr(left, c);
         if (pointer_offset(left, mini_ptr) != pointer_offset(left, host_ptr)) {
             return 8;
+        }
+
+        mini_ptr = mini_test_strstr(left, right);
+        host_ptr = strstr(left, right);
+        if (pointer_offset(left, mini_ptr) != pointer_offset(left, host_ptr)) {
+            return 10;
         }
     }
 

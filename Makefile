@@ -14,7 +14,7 @@ MEMORY_RENAMES := -Dmemcpy=mini_test_memcpy -Dmemmove=mini_test_memmove \
 STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
                   -Dstrncmp=mini_test_strncmp -Dstrcpy=mini_test_strcpy \
                   -Dstrncpy=mini_test_strncpy -Dstrchr=mini_test_strchr \
-                  -Dstrrchr=mini_test_strrchr
+                  -Dstrrchr=mini_test_strrchr -Dstrstr=mini_test_strstr
 ATOI_RENAMES := -Datoi=mini_test_atoi
 STRTOL_RENAMES := -Dstrtol=mini_test_strtol
 STRTOUL_RENAMES := -Dstrtoul=mini_test_strtoul

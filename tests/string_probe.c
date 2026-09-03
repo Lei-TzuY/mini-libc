@@ -55,6 +55,27 @@ static int model_strncmp(const char *left, const char *right, size_t n)
     return 0;
 }
 
+static const char *model_strstr(const char *haystack, const char *needle)
+{
+    size_t start;
+
+    if (needle[0] == '\0') {
+        return haystack;
+    }
+    for (start = 0; haystack[start] != '\0'; ++start) {
+        size_t i = 0;
+
+        while (needle[i] != '\0' && haystack[start + i] != '\0' &&
+               (unsigned char)haystack[start + i] == (unsigned char)needle[i]) {
+            ++i;
+        }
+        if (needle[i] == '\0') {
+            return haystack + start;
+        }
+    }
+    return (const char *)0;
+}
+
 static void fill_string(char *s, size_t max_len)
 {
     size_t length = (size_t)(next_random() % max_len);
@@ -131,6 +152,20 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
+    {
+        const char text[] = "aaaab-tail";
+        const char high_text[] = {(char)0x80, (char)0xff, 'x', (char)0x80,
+                                  (char)0xff, 'y', '\0'};
+        const char high_needle[] = {(char)0x80, (char)0xff, 'y', '\0'};
+
+        if (strstr(text, "") != text || strstr(text, "aaa") != text ||
+            strstr(text, "aaab") != text + 1 || strstr(text, "tail") != text + 6 ||
+            strstr(text, "missing") != (char *)0 ||
+            strstr(high_text, high_needle) != high_text + 3) {
+            return 38;
+        }
+    }
+
     for (case_no = 0; case_no < RANDOM_CASES; ++case_no) {
         size_t n;
         size_t src_len;
@@ -200,10 +235,16 @@ int main(int argc, char **argv, char **envp)
         if (pointer_offset(source, actual_ptr) != pointer_offset(source, expected_ptr)) {
             return 46;
         }
+
+        actual_ptr = strstr(source, other);
+        expected_ptr = model_strstr(source, other);
+        if (pointer_offset(source, actual_ptr) != pointer_offset(source, expected_ptr)) {
+            return 47;
+        }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 47;
+        return 48;
     }
     return 0;
 }

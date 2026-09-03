@@ -15,5 +15,6 @@ char *strcpy(char *restrict dest, const char *restrict src);
 char *strncpy(char *restrict dest, const char *restrict src, size_t n);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
+char *strstr(const char *haystack, const char *needle);
 
 #endif

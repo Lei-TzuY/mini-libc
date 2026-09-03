@@ -91,3 +91,28 @@ char *strrchr(const char *s, int c)
         ++s;
     }
 }
+
+char *strstr(const char *haystack, const char *needle)
+{
+    const unsigned char *first = (const unsigned char *)haystack;
+    const unsigned char *pattern = (const unsigned char *)needle;
+
+    if (*pattern == 0) {
+        return (char *)haystack;
+    }
+
+    while (*first != 0) {
+        const unsigned char *h = first;
+        const unsigned char *n = pattern;
+
+        while (*n != 0 && *h != 0 && *h == *n) {
+            ++h;
+            ++n;
+        }
+        if (*n == 0) {
+            return (char *)first;
+        }
+        ++first;
+    }
+    return (char *)0;
+}
