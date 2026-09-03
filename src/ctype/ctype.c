@@ -15,6 +15,11 @@ int isalnum(int c)
     return isalpha(c) || isdigit(c);
 }
 
+int islower(int c)
+{
+    return c >= 'a' && c <= 'z';
+}
+
 int isspace(int c)
 {
     switch (c) {
@@ -28,4 +33,9 @@ int isspace(int c)
     default:
         return 0;
     }
+}
+
+int isupper(int c)
+{
+    return c >= 'A' && c <= 'Z';
 }
