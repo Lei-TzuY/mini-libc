@@ -13,10 +13,11 @@ pointer, `envp[]`, another null pointer, and then the ELF auxiliary vector.
 boundary for the System V AMD64 function-call convention, and calls
 `__mini_start`.
 
-`__mini_start` decodes `argc`, `argv`, and `envp`, invokes
-`main(int, char **, char **)`, then forwards the returned status to
+`__mini_start` decodes `argc`, `argv`, and `envp`, records the original
+environment vector through the implementation-only `__mini_set_envp` hook,
+invokes `main(int, char **, char **)`, then forwards the returned status to
 `mini_sys_exit`. There are currently no constructors, destructors, TLS setup,
-`atexit` handlers, or libc initialization hooks.
+`atexit` handlers, or other libc initialization hooks.
 
 ## Function ABI
 
@@ -82,6 +83,24 @@ do not clear an existing errno value. Raw
 The current storage is suitable for the single-threaded runtime milestone only.
 Future threading/TLS work must preserve the `errno` lvalue contract while making
 the backing slot thread-local.
+
+## Environment access ABI
+
+`__mini_start` retains the original Linux process `envp` vector before entering
+`main`. The implementation-only `__mini_set_envp` symbol stores that vector for
+`getenv`; it is not declared by a public header. `getenv(name)` performs no heap
+allocation and does not copy environment strings. A successful lookup returns a
+pointer directly after the matching `NAME=` prefix in the original process
+environment entry. That storage therefore has process-stack lifetime and is
+shared with the `envp` visible to `main`.
+
+Matching is exact: the requested name must be non-empty, contain no `=`, and be
+followed immediately by `=` in an environment entry. Empty values are valid and
+return a non-null pointer to the entry's terminating null byte. Missing names,
+empty names, and names containing `=` return null. Lookups do not modify
+`errno`. The current surface intentionally does not expose POSIX `environ`,
+`setenv`, `putenv`, or `unsetenv`; adding mutation later must define how retained
+storage and returned pointers are updated or invalidated.
 
 ## Allocator ABI and ownership
 

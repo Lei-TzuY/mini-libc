@@ -26,11 +26,12 @@ LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
 LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
             $(BUILD)/atoi.o $(BUILD)/strtol.o $(BUILD)/strtoul.o \
-            $(BUILD)/allocator.o $(BUILD)/calloc.o $(BUILD)/errno.o
+            $(BUILD)/allocator.o $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/atoi_probe \
             $(BUILD)/errno_probe $(BUILD)/strtol_probe $(BUILD)/strtoul_probe \
-            $(BUILD)/allocator_probe $(BUILD)/calloc_probe $(BUILD)/realloc_probe
+            $(BUILD)/allocator_probe $(BUILD)/calloc_probe $(BUILD)/realloc_probe \
+            $(BUILD)/getenv_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
               $(BUILD)/strtoul_differential $(BUILD)/allocator_failure_test
@@ -70,6 +71,9 @@ $(BUILD)/allocator.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h i
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/calloc.o: src/stdlib/calloc.c include/stdlib.h include/stddef.h include/errno.h include/string.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/getenv.o: src/stdlib/getenv.c include/stdlib.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/errno.o: src/errno/errno.c include/errno.h | $(BUILD)
@@ -144,6 +148,9 @@ $(BUILD)/calloc_probe.o: tests/calloc_probe.c include/mini/syscall.h include/std
 $(BUILD)/realloc_probe.o: tests/realloc_probe.c include/mini/syscall.h include/stdlib.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/getenv_probe.o: tests/getenv_probe.c include/mini/syscall.h include/stdlib.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/allocator_test_impl.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h include/string.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(ALLOCATOR_RENAMES) -c $< -o $@
 
@@ -185,6 +192,9 @@ $(BUILD)/calloc_probe: $(BUILD)/calloc_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/realloc_probe: $(BUILD)/realloc_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/realloc_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/getenv_probe: $(BUILD)/getenv_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/getenv_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^

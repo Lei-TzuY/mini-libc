@@ -5,7 +5,8 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: runtime, core libc primitives, integer conversion, and allocation
+## Current milestone: runtime, core libc primitives, integer conversion,
+allocation, and environment access
 
 The repository builds real ELF executables through this path:
 
@@ -58,6 +59,15 @@ minus is accepted by the C conversion contract: when the magnitude is
 representable, the result is its unsigned negation modulo `ULONG_MAX + 1`; for
 example, `strtoul("-1", ..., 10)` returns `ULONG_MAX` without setting `ERANGE`.
 
+`getenv` retains the original `envp` vector decoded at process startup and
+scans it without allocating or copying. A lookup matches only an exact
+`NAME=` prefix, so `FOO` does not match `FOOBAR`. An empty environment value
+returns a non-null pointer to its terminating null byte. Missing names, empty
+lookup names, and lookup names containing `=` return null. Successful and
+unsuccessful lookups leave `errno` unchanged. The returned value pointer
+aliases the process environment storage. mini-libc does not currently expose
+the POSIX `environ` global or environment mutation APIs.
+
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
 raw `brk` boundary.
@@ -102,12 +112,14 @@ make inspect
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
 conversion edge cases, allocator alignment/reuse/split/coalescing behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
-fixed-seed allocation/resize stress, and the errno lvalue/storage contract. Separate hosted differential executables compare the
-production memory/string/conversion sources against host libc where the target contract is comparable. A test-only
-fake-`brk` allocator harness deterministically verifies heap-growth refusal and
-`ENOMEM` without linking the freestanding allocator to the host heap. Hosted
-oracles are test-only; all library probes, including `allocator_probe`, remain
-freestanding mini-libc executables.
+fixed-seed allocation/resize stress, startup-backed `getenv`
+exact-match/empty/missing semantics, and the errno lvalue/storage contract.
+Separate hosted differential executables compare the production
+memory/string/conversion sources against host libc where the target contract is
+comparable. A test-only fake-`brk` allocator harness deterministically
+verifies heap-growth refusal and `ENOMEM` without linking the freestanding
+allocator to the host heap. Hosted oracles are test-only; all library probes,
+including `allocator_probe`, remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -121,7 +133,7 @@ include/mini/        implemented project-specific public APIs
 src/crt/             process entry and startup
 src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
-src/stdlib/          integer conversion, allocation, and later general utilities
+src/stdlib/          conversion, allocation, and environment utilities
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -131,18 +143,17 @@ docs/                ABI contracts and design notes
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
 memory/string routines, `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
-`malloc`, `calloc`, `realloc`, and `free`, and `errno.h` currently provides the
-errno lvalue contract plus `ENOMEM`, `EINVAL`, and `ERANGE`.
+`getenv`, `malloc`, `calloc`, `realloc`, and `free`, and `errno.h` currently
+provides the errno lvalue contract plus `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With the bounded allocator surface now covered, the next useful libc slice can
-add `getenv` by retaining the process `envp` decoded at startup and testing exact
-name matching, empty values, and missing variables. That slice should not expose
-a POSIX `environ` surface unless it is implemented deliberately. Stdio and
-mmap-backed large allocations remain later work. Cross-repository integration
-will wait until mini-libc is stable on the system assembler/linker bootstrap
-path.
+With startup-backed environment lookup in place, the next useful bounded slice
+can begin a write-only stdio foundation with `putchar` and `puts`, a minimal
+`stdio.h`, and explicit short-write/error tests. Formatted I/O, buffering,
+`FILE`, environment mutation, threading, and mmap-backed large allocations
+should remain separate later slices. Cross-repository integration will wait
+until mini-libc is stable on the system assembler/linker bootstrap path.

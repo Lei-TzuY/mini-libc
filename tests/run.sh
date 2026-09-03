@@ -80,6 +80,13 @@ if [ "$realloc_output" != "realloc-ok" ]; then
     exit 1
 fi
 
+getenv_output="$(env -i MINI_GETENV_ALPHA=value MINI_GETENV_EMPTY= \
+    MINI_GETENV_ALPHA_SUFFIX=suffix ./build/getenv_probe)"
+if [ "$getenv_output" != "getenv-ok" ]; then
+    echo "unexpected getenv probe output: $getenv_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
@@ -87,4 +94,4 @@ fi
 ./build/strtoul_differential
 ./build/allocator_failure_test
 
-echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, realloc, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, and differential probes passed"
