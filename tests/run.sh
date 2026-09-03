@@ -26,4 +26,12 @@ if [ "$syscall_output" != "syscall-ok" ]; then
     exit 1
 fi
 
-echo "runtime and syscall probes passed"
+memory_output="$(./build/memory_probe)"
+if [ "$memory_output" != "memory-ok" ]; then
+    echo "unexpected memory probe output: $memory_output" >&2
+    exit 1
+fi
+
+./build/memory_differential
+
+echo "runtime, syscall, memory, and differential probes passed"
