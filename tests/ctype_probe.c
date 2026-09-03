@@ -3,9 +3,19 @@
 #include <mini/syscall.h>
 #include <stdio.h>
 
+static int model_alpha(int c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
 static int model_digit(int c)
 {
     return c >= '0' && c <= '9';
+}
+
+static int model_alnum(int c)
+{
+    return model_alpha(c) || model_digit(c);
 }
 
 static int model_space(int c)
@@ -24,24 +34,31 @@ int main(int argc, char **argv, char **envp)
     (void)envp;
 
     errno = ERANGE;
-    if (isdigit(EOF) != 0 || isspace(EOF) != 0 || errno != ERANGE) {
+    if (isalpha(EOF) != 0 || isalnum(EOF) != 0 || isdigit(EOF) != 0 ||
+        isspace(EOF) != 0 || errno != ERANGE) {
         return 1;
     }
 
     for (c = 0; c <= 255; ++c) {
-        if ((isdigit(c) != 0) != model_digit(c)) {
+        if ((isalpha(c) != 0) != model_alpha(c)) {
             return 2;
         }
-        if ((isspace(c) != 0) != model_space(c)) {
+        if ((isalnum(c) != 0) != model_alnum(c)) {
             return 3;
         }
-        if (errno != ERANGE) {
+        if ((isdigit(c) != 0) != model_digit(c)) {
             return 4;
+        }
+        if ((isspace(c) != 0) != model_space(c)) {
+            return 5;
+        }
+        if (errno != ERANGE) {
+            return 6;
         }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 5;
+        return 7;
     }
     return 0;
 }
