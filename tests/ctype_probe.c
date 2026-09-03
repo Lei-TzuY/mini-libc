@@ -34,6 +34,16 @@ static int model_upper(int c)
     return c >= 'A' && c <= 'Z';
 }
 
+static int model_tolower(int c)
+{
+    return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
+}
+
+static int model_toupper(int c)
+{
+    return c >= 'a' && c <= 'z' ? c - ('a' - 'A') : c;
+}
+
 int main(int argc, char **argv, char **envp)
 {
     static const char ok[] = "ctype-ok\n";
@@ -46,7 +56,7 @@ int main(int argc, char **argv, char **envp)
     errno = ERANGE;
     if (isalpha(EOF) != 0 || isalnum(EOF) != 0 || isdigit(EOF) != 0 ||
         islower(EOF) != 0 || isspace(EOF) != 0 || isupper(EOF) != 0 ||
-        errno != ERANGE) {
+        tolower(EOF) != EOF || toupper(EOF) != EOF || errno != ERANGE) {
         return 1;
     }
 
@@ -69,13 +79,19 @@ int main(int argc, char **argv, char **envp)
         if ((isupper(c) != 0) != model_upper(c)) {
             return 7;
         }
-        if (errno != ERANGE) {
+        if (tolower(c) != model_tolower(c)) {
             return 8;
+        }
+        if (toupper(c) != model_toupper(c)) {
+            return 9;
+        }
+        if (errno != ERANGE) {
+            return 10;
         }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 9;
+        return 11;
     }
     return 0;
 }
