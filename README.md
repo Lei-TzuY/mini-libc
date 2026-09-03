@@ -58,15 +58,18 @@ minus is accepted by the C conversion contract: when the magnitude is
 representable, the result is its unsigned negation modulo `ULONG_MAX + 1`; for
 example, `strtoul("-1", ..., 10)` returns `ULONG_MAX` without setting `ERANGE`.
 
-The allocator surface now provides `malloc` and `free`. It is deliberately a
-small single-threaded x86-64 allocator backed only by the raw `brk` boundary.
+The allocator surface now provides `malloc`, `calloc`, and `free`. It is
+deliberately a small single-threaded x86-64 allocator backed only by the raw
+`brk` boundary.
 Returned payloads are 16-byte aligned. `malloc(0)` returns null without changing
 `errno`; overflow or a refused heap-growth request returns null and sets
-`ENOMEM`. `free(NULL)` is a no-op. Freed blocks are reused with first-fit search,
-split when a useful aligned remainder exists, and coalesced with adjacent free
-blocks. The allocator does not currently return tail space to the kernel, is not
-thread-safe, and must own the program break once it has initialized; callers
-must not move the break directly while allocator state is live. As in C,
+`ENOMEM`. `calloc` uses the same allocator, returns null without changing
+`errno` when either dimension is zero, checks `nmemb * size` before multiplying,
+and zero-initializes every byte of successful allocations. `free(NULL)` is a
+no-op. Freed blocks are reused with first-fit search, split when a useful aligned
+remainder exists, and coalesced with adjacent free blocks. The allocator does
+not currently return tail space to the kernel, is not thread-safe, and must own
+the program break once it has initialized; callers must not move the break directly while allocator state is live. As in C,
 invalid-pointer and double-free calls are outside the supported contract.
 
 The `errno.h` surface defines Linux `ENOMEM` as 12, `EINVAL` as 22, and `ERANGE`
@@ -90,9 +93,9 @@ make inspect
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
 conversion edge cases, allocator alignment/reuse/split/coalescing behavior,
-fixed-seed allocation stress, and the errno lvalue/storage contract. Separate
-hosted differential executables compare the production memory/string/conversion
-sources against host libc where the target contract is comparable. A test-only
+`calloc` zeroing/overflow semantics, fixed-seed allocation stress, and the errno
+lvalue/storage contract. Separate hosted differential executables compare the
+production memory/string/conversion sources against host libc where the target contract is comparable. A test-only
 fake-`brk` allocator harness deterministically verifies heap-growth refusal and
 `ENOMEM` without linking the freestanding allocator to the host heap. Hosted
 oracles are test-only; all library probes, including `allocator_probe`, remain
@@ -120,16 +123,16 @@ docs/                ABI contracts and design notes
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
 memory/string routines, `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
-`malloc`, and `free`, and `errno.h` currently provides the errno lvalue contract
-plus `ENOMEM`, `EINVAL`, and `ERANGE`.
+`malloc`, `calloc`, and `free`, and `errno.h` currently provides the errno lvalue
+contract plus `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-The next bounded allocator slice can add `calloc` with zero-initialization and
-checked `nmemb * size` overflow semantics. `realloc` should remain a separate
-reviewable slice because in-place growth, move/copy behavior, zero-size handling,
-and failure preservation need their own tests. Cross-repository integration will
-wait until mini-libc is stable on the system assembler/linker bootstrap path.
+The next bounded allocator slice can add `realloc` with explicit tests for
+in-place reuse versus move/copy behavior, zero-size handling, growth/shrink
+semantics, and failure preservation. It should remain separate from any stdio or
+large-allocation mmap work. Cross-repository integration will wait until
+mini-libc is stable on the system assembler/linker bootstrap path.

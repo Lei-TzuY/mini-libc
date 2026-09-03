@@ -68,6 +68,12 @@ if [ "$allocator_output" != "allocator-ok" ]; then
     exit 1
 fi
 
+calloc_output="$(./build/calloc_probe)"
+if [ "$calloc_output" != "calloc-ok" ]; then
+    echo "unexpected calloc probe output: $calloc_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
@@ -75,4 +81,4 @@ fi
 ./build/strtoul_differential
 ./build/allocator_failure_test
 
-echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, strtol, strtoul, allocator, calloc, and differential probes passed"
