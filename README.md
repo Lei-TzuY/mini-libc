@@ -33,9 +33,9 @@ not update libc `errno`.
 The standard `string.h` surface includes the memory primitives `memcpy`,
 `memmove`, `memset`, `memcmp`, and `memchr`, plus `strlen`, `strcmp`, `strncmp`,
 `strcpy`, `strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`,
-`strspn`, `strcspn`, and `strpbrk`. `memchr` searches at most the requested
-number of bytes, compares against the `unsigned char` conversion of its search
-value, and returns the first matching byte in the original object.
+`strspn`, `strcspn`, `strpbrk`, and `strtok`. `memchr` searches at most the
+requested number of bytes, compares against the `unsigned char` conversion of
+its search value, and returns the first matching byte in the original object.
 `strstr` returns the first matching substring and treats an empty needle as a
 match at the haystack start. `strspn` counts the initial bytes present in an
 accept set, while `strcspn` counts the initial bytes absent from a reject set.
@@ -43,11 +43,16 @@ accept set, while `strcspn` counts the initial bytes absent from a reject set.
 `strcat` appends a complete non-overlapping source string at the destination
 terminator and returns the original destination pointer. `strncat` follows the
 same return and non-overlap contract while appending at most the requested
-number of source bytes and always writing a final null terminator. The searches
-and scans compare byte representations directly without allocating or copying.
+number of source bytes and always writing a final null terminator. `strtok`
+destructively splits a caller-owned string in place, skips delimiter runs, and
+uses the delimiter set supplied to each individual call, so the delimiter set
+may change during a tokenization sequence. Continuation state is held in one
+process-global static pointer: the implementation is intentionally not
+reentrant, not thread-safe, and not TLS-backed yet. The searches and scans
+compare byte representations directly without allocating or copying.
 Implementations stay deliberately simple so overlap direction, unsigned-byte
-comparisons, termination/padding semantics, and search behavior remain easy to
-audit.
+comparisons, termination/padding semantics, search behavior, and hidden state
+remain easy to audit.
 
 The current `stdlib.h` integer-conversion surface contains `atoi`, `strtol`, and
 `strtoul`. `atoi` skips the six C whitespace characters, accepts one optional
@@ -134,18 +139,22 @@ make inspect
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
-membership-scan, and counting-scan edge cases,
+membership-scan, counting-scan, and stateful tokenization edge cases,
 allocator alignment/reuse/split/coalescing behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
 fixed-seed allocation/resize stress, startup-backed `getenv`
 exact-match/empty/missing semantics, write-only stdio success/short-write/error
-behavior, and the errno lvalue/storage contract.
+behavior, and the errno lvalue/storage contract. The `strtok` probe covers
+leading delimiter runs, delimiter changes between continuation calls, empty
+input and delimiter sets, end-of-stream, high-byte delimiters, sequence reset,
+errno preservation, and fixed-seed model comparison.
 Separate hosted differential executables compare the production
 memory/string/conversion sources against host libc where the target contract is
-comparable. A test-only fake-`brk` allocator harness deterministically
-verifies heap-growth refusal and `ENOMEM` without linking the freestanding
-allocator to the host heap. Hosted oracles are test-only; all library probes,
-including `allocator_probe`, remain freestanding mini-libc executables.
+comparable, including a state-isolated `strtok` differential. A test-only
+fake-`brk` allocator harness deterministically verifies heap-growth refusal and
+`ENOMEM` without linking the freestanding allocator to the host heap. Hosted
+oracles are test-only; all library probes, including `allocator_probe` and
+`strtok_probe`, remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -170,7 +179,7 @@ docs/                ABI contracts and design notes
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
 memory/string routines including `memchr`, `strcat`, `strncat`, `strstr`,
-`strspn`, `strcspn`, and `strpbrk`;
+`strspn`, `strcspn`, `strpbrk`, and `strtok`;
 `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
 `getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
 `putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
@@ -181,11 +190,10 @@ contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With bounded byte search in place, the next useful standard C string slice can
-add `strtok` with delimiter-run, delimiter-change, continuation-state, empty-
-input, and end-of-stream regression coverage. Because `strtok` owns hidden
-mutable state, thread-safety/TLS implications must stay explicit rather than
-being silently widened. Formatted I/O, buffering, `FILE`, input routines,
-environment mutation, threading, and mmap-backed large allocations should remain
-separate later slices. Cross-repository integration will wait until mini-libc is
-stable on the system assembler/linker bootstrap path.
+With stateful tokenization in place, the next bounded standard C string slice can
+add `strerror` for the errno values mini-libc currently exposes, with deterministic
+unknown-code behavior and explicit returned-storage lifetime. Locale-aware
+message translation, formatted I/O, buffering, `FILE`, input routines,
+environment mutation, threading/TLS, and mmap-backed large allocations should
+remain separate later slices. Cross-repository integration will wait until
+mini-libc is stable on the system assembler/linker bootstrap path.

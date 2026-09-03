@@ -22,5 +22,6 @@ size_t strcspn(const char *s, const char *reject);
 char *strpbrk(const char *s, const char *accept);
 char *strcat(char *restrict dest, const char *restrict src);
 char *strncat(char *restrict dest, const char *restrict src, size_t n);
+char *strtok(char *restrict str, const char *restrict delim);
 
 #endif

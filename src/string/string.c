@@ -187,3 +187,40 @@ char *strncat(char *restrict dest, const char *restrict src, size_t n)
     dest[i] = '\0';
     return result;
 }
+
+static char *strtok_next;
+
+char *strtok(char *restrict str, const char *restrict delim)
+{
+    char *token;
+
+    if (str != (char *)0) {
+        strtok_next = str;
+    } else {
+        str = strtok_next;
+    }
+    if (str == (char *)0) {
+        return (char *)0;
+    }
+
+    while (*str != '\0' && byte_in_set(delim, (unsigned char)*str)) {
+        ++str;
+    }
+    if (*str == '\0') {
+        strtok_next = str;
+        return (char *)0;
+    }
+
+    token = str;
+    while (*str != '\0' && !byte_in_set(delim, (unsigned char)*str)) {
+        ++str;
+    }
+    if (*str == '\0') {
+        strtok_next = str;
+        return token;
+    }
+
+    *str = '\0';
+    strtok_next = str + 1;
+    return token;
+}
