@@ -59,6 +59,14 @@ is not overwritten by later `strerror` calls; callers must treat that storage as
 read-only. The routine does not allocate, does not perform locale lookup, and
 leaves an existing `errno` value unchanged.
 
+The minimal `ctype.h` surface currently provides `isdigit` and `isspace` with a
+fixed C-locale classification contract. `isdigit` recognizes only the ASCII
+bytes `0` through `9`; `isspace` recognizes space plus `\t`, `\n`, `\v`, `\f`,
+and `\r`. Their defined argument domain follows ISO C: callers pass either
+`EOF` or a value representable as `unsigned char`. `EOF` and every other byte
+outside the matching class produce zero. The routines do not allocate, perform
+locale lookup, or modify `errno`.
+
 The searches and scans compare byte representations directly without allocating
 or copying. Implementations stay deliberately simple so overlap direction,
 unsigned-byte comparisons, termination/padding semantics, search behavior, and
@@ -149,8 +157,9 @@ make inspect
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
-membership-scan, counting-scan, stateful tokenization, and deterministic error-
-message edge cases, allocator alignment/reuse/split/coalescing behavior,
+membership-scan, counting-scan, stateful tokenization, deterministic error-
+message edge cases, and exhaustive C-locale digit/whitespace classification,
+allocator alignment/reuse/split/coalescing behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
 fixed-seed allocation/resize stress, startup-backed `getenv`
 exact-match/empty/missing semantics, write-only stdio success/short-write/error
@@ -159,14 +168,17 @@ leading delimiter runs, delimiter changes between continuation calls, empty
 input and delimiter sets, end-of-stream, high-byte delimiters, sequence reset,
 errno preservation, and fixed-seed model comparison. The `strerror` probe locks
 the four exposed errno messages, deterministic unknown-code behavior, stable
-static storage across later calls, and errno preservation.
+static storage across later calls, and errno preservation. The `ctype` probe
+checks `EOF` plus every value in the complete `unsigned char` domain and verifies
+that classification preserves an existing `errno` value.
 Separate hosted differential executables compare the production
 memory/string/conversion sources against host libc where the target contract is
 comparable, including a state-isolated `strtok` differential. A test-only
 fake-`brk` allocator harness deterministically verifies heap-growth refusal and
 `ENOMEM` without linking the freestanding allocator to the host heap. Hosted
 oracles are test-only; all library probes, including `allocator_probe`,
-`strtok_probe`, and `strerror_probe`, remain freestanding mini-libc executables.
+`strtok_probe`, `strerror_probe`, and `ctype_probe`, remain freestanding mini-libc
+executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -180,6 +192,7 @@ include/mini/        implemented project-specific public APIs
 src/crt/             process entry and startup
 src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
+src/ctype/           C-locale character classification
 src/stdlib/          conversion, allocation, and environment utilities
 src/stdio/           unbuffered write-only standard I/O
 src/errno/           errno storage boundary
@@ -189,25 +202,25 @@ docs/                ABI contracts and design notes
 ```
 
 Standard headers are added only as their required surface becomes real. The
-current `stddef.h` provides `size_t`, `string.h` declares only implemented
-memory/string routines including `memchr`, `strcat`, `strncat`, `strstr`,
-`strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`;
-`stdlib.h` declares `atoi`, `strtol`, `strtoul`,
-`getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
-`putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
-contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+current `stddef.h` provides `size_t`; `ctype.h` provides `isdigit` and `isspace`;
+`string.h` declares only implemented memory/string routines including `memchr`,
+`strcat`, `strncat`, `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and
+`strerror`; `stdlib.h` declares `atoi`, `strtol`, `strtoul`, `getenv`, `malloc`,
+`calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`, `putchar`, and `puts`;
+and `errno.h` currently provides the errno lvalue contract plus `EIO`, `ENOMEM`,
+`EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With deterministic error messages in place, the remaining ISO C `string.h`
-gaps are locale-sensitive `strcoll`/`strxfrm` and should stay deferred until a
-locale contract exists. The next bounded general-libc slice can instead establish
-a minimal `ctype.h` classification foundation, beginning with `isdigit` and
-`isspace` while making the required EOF/`unsigned char` argument domain explicit.
-Locale support, formatted I/O, buffering, `FILE`, input routines, environment
-mutation, threading/TLS, and mmap-backed large allocations should remain
-separate later slices. Cross-repository integration will wait until mini-libc is
+With the first fixed C-locale classifiers in place, the next bounded `ctype.h`
+slice can add paired `isalpha` + `isalnum`, preserving the same explicit
+`EOF`/`unsigned char` argument-domain contract and exhaustive byte-domain tests.
+Case conversion (`tolower`/`toupper`), the remaining classification functions,
+and locale-aware behavior should remain separate later slices. Locale-sensitive
+`strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`, input routines,
+environment mutation, threading/TLS, and mmap-backed large allocations should
+also remain separate. Cross-repository integration will wait until mini-libc is
 stable on the system assembler/linker bootstrap path.

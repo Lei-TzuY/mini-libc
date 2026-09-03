@@ -30,15 +30,15 @@ BUILD := build
 LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
 LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
-            $(BUILD)/strerror.o $(BUILD)/atoi.o $(BUILD)/strtol.o $(BUILD)/strtoul.o \
-            $(BUILD)/allocator.o $(BUILD)/calloc.o $(BUILD)/getenv.o \
-            $(BUILD)/stdio.o $(BUILD)/errno.o
+            $(BUILD)/strerror.o $(BUILD)/ctype.o $(BUILD)/atoi.o \
+            $(BUILD)/strtol.o $(BUILD)/strtoul.o $(BUILD)/allocator.o \
+            $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
-            $(BUILD)/strerror_probe $(BUILD)/atoi_probe $(BUILD)/errno_probe \
-            $(BUILD)/strtol_probe $(BUILD)/strtoul_probe $(BUILD)/allocator_probe \
-            $(BUILD)/calloc_probe $(BUILD)/realloc_probe $(BUILD)/getenv_probe \
-            $(BUILD)/stdio_probe
+            $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/atoi_probe \
+            $(BUILD)/errno_probe $(BUILD)/strtol_probe $(BUILD)/strtoul_probe \
+            $(BUILD)/allocator_probe $(BUILD)/calloc_probe $(BUILD)/realloc_probe \
+            $(BUILD)/getenv_probe $(BUILD)/stdio_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/atoi_differential \
               $(BUILD)/strtol_differential $(BUILD)/strtoul_differential \
@@ -67,6 +67,9 @@ $(BUILD)/string.o: src/string/string.c include/string.h include/stddef.h | $(BUI
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/strerror.o: src/string/strerror.c include/string.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ctype.o: src/ctype/ctype.c include/ctype.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/atoi.o: src/stdlib/atoi.c include/stdlib.h | $(BUILD)
@@ -121,6 +124,9 @@ $(BUILD)/strtok_probe.o: tests/strtok_probe.c include/mini/syscall.h include/str
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/strerror_probe.o: tests/strerror_probe.c include/mini/syscall.h include/string.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ctype_probe.o: tests/ctype_probe.c include/mini/syscall.h include/ctype.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/string_diff_impl.o: src/string/string.c include/string.h include/stddef.h | $(BUILD)
@@ -209,6 +215,9 @@ $(BUILD)/strtok_probe: $(BUILD)/strtok_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/strerror_probe: $(BUILD)/strerror_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/strerror_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/ctype_probe: $(BUILD)/ctype_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/ctype_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/atoi_probe: $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)

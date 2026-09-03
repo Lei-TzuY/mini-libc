@@ -50,6 +50,12 @@ if [ "$strerror_output" != "strerror-ok" ]; then
     exit 1
 fi
 
+ctype_output="$(./build/ctype_probe)"
+if [ "$ctype_output" != "ctype-ok" ]; then
+    echo "unexpected ctype probe output: $ctype_output" >&2
+    exit 1
+fi
+
 atoi_output="$(./build/atoi_probe)"
 if [ "$atoi_output" != "atoi-ok" ]; then
     echo "unexpected atoi probe output: $atoi_output" >&2
@@ -118,4 +124,4 @@ fi
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime, syscall, memory, string, strtok, strerror, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"
+echo "runtime, syscall, memory, string, strtok, strerror, ctype, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"
