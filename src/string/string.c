@@ -116,3 +116,34 @@ char *strstr(const char *haystack, const char *needle)
     }
     return (char *)0;
 }
+
+static int byte_in_set(const char *set, unsigned char byte)
+{
+    while (*set != '\0') {
+        if ((unsigned char)*set == byte) {
+            return 1;
+        }
+        ++set;
+    }
+    return 0;
+}
+
+size_t strspn(const char *s, const char *accept)
+{
+    size_t n = 0;
+
+    while (s[n] != '\0' && byte_in_set(accept, (unsigned char)s[n])) {
+        ++n;
+    }
+    return n;
+}
+
+size_t strcspn(const char *s, const char *reject)
+{
+    size_t n = 0;
+
+    while (s[n] != '\0' && !byte_in_set(reject, (unsigned char)s[n])) {
+        ++n;
+    }
+    return n;
+}

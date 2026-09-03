@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <string.h>
@@ -74,6 +75,38 @@ static const char *model_strstr(const char *haystack, const char *needle)
         }
     }
     return (const char *)0;
+}
+
+static int model_contains(const char *set, unsigned char byte)
+{
+    size_t i;
+
+    for (i = 0; set[i] != '\0'; ++i) {
+        if ((unsigned char)set[i] == byte) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static size_t model_strspn(const char *s, const char *accept)
+{
+    size_t n = 0;
+
+    while (s[n] != '\0' && model_contains(accept, (unsigned char)s[n])) {
+        ++n;
+    }
+    return n;
+}
+
+static size_t model_strcspn(const char *s, const char *reject)
+{
+    size_t n = 0;
+
+    while (s[n] != '\0' && !model_contains(reject, (unsigned char)s[n])) {
+        ++n;
+    }
+    return n;
 }
 
 static void fill_string(char *s, size_t max_len)
@@ -166,6 +199,23 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
+    {
+        const char high_text[] = {(char)0x80, (char)0xff, 'x', '\0'};
+        const char high_set[] = {(char)0xff, (char)0x80, (char)0x80, '\0'};
+        const char high_reject[] = {(char)0xff, (char)0xff, '\0'};
+
+        errno = ERANGE;
+        if (strspn("", "abc") != 0 || strspn("abc", "") != 0 ||
+            strspn("aaab", "aaa") != 3 || strspn("abc", "cba") != 3 ||
+            strspn("xyz", "abc") != 0 || strspn(high_text, high_set) != 2 ||
+            strcspn("", "abc") != 0 || strcspn("abc", "") != 3 ||
+            strcspn("abc", "xxbxx") != 1 || strcspn("abc", "xyz") != 3 ||
+            strcspn("abc", "a") != 0 || strcspn(high_text, high_reject) != 1 ||
+            errno != ERANGE) {
+            return 39;
+        }
+    }
+
     for (case_no = 0; case_no < RANDOM_CASES; ++case_no) {
         size_t n;
         size_t src_len;
@@ -241,10 +291,17 @@ int main(int argc, char **argv, char **envp)
         if (pointer_offset(source, actual_ptr) != pointer_offset(source, expected_ptr)) {
             return 47;
         }
+
+        if (strspn(source, other) != model_strspn(source, other)) {
+            return 48;
+        }
+        if (strcspn(source, other) != model_strcspn(source, other)) {
+            return 49;
+        }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 48;
+        return 50;
     }
     return 0;
 }

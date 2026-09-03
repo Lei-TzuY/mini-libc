@@ -12,6 +12,8 @@ char *mini_test_strncpy(char *restrict dest, const char *restrict src, size_t n)
 char *mini_test_strchr(const char *s, int c);
 char *mini_test_strrchr(const char *s, int c);
 char *mini_test_strstr(const char *haystack, const char *needle);
+size_t mini_test_strspn(const char *s, const char *accept);
+size_t mini_test_strcspn(const char *s, const char *reject);
 
 static unsigned long rng_state = 0xe7037ed1a0b428dbUL;
 static char *(*volatile host_strncpy_fn)(char *, const char *, size_t) = strncpy;
@@ -73,6 +75,18 @@ int main(void)
         }
     }
 
+    {
+        const char high_text[] = {(char)0x80, (char)0xff, 'x', '\0'};
+        const char high_set[] = {(char)0xff, (char)0x80, (char)0x80, '\0'};
+        const char high_reject[] = {(char)0xff, (char)0xff, '\0'};
+
+        if (mini_test_strspn(high_text, high_set) != strspn(high_text, high_set) ||
+            mini_test_strcspn(high_text, high_reject) !=
+                strcspn(high_text, high_reject)) {
+            return 11;
+        }
+    }
+
     for (case_no = 0; case_no < RANDOM_CASES; ++case_no) {
         size_t n;
         int c;
@@ -125,6 +139,14 @@ int main(void)
         host_ptr = strstr(left, right);
         if (pointer_offset(left, mini_ptr) != pointer_offset(left, host_ptr)) {
             return 10;
+        }
+
+
+        if (mini_test_strspn(left, right) != strspn(left, right)) {
+            return 12;
+        }
+        if (mini_test_strcspn(left, right) != strcspn(left, right)) {
+            return 13;
         }
     }
 
