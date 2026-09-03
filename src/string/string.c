@@ -147,3 +147,14 @@ size_t strcspn(const char *s, const char *reject)
     }
     return n;
 }
+
+char *strpbrk(const char *s, const char *accept)
+{
+    while (*s != '\0') {
+        if (byte_in_set(accept, (unsigned char)*s)) {
+            return (char *)s;
+        }
+        ++s;
+    }
+    return (char *)0;
+}

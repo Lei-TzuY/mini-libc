@@ -14,6 +14,7 @@ char *mini_test_strrchr(const char *s, int c);
 char *mini_test_strstr(const char *haystack, const char *needle);
 size_t mini_test_strspn(const char *s, const char *accept);
 size_t mini_test_strcspn(const char *s, const char *reject);
+char *mini_test_strpbrk(const char *s, const char *accept);
 
 static unsigned long rng_state = 0xe7037ed1a0b428dbUL;
 static char *(*volatile host_strncpy_fn)(char *, const char *, size_t) = strncpy;
@@ -82,7 +83,9 @@ int main(void)
 
         if (mini_test_strspn(high_text, high_set) != strspn(high_text, high_set) ||
             mini_test_strcspn(high_text, high_reject) !=
-                strcspn(high_text, high_reject)) {
+                strcspn(high_text, high_reject) ||
+            pointer_offset(high_text, mini_test_strpbrk(high_text, high_reject)) !=
+                pointer_offset(high_text, strpbrk(high_text, high_reject))) {
             return 11;
         }
     }
@@ -147,6 +150,11 @@ int main(void)
         }
         if (mini_test_strcspn(left, right) != strcspn(left, right)) {
             return 13;
+        }
+        mini_ptr = mini_test_strpbrk(left, right);
+        host_ptr = strpbrk(left, right);
+        if (pointer_offset(left, mini_ptr) != pointer_offset(left, host_ptr)) {
+            return 14;
         }
     }
 

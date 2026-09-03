@@ -109,6 +109,18 @@ static size_t model_strcspn(const char *s, const char *reject)
     return n;
 }
 
+static const char *model_strpbrk(const char *s, const char *accept)
+{
+    size_t i;
+
+    for (i = 0; s[i] != '\0'; ++i) {
+        if (model_contains(accept, (unsigned char)s[i])) {
+            return s + i;
+        }
+    }
+    return (const char *)0;
+}
+
 static void fill_string(char *s, size_t max_len)
 {
     size_t length = (size_t)(next_random() % max_len);
@@ -200,6 +212,7 @@ int main(int argc, char **argv, char **envp)
     }
 
     {
+        const char text[] = "abc";
         const char high_text[] = {(char)0x80, (char)0xff, 'x', '\0'};
         const char high_set[] = {(char)0xff, (char)0x80, (char)0x80, '\0'};
         const char high_reject[] = {(char)0xff, (char)0xff, '\0'};
@@ -211,7 +224,11 @@ int main(int argc, char **argv, char **envp)
             strcspn("", "abc") != 0 || strcspn("abc", "") != 3 ||
             strcspn("abc", "xxbxx") != 1 || strcspn("abc", "xyz") != 3 ||
             strcspn("abc", "a") != 0 || strcspn(high_text, high_reject) != 1 ||
-            errno != ERANGE) {
+            strpbrk("", "abc") != (char *)0 || strpbrk(text, "") != (char *)0 ||
+            strpbrk(text, "caa") != text || strpbrk(text, "a") != text ||
+            strpbrk(text, "xxbxx") != text + 1 ||
+            strpbrk(text, "c") != text + 2 || strpbrk(text, "xyz") != (char *)0 ||
+            strpbrk(high_text, high_reject) != high_text + 1 || errno != ERANGE) {
             return 39;
         }
     }
@@ -298,10 +315,15 @@ int main(int argc, char **argv, char **envp)
         if (strcspn(source, other) != model_strcspn(source, other)) {
             return 49;
         }
+        actual_ptr = strpbrk(source, other);
+        expected_ptr = model_strpbrk(source, other);
+        if (pointer_offset(source, actual_ptr) != pointer_offset(source, expected_ptr)) {
+            return 50;
+        }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 50;
+        return 51;
     }
     return 0;
 }
