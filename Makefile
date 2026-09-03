@@ -15,14 +15,17 @@ STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
                   -Dstrncmp=mini_test_strncmp -Dstrcpy=mini_test_strcpy \
                   -Dstrncpy=mini_test_strncpy -Dstrchr=mini_test_strchr \
                   -Dstrrchr=mini_test_strrchr
+ATOI_RENAMES := -Datoi=mini_test_atoi
 
 BUILD := build
 LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
-LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o
+LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
+            $(BUILD)/atoi.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
-            $(BUILD)/memory_probe $(BUILD)/string_probe
-HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential
+            $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/atoi_probe
+HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
+              $(BUILD)/atoi_differential
 
 .PHONY: all clean test inspect
 
@@ -44,6 +47,9 @@ $(BUILD)/memory.o: src/string/memory.c include/string.h include/stddef.h | $(BUI
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/string.o: src/string/string.c include/string.h include/stddef.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/atoi.o: src/stdlib/atoi.c include/stdlib.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(LIBC): $(LIB_OBJS)
@@ -76,6 +82,15 @@ $(BUILD)/string_diff_impl.o: src/string/string.c include/string.h include/stddef
 $(BUILD)/string_differential.o: tests/string_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
+$(BUILD)/atoi_probe.o: tests/atoi_probe.c include/mini/syscall.h include/stdlib.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/atoi_diff_impl.o: src/stdlib/atoi.c include/stdlib.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(ATOI_RENAMES) -c $< -o $@
+
+$(BUILD)/atoi_differential.o: tests/atoi_differential.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
+
 $(BUILD)/hello: $(BUILD)/hello.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/hello.o $(CRT0) $(LIBC)
 
@@ -91,10 +106,16 @@ $(BUILD)/memory_probe: $(BUILD)/memory_probe.o $(CRT0) $(LIBC)
 $(BUILD)/string_probe: $(BUILD)/string_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/string_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/atoi_probe: $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/string_differential: $(BUILD)/string_differential.o $(BUILD)/string_diff_impl.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+$(BUILD)/atoi_differential: $(BUILD)/atoi_differential.o $(BUILD)/atoi_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 test: all

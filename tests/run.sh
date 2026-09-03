@@ -38,7 +38,14 @@ if [ "$string_output" != "string-ok" ]; then
     exit 1
 fi
 
+atoi_output="$(./build/atoi_probe)"
+if [ "$atoi_output" != "atoi-ok" ]; then
+    echo "unexpected atoi probe output: $atoi_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
+./build/atoi_differential
 
-echo "runtime, syscall, memory, string, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, and differential probes passed"
