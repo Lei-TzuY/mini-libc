@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <string.h>
@@ -54,6 +55,17 @@ static int reference_compare(const unsigned char *a, const unsigned char *b, siz
     return 0;
 }
 
+static const void *reference_find(const unsigned char *s, int c, size_t n)
+{
+    unsigned char target = (unsigned char)c;
+    size_t i;
+
+    for (i = 0; i < n; ++i) {
+        if (s[i] == target) return s + i;
+    }
+    return (const void *)0;
+}
+
 static int deterministic_cases(void)
 {
     unsigned char a[8] = {0,1,2,3,4,5,6,7};
@@ -61,6 +73,7 @@ static int deterministic_cases(void)
     unsigned char overlap[8] = {0,1,2,3,4,5,6,7};
     unsigned char hi[1] = {0x80};
     unsigned char lo[1] = {0x7f};
+    unsigned char search[7] = {'a',0,'b',0xff,'a','z',0x80};
 
     if (memcpy(b, a, 0) != b || b[0] != 9) return 1;
     if (memcpy(b, a, 8) != b || !equal_bytes(a, b, 8)) return 2;
@@ -77,6 +90,15 @@ static int deterministic_cases(void)
         memmove(reverse, reverse + 2, 6);
         if (!equal_bytes(reverse, expected, 8)) return 7;
     }
+
+    errno = ERANGE;
+    if (memchr(search, 'a', 0) != (void *)0 || errno != ERANGE) return 8;
+    if (memchr(search, 'a', sizeof(search)) != search ||
+        memchr(search, 0, sizeof(search)) != search + 1 ||
+        memchr(search, 0x1ff, sizeof(search)) != search + 3 ||
+        memchr(search, -1, sizeof(search)) != search + 3 ||
+        memchr(search, 'z', 5) != (void *)0 ||
+        memchr(search, 0x180, sizeof(search)) != search + 6 || errno != ERANGE) return 9;
     return 0;
 }
 
@@ -127,6 +149,11 @@ static int randomized_cases(void)
         n = (size_t)(next_random() % (BUF_SIZE + 1));
         if (sign_of(memcmp(actual, expected, n)) !=
             sign_of(reference_compare(actual, expected, n))) return 13;
+
+        fill_random(source, BUF_SIZE);
+        n = (size_t)(next_random() % (BUF_SIZE + 1));
+        c = (int)(next_random() & 0x3ffUL) - 512;
+        if (memchr(source, c, n) != reference_find(source, c, n)) return 14;
     }
     return 0;
 }

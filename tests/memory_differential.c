@@ -8,6 +8,7 @@ void *mini_test_memcpy(void *restrict dest, const void *restrict src, size_t n);
 void *mini_test_memmove(void *dest, const void *src, size_t n);
 void *mini_test_memset(void *s, int c, size_t n);
 int mini_test_memcmp(const void *s1, const void *s2, size_t n);
+void *mini_test_memchr(const void *s, int c, size_t n);
 
 static unsigned long rng_state = 0xd1b54a32d192ed03UL;
 
@@ -40,8 +41,14 @@ int main(void)
     {
         unsigned char high = 0x80;
         unsigned char low = 0x7f;
+        unsigned char search[5] = {'a',0,0xff,'a',0x80};
         if (sign_of(mini_test_memcmp(&high, &low, 1)) !=
             sign_of(memcmp(&high, &low, 1))) return 1;
+        if (mini_test_memchr(search, 'a', 0) != memchr(search, 'a', 0) ||
+            mini_test_memchr(search, 'a', sizeof(search)) != memchr(search, 'a', sizeof(search)) ||
+            mini_test_memchr(search, 0, sizeof(search)) != memchr(search, 0, sizeof(search)) ||
+            mini_test_memchr(search, -1, sizeof(search)) != memchr(search, -1, sizeof(search)) ||
+            mini_test_memchr(search, 0x180, sizeof(search)) != memchr(search, 0x180, sizeof(search))) return 12;
     }
 
     for (case_no = 0; case_no < RANDOM_CASES; ++case_no) {
@@ -83,6 +90,11 @@ int main(void)
         n = (size_t)(next_random() % (BUF_SIZE + 1));
         if (sign_of(mini_test_memcmp(mini_buf, host_buf, n)) !=
             sign_of(memcmp(mini_buf, host_buf, n))) return 11;
+
+        fill_random(source, BUF_SIZE);
+        n = (size_t)(next_random() % (BUF_SIZE + 1));
+        c = (int)(next_random() & 0x3ffUL) - 512;
+        if (mini_test_memchr(source, c, n) != memchr(source, c, n)) return 13;
     }
     return 0;
 }

@@ -10,7 +10,8 @@ HOST_CFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
                -fno-builtin -fno-pie
 HOST_LDFLAGS := -no-pie
 MEMORY_RENAMES := -Dmemcpy=mini_test_memcpy -Dmemmove=mini_test_memmove \
-                  -Dmemset=mini_test_memset -Dmemcmp=mini_test_memcmp
+                  -Dmemset=mini_test_memset -Dmemcmp=mini_test_memcmp \
+                  -Dmemchr=mini_test_memchr
 STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
                   -Dstrncmp=mini_test_strncmp -Dstrcpy=mini_test_strcpy \
                   -Dstrncpy=mini_test_strncpy -Dstrchr=mini_test_strchr \
@@ -100,7 +101,7 @@ $(BUILD)/runtime_probe.o: tests/runtime_probe.c include/mini/syscall.h | $(BUILD
 $(BUILD)/syscall_probe.o: tests/syscall_probe.c include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/memory_probe.o: tests/memory_probe.c include/mini/syscall.h include/string.h include/stddef.h | $(BUILD)
+$(BUILD)/memory_probe.o: tests/memory_probe.c include/mini/syscall.h include/string.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/memory_diff_impl.o: src/string/memory.c include/string.h include/stddef.h | $(BUILD)

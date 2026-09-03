@@ -57,3 +57,17 @@ int memcmp(const void *s1, const void *s2, size_t n)
     }
     return 0;
 }
+
+void *memchr(const void *s, int c, size_t n)
+{
+    const unsigned char *p = s;
+    unsigned char target = (unsigned char)c;
+    size_t i;
+
+    for (i = 0; i < n; ++i) {
+        if (p[i] == target) {
+            return (void *)(p + i);
+        }
+    }
+    return (void *)0;
+}
