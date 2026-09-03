@@ -51,8 +51,22 @@ Implemented x86-64 Linux syscall numbers are:
 | `mini_sys_exit` | 60 |
 
 Except for the non-returning exit call, wrappers return the kernel's raw `rax`
-value. Errors therefore remain negative errno values in `[-4095, -1]`; this is
-not yet the standard libc `-1` plus `errno` contract.
+value. Errors therefore remain negative errno values in `[-4095, -1]`; raw
+syscall wrappers still do not translate failures to `-1` or update libc
+`errno`.
+
+## errno storage ABI
+
+`<errno.h>` currently exposes `ERANGE` with the Linux value 34 and defines
+`errno` as a modifiable `int` lvalue backed by `__mini_errno_location()`.
+The accessor currently returns one process-global, zero-initialized BSS slot.
+This is deliberately not thread-local because mini-libc has no TLS runtime yet.
+Keeping access behind the implementation-reserved accessor allows a later TLS
+implementation without changing source code that uses the `errno` macro.
+
+The current storage is suitable for the single-threaded runtime milestone only.
+Future threading/TLS work must preserve the `errno` lvalue contract while making
+the backing slot thread-local.
 
 ## ELF expectations
 

@@ -44,8 +44,14 @@ if [ "$atoi_output" != "atoi-ok" ]; then
     exit 1
 fi
 
+errno_output="$(./build/errno_probe)"
+if [ "$errno_output" != "errno-ok" ]; then
+    echo "unexpected errno probe output: $errno_output" >&2
+    exit 1
+fi
+
 ./build/memory_differential
 ./build/string_differential
 ./build/atoi_differential
 
-echo "runtime, syscall, memory, string, atoi, and differential probes passed"
+echo "runtime, syscall, memory, string, atoi, errno, and differential probes passed"
