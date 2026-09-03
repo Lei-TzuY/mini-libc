@@ -16,9 +16,11 @@ size_t mini_test_strspn(const char *s, const char *accept);
 size_t mini_test_strcspn(const char *s, const char *reject);
 char *mini_test_strpbrk(const char *s, const char *accept);
 char *mini_test_strcat(char *restrict dest, const char *restrict src);
+char *mini_test_strncat(char *restrict dest, const char *restrict src, size_t n);
 
 static unsigned long rng_state = 0xe7037ed1a0b428dbUL;
 static char *(*volatile host_strncpy_fn)(char *, const char *, size_t) = strncpy;
+static char *(*volatile host_strncat_fn)(char *, const char *, size_t) = strncat;
 
 static unsigned long next_random(void)
 {
@@ -147,7 +149,6 @@ int main(void)
             return 10;
         }
 
-
         if (mini_test_strspn(left, right) != strspn(left, right)) {
             return 12;
         }
@@ -160,7 +161,6 @@ int main(void)
             return 14;
         }
 
-
         memset(mini_cat, 0xa5, sizeof(mini_cat));
         memset(host_cat, 0xa5, sizeof(host_cat));
         strcpy(mini_cat, left);
@@ -169,6 +169,17 @@ int main(void)
             strcat(host_cat, right) != host_cat ||
             memcmp(mini_cat, host_cat, sizeof(mini_cat)) != 0) {
             return 15;
+        }
+
+        n = (size_t)(next_random() % (BUF_SIZE + 1));
+        memset(mini_cat, 0xa5, sizeof(mini_cat));
+        memset(host_cat, 0xa5, sizeof(host_cat));
+        strcpy(mini_cat, left);
+        strcpy(host_cat, left);
+        if (mini_test_strncat(mini_cat, right, n) != mini_cat ||
+            host_strncat_fn(host_cat, right, n) != host_cat ||
+            memcmp(mini_cat, host_cat, sizeof(mini_cat)) != 0) {
+            return 16;
         }
     }
 

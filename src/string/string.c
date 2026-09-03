@@ -171,3 +171,19 @@ char *strcat(char *restrict dest, const char *restrict src)
     } while (*src++ != '\0');
     return result;
 }
+
+char *strncat(char *restrict dest, const char *restrict src, size_t n)
+{
+    char *result = dest;
+    size_t i = 0;
+
+    while (*dest != '\0') {
+        ++dest;
+    }
+    while (i < n && src[i] != '\0') {
+        dest[i] = src[i];
+        ++i;
+    }
+    dest[i] = '\0';
+    return result;
+}

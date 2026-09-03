@@ -16,7 +16,8 @@ STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
                   -Dstrncpy=mini_test_strncpy -Dstrchr=mini_test_strchr \
                   -Dstrrchr=mini_test_strrchr -Dstrstr=mini_test_strstr \
                   -Dstrspn=mini_test_strspn -Dstrcspn=mini_test_strcspn \
-                  -Dstrpbrk=mini_test_strpbrk -Dstrcat=mini_test_strcat
+                  -Dstrpbrk=mini_test_strpbrk -Dstrcat=mini_test_strcat \
+                  -Dstrncat=mini_test_strncat
 ATOI_RENAMES := -Datoi=mini_test_atoi
 STRTOL_RENAMES := -Dstrtol=mini_test_strtol
 STRTOUL_RENAMES := -Dstrtoul=mini_test_strtoul

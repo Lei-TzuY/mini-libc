@@ -32,15 +32,17 @@ not update libc `errno`.
 
 The standard `string.h` surface includes the memory primitives `memcpy`,
 `memmove`, `memset`, and `memcmp`, plus `strlen`, `strcmp`, `strncmp`, `strcpy`,
-`strncpy`, `strcat`, `strchr`, `strrchr`, `strstr`, `strspn`, `strcspn`, and
-`strpbrk`.
+`strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`, `strspn`,
+`strcspn`, and `strpbrk`.
 `strstr` returns the first matching substring and treats an empty needle as a
 match at the haystack start. `strspn` counts the initial bytes present in an
 accept set, while `strcspn` counts the initial bytes absent from a reject set.
 `strpbrk` returns the first byte in the source that belongs to an accept set.
 `strcat` appends a complete non-overlapping source string at the destination
-terminator and returns the original destination pointer. The searches and scans
-compare byte representations directly without allocating or copying.
+terminator and returns the original destination pointer. `strncat` follows the
+same return and non-overlap contract while appending at most the requested
+number of source bytes and always writing a final null terminator. The searches
+and scans compare byte representations directly without allocating or copying.
 Implementations stay deliberately simple so overlap direction, unsigned-byte
 comparisons, termination/padding semantics, and search behavior remain easy to
 audit.
@@ -129,8 +131,8 @@ make inspect
 
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
-conversion, string-copy/concatenation, search, membership-scan, and counting-scan
-edge cases,
+conversion, string-copy/bounded-concatenation, search, membership-scan, and
+counting-scan edge cases,
 allocator alignment/reuse/split/coalescing behavior,
 `calloc` zeroing/overflow semantics, `realloc` in-place/move/failure semantics,
 fixed-seed allocation/resize stress, startup-backed `getenv`
@@ -165,8 +167,8 @@ docs/                ABI contracts and design notes
 
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`, `string.h` declares only implemented
-memory/string routines including `strcat`, `strstr`, `strspn`, `strcspn`, and
-`strpbrk`;
+memory/string routines including `strcat`, `strncat`, `strstr`, `strspn`,
+`strcspn`, and `strpbrk`;
 `stdlib.h` declares `atoi`, `strtol`, `strtoul`,
 `getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
 `putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
@@ -177,9 +179,9 @@ contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With basic concatenation in place, the next useful bounded string slice can add
-`strncat` with zero-count, truncation-boundary, termination, return-value, and
-non-overlap regression coverage. Formatted I/O, buffering, `FILE`, input
-routines, environment mutation, threading, and mmap-backed large allocations
-should remain separate later slices. Cross-repository integration will wait
-until mini-libc is stable on the system assembler/linker bootstrap path.
+With bounded concatenation in place, the next useful standard C memory slice can
+add `memchr` with zero-count, first-match, null-byte, high-byte, and no-match
+regression coverage. Formatted I/O, buffering, `FILE`, input routines,
+environment mutation, threading, and mmap-backed large allocations should remain
+separate later slices. Cross-repository integration will wait until mini-libc is
+stable on the system assembler/linker bootstrap path.
