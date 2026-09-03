@@ -158,3 +158,16 @@ char *strpbrk(const char *s, const char *accept)
     }
     return (char *)0;
 }
+
+char *strcat(char *restrict dest, const char *restrict src)
+{
+    char *result = dest;
+
+    while (*dest != '\0') {
+        ++dest;
+    }
+    do {
+        *dest++ = *src;
+    } while (*src++ != '\0');
+    return result;
+}

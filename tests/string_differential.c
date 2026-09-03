@@ -15,6 +15,7 @@ char *mini_test_strstr(const char *haystack, const char *needle);
 size_t mini_test_strspn(const char *s, const char *accept);
 size_t mini_test_strcspn(const char *s, const char *reject);
 char *mini_test_strpbrk(const char *s, const char *accept);
+char *mini_test_strcat(char *restrict dest, const char *restrict src);
 
 static unsigned long rng_state = 0xe7037ed1a0b428dbUL;
 static char *(*volatile host_strncpy_fn)(char *, const char *, size_t) = strncpy;
@@ -54,6 +55,8 @@ int main(void)
     char right[BUF_SIZE];
     char mini_buf[BUF_SIZE];
     char host_buf[BUF_SIZE];
+    char mini_cat[BUF_SIZE * 2];
+    char host_cat[BUF_SIZE * 2];
     int case_no;
 
     {
@@ -155,6 +158,17 @@ int main(void)
         host_ptr = strpbrk(left, right);
         if (pointer_offset(left, mini_ptr) != pointer_offset(left, host_ptr)) {
             return 14;
+        }
+
+
+        memset(mini_cat, 0xa5, sizeof(mini_cat));
+        memset(host_cat, 0xa5, sizeof(host_cat));
+        strcpy(mini_cat, left);
+        strcpy(host_cat, left);
+        if (mini_test_strcat(mini_cat, right) != mini_cat ||
+            strcat(host_cat, right) != host_cat ||
+            memcmp(mini_cat, host_cat, sizeof(mini_cat)) != 0) {
+            return 15;
         }
     }
 

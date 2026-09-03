@@ -144,6 +144,8 @@ int main(int argc, char **argv, char **envp)
     char other[BUF_SIZE];
     char dest[BUF_SIZE];
     char expected[BUF_SIZE];
+    char cat_dest[BUF_SIZE * 2];
+    char cat_expected[BUF_SIZE * 2];
     int case_no;
 
     (void)argc;
@@ -230,6 +232,44 @@ int main(int argc, char **argv, char **envp)
             strpbrk(text, "c") != text + 2 || strpbrk(text, "xyz") != (char *)0 ||
             strpbrk(high_text, high_reject) != high_text + 1 || errno != ERANGE) {
             return 39;
+        }
+    }
+
+    {
+        const char high_src[] = {(char)0xff, 'x', '\0'};
+
+        errno = ERANGE;
+        memset(dest, 0x5a, sizeof(dest));
+        dest[0] = 'a';
+        dest[1] = 'b';
+        dest[2] = '\0';
+        if (strcat(dest, "cd") != dest || memcmp(dest, "abcd\0", 5) != 0 ||
+            (unsigned char)dest[5] != 0x5a || errno != ERANGE) {
+            return 52;
+        }
+
+        memset(dest, 0x5a, sizeof(dest));
+        dest[0] = '\0';
+        if (strcat(dest, "xy") != dest || memcmp(dest, "xy\0", 3) != 0 ||
+            (unsigned char)dest[3] != 0x5a || errno != ERANGE) {
+            return 53;
+        }
+
+        memset(dest, 0x5a, sizeof(dest));
+        dest[0] = 'q';
+        dest[1] = '\0';
+        if (strcat(dest, "") != dest || dest[0] != 'q' || dest[1] != '\0' ||
+            (unsigned char)dest[2] != 0x5a || errno != ERANGE) {
+            return 54;
+        }
+
+        memset(dest, 0x5a, sizeof(dest));
+        dest[0] = (char)0x80;
+        dest[1] = '\0';
+        if (strcat(dest, high_src) != dest || (unsigned char)dest[0] != 0x80 ||
+            (unsigned char)dest[1] != 0xff || dest[2] != 'x' || dest[3] != '\0' ||
+            (unsigned char)dest[4] != 0x5a || errno != ERANGE) {
+            return 55;
         }
     }
 
@@ -320,10 +360,28 @@ int main(int argc, char **argv, char **envp)
         if (pointer_offset(source, actual_ptr) != pointer_offset(source, expected_ptr)) {
             return 50;
         }
+
+
+        memset(cat_dest, 0xa5, sizeof(cat_dest));
+        memset(cat_expected, 0xa5, sizeof(cat_expected));
+        for (i = 0; i < src_len; ++i) {
+            cat_dest[i] = source[i];
+            cat_expected[i] = source[i];
+        }
+        cat_dest[src_len] = '\0';
+        cat_expected[src_len] = '\0';
+        for (i = 0; other[i] != '\0'; ++i) {
+            cat_expected[src_len + i] = other[i];
+        }
+        cat_expected[src_len + i] = '\0';
+        if (strcat(cat_dest, other) != cat_dest ||
+            memcmp(cat_dest, cat_expected, sizeof(cat_dest)) != 0) {
+            return 56;
+        }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 51;
+        return 57;
     }
     return 0;
 }

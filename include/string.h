@@ -19,5 +19,6 @@ char *strstr(const char *haystack, const char *needle);
 size_t strspn(const char *s, const char *accept);
 size_t strcspn(const char *s, const char *reject);
 char *strpbrk(const char *s, const char *accept);
+char *strcat(char *restrict dest, const char *restrict src);
 
 #endif
