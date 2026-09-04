@@ -23,3 +23,36 @@ void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
 
     return (void *)0;
 }
+
+static void swap_bytes(unsigned char *left, unsigned char *right, size_t size)
+{
+    size_t i;
+
+    for (i = 0; i < size; ++i) {
+        unsigned char tmp = left[i];
+        left[i] = right[i];
+        right[i] = tmp;
+    }
+}
+
+void qsort(void *base, size_t nmemb, size_t size,
+           int (*compar)(const void *, const void *))
+{
+    unsigned char *bytes = (unsigned char *)base;
+    size_t i;
+
+    for (i = 1; i < nmemb; ++i) {
+        size_t j = i;
+
+        while (j != 0) {
+            unsigned char *left = bytes + (j - 1) * size;
+            unsigned char *right = bytes + j * size;
+
+            if (compar(left, right) <= 0) {
+                break;
+            }
+            swap_bytes(left, right, size);
+            --j;
+        }
+    }
+}

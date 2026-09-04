@@ -8,6 +8,12 @@ struct record {
     unsigned char payload[3];
 };
 
+struct triple {
+    unsigned char key;
+    unsigned char a;
+    unsigned char b;
+};
+
 static int compare_int(const void *key_ptr, const void *element_ptr)
 {
     int key = *(const int *)key_ptr;
@@ -24,6 +30,14 @@ static int compare_record(const void *key_ptr, const void *element_ptr)
     return key < element ? -1 : key > element ? 1 : 0;
 }
 
+static int compare_triple(const void *left_ptr, const void *right_ptr)
+{
+    unsigned char left = ((const struct triple *)left_ptr)->key;
+    unsigned char right = ((const struct triple *)right_ptr)->key;
+
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
 static int compare_calls;
 
 static int counting_compare(const void *key_ptr, const void *element_ptr)
@@ -32,6 +46,54 @@ static int counting_compare(const void *key_ptr, const void *element_ptr)
     (void)element_ptr;
     ++compare_calls;
     return 0;
+}
+
+static int ints_sorted(const int *values, size_t count)
+{
+    size_t i;
+
+    for (i = 1; i < count; ++i) {
+        if (values[i - 1] > values[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int triples_valid(const struct triple *values, size_t count)
+{
+    unsigned int seen_1 = 0;
+    unsigned int seen_10 = 0;
+    unsigned int seen_12 = 0;
+    unsigned int seen_20 = 0;
+    unsigned int seen_30 = 0;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        if (i != 0 && values[i - 1].key > values[i].key) {
+            return 0;
+        }
+        if (values[i].a == 1 && values[i].b == 2 && values[i].key == 0) {
+            ++seen_1;
+        } else if (values[i].a == 10 && values[i].b == 11 &&
+                   values[i].key == 1) {
+            ++seen_10;
+        } else if (values[i].a == 12 && values[i].b == 13 &&
+                   values[i].key == 1) {
+            ++seen_12;
+        } else if (values[i].a == 20 && values[i].b == 21 &&
+                   values[i].key == 2) {
+            ++seen_20;
+        } else if (values[i].a == 30 && values[i].b == 31 &&
+                   values[i].key == 3) {
+            ++seen_30;
+        } else {
+            return 0;
+        }
+    }
+
+    return seen_1 == 1 && seen_10 == 1 && seen_12 == 1 && seen_20 == 1 &&
+           seen_30 == 1;
 }
 
 int main(int argc, char **argv, char **envp)
@@ -44,6 +106,16 @@ int main(int argc, char **argv, char **envp)
         {4, {4, 5, 6}},
         {8, {7, 8, 9}},
     };
+    int sorted[] = {-3, -1, 0, 4, 8};
+    int reverse[] = {9, 7, 5, 3, 1, -1};
+    int sort_duplicates[] = {4, 2, 4, 1, 2, 4, 1};
+    struct {
+        unsigned char before;
+        struct triple values[5];
+        unsigned char after;
+    } box = {0xa5,
+             {{3, 30, 31}, {1, 10, 11}, {2, 20, 21}, {1, 12, 13}, {0, 1, 2}},
+             0x5a};
     int key;
     int *found;
     struct record *record;
@@ -100,8 +172,54 @@ int main(int argc, char **argv, char **envp)
         return 7;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    compare_calls = 0;
+    qsort(sorted, 0, sizeof(sorted[0]), counting_compare);
+    if (compare_calls != 0 || sorted[0] != -3 || errno != ERANGE) {
         return 8;
+    }
+
+    compare_calls = 0;
+    qsort(sorted, 1, sizeof(sorted[0]), counting_compare);
+    if (compare_calls != 0 || sorted[0] != -3 || errno != ERANGE) {
+        return 9;
+    }
+
+    qsort(sorted, sizeof(sorted) / sizeof(sorted[0]), sizeof(sorted[0]),
+          compare_int);
+    if (!ints_sorted(sorted, sizeof(sorted) / sizeof(sorted[0])) ||
+        errno != ERANGE) {
+        return 10;
+    }
+
+    qsort(reverse, sizeof(reverse) / sizeof(reverse[0]), sizeof(reverse[0]),
+          compare_int);
+    if (!ints_sorted(reverse, sizeof(reverse) / sizeof(reverse[0])) ||
+        reverse[0] != -1 || reverse[5] != 9 || errno != ERANGE) {
+        return 11;
+    }
+
+    qsort(sort_duplicates,
+          sizeof(sort_duplicates) / sizeof(sort_duplicates[0]),
+          sizeof(sort_duplicates[0]), compare_int);
+    if (!ints_sorted(sort_duplicates,
+                     sizeof(sort_duplicates) / sizeof(sort_duplicates[0])) ||
+        sort_duplicates[0] != 1 || sort_duplicates[1] != 1 ||
+        sort_duplicates[2] != 2 || sort_duplicates[3] != 2 ||
+        sort_duplicates[4] != 4 || sort_duplicates[5] != 4 ||
+        sort_duplicates[6] != 4 || errno != ERANGE) {
+        return 12;
+    }
+
+    qsort(box.values, sizeof(box.values) / sizeof(box.values[0]),
+          sizeof(box.values[0]), compare_triple);
+    if (box.before != 0xa5 || box.after != 0x5a ||
+        !triples_valid(box.values, sizeof(box.values) / sizeof(box.values[0])) ||
+        errno != ERANGE) {
+        return 13;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 14;
     }
     return 0;
 }
