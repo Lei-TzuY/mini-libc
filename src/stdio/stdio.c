@@ -60,6 +60,9 @@ int fgetc(FILE *stream)
     if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
         return mark_error(stream, EINVAL);
     }
+    if ((stream->state & MINI_FILE_EOF) != 0U) {
+        return EOF;
+    }
 
     result = mini_sys_read(stream->fd, &byte, 1);
     if (result < 0) {
