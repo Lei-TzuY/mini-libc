@@ -5,7 +5,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: executable runtime lifecycle, inherited and owned streams,
+## Current milestone: executable runtime lifecycle, owned block streams and positioning,
 core libc primitives, allocation, environment access, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
@@ -174,16 +174,16 @@ unsuccessful lookups leave `errno` unchanged. The returned value pointer
 aliases the process environment storage. mini-libc does not currently expose
 the POSIX `environ` global or environment mutation APIs.
 
-The `stdio.h` surface now has an opaque `FILE` type and predefined `stdin`,
-`stdout`, and `stderr` expressions backed by inherited descriptors 0, 1, and 2.
-The concrete stream layout stays private. `stdin` is readable; `stdout` and
-`stderr` are writable. `fgetc`/`getc`/`getchar` provide one-byte unbuffered input,
-while `fputc`/`putc`, `fputs`, `putchar`, and `puts` provide unbuffered output.
+The `stdio.h` surface has an opaque `FILE` type and predefined `stdin`, `stdout`,
+and `stderr` expressions backed by inherited descriptors 0, 1, and 2. The
+concrete stream layout stays private. `stdin` is readable; `stdout` and `stderr`
+are writable. `fgetc`/`getc`/`getchar` provide one-byte unbuffered input, while
+`fputc`/`putc`, `fputs`, `putchar`, and `puts` provide unbuffered output.
 `feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error state.
 
 `fopen` extends that object boundary to pathname-backed owned streams without
-coupling the inherited-stream object file to allocator or pathname support.
-The current mode parser accepts `r`, `w`, and `a`, with one optional `+` and one
+coupling the inherited-stream object file to allocator or pathname support. The
+current mode parser accepts `r`, `w`, and `a`, with one optional `+` and one
 optional `b` in either order. On Linux this milestone treats text and binary
 modes identically. Read mode opens an existing file; write mode creates when
 needed and truncates; append mode creates when needed and uses kernel `O_APPEND`;
@@ -200,16 +200,33 @@ even when the close syscall fails, while reporting that close error through
 `errno` and `EOF`. The predefined inherited streams can also be explicitly
 closed and then become invalid. There is no implicit open-stream registry yet.
 
-Input EOF sets only the EOF indicator and leaves `errno` unchanged; later reads
-remain at EOF until `clearerr`. Raw read/write failures set the stream error
-indicator and map the negative kernel result to positive libc `errno`. Output
-retries positive short writes and treats a zero-progress write as `EIO` so it
-cannot spin forever. Calls in the wrong stream direction are rejected with
-`EINVAL`. Successful operations preserve `errno`, and a previous error indicator
-remains set until explicitly cleared. The current stream layer is single-threaded
-and deliberately unbuffered: it does not yet expose `fflush`, `fread`/`fwrite`,
-public seeking/position APIs, formatted I/O, `tmpfile`, or C11 exclusive-create
-`x` modes.
+`fread` and `fwrite` extend the same unbuffered object to block transfers. A zero
+`size` or zero `nmemb` returns zero without issuing a syscall. Otherwise the
+implementation checks that `size * nmemb` is representable, retries positive
+short raw transfers, and returns the number of complete elements transferred.
+EOF after a partial final element leaves those bytes in the caller buffer but
+does not count that incomplete element. A raw read error sets the error
+indicator and maps the kernel error into `errno`; true EOF sets only the EOF
+indicator. A raw write error or zero-progress write sets the error indicator,
+with zero progress reported as `EIO`. The checked multiplication overflow path
+is a deterministic mini-libc extension: it reports `EINVAL`, sets the stream
+error indicator, and performs no raw transfer.
+
+`fseek`, `ftell`, and `rewind` use the existing raw `mini_sys_lseek` boundary.
+`SEEK_SET`, `SEEK_CUR`, and `SEEK_END` map directly to Linux origins. Successful
+`fseek` clears the EOF indicator but deliberately preserves any existing stream
+error indicator; a failed `fseek` reports the raw error through `errno` and does
+not change EOF/error state. `ftell` queries the current offset with a zero
+`SEEK_CUR` seek and returns `-1L` on failure without setting the stream error
+indicator. `rewind` clears both stream indicators and seeks to offset zero;
+because it returns `void`, a seek failure is observable through `errno` while
+the indicators remain cleared.
+
+Successful byte, block, and positioning operations preserve an existing `errno`
+value unless their contract reports a failure. The stream layer remains
+single-threaded and deliberately unbuffered. It does not yet expose `fflush`,
+user-space buffering, formatted I/O, `fgetpos`/`fsetpos`, `tmpfile`, or C11
+exclusive-create `x` modes.
 
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
@@ -267,39 +284,41 @@ zeroing/overflow semantics, `realloc` in-place/move/failure semantics, fixed-see
 allocation/resize stress, startup-backed `getenv` exact-match/empty/missing
 semantics, inherited standard-stream input/output, short-write retry, sticky
 EOF/error indicators, direction errors, owned-file create/truncate/append/reopen/
-read/close behavior, mode translation, pathname errno mapping, and ownership
-failure cleanup. The `strtok` probe covers leading delimiter runs, delimiter
-changes between continuation calls, empty input and delimiter sets, end-of-stream,
-high-byte delimiters, sequence reset, errno preservation, and fixed-seed model
-comparison. The `strerror` probe locks the five exposed errno messages,
-deterministic unknown-code behavior, stable static storage across later calls,
-and errno preservation. The `ctype` probe checks `EOF` plus every value in the
-complete `unsigned char` domain and verifies that all implemented classification
-and conversion routines preserve an existing `errno` value. The `bsearch` probe
-also covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
-duplicate inputs, generic three-byte records, boundary sentinels, signed
-absolute-value boundary-adjacent representable values across `int`, `long`, and
-`long long`, `div`/`ldiv`/`lldiv` sign quadrants, quotient/remainder invariants,
-and errno preservation. Hosted differential executables compare production
-memory/string/conversion/search routines against host libc where the target
-contract is comparable, including a state-isolated `strtok` differential and
-10,000 fixed-seed sorted-array `bsearch` cases. The same hosted search test also
-runs 10,000 fixed-seed `qsort` ordering/multiset property cases against the
-production sorter. Test-only fake syscall/allocator harnesses deterministically
-verify allocator heap-growth refusal, inherited stdio EOF/error/short-write
-state, `fopen` mode flags, allocation/open failures, and close-failure cleanup.
-Hosted oracles are test-only; all library probes remain freestanding mini-libc
-executables.
+read/close behavior, mode translation, pathname errno mapping, block-transfer
+short progress and partial-element semantics, `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
+positioning, EOF reset, and ownership/error cleanup. The `strtok` probe covers
+leading delimiter runs, delimiter changes between continuation calls, empty
+input and delimiter sets, end-of-stream, high-byte delimiters, sequence reset,
+errno preservation, and fixed-seed model comparison. The `strerror` probe locks
+the five exposed errno messages, deterministic unknown-code behavior, stable
+static storage across later calls, and errno preservation. The `ctype` probe
+checks `EOF` plus every value in the complete `unsigned char` domain and verifies
+that all implemented classification and conversion routines preserve an existing
+`errno` value. The `bsearch` probe also covers `qsort` zero/one-element
+no-comparator-call behavior, sorted/reverse/duplicate inputs, generic three-byte
+records, boundary sentinels, signed absolute-value boundary-adjacent
+representable values across `int`, `long`, and `long long`, `div`/`ldiv`/`lldiv`
+sign quadrants, quotient/remainder invariants, and errno preservation. Hosted
+differential executables compare production memory/string/conversion/search
+routines against host libc where the target contract is comparable, including a
+state-isolated `strtok` differential and 10,000 fixed-seed sorted-array `bsearch`
+cases. The same hosted search test also runs 10,000 fixed-seed `qsort`
+ordering/multiset property cases against the production sorter. Test-only fake
+syscall/allocator harnesses deterministically verify allocator heap-growth
+refusal, inherited stdio EOF/error/short-write state, `fopen` mode flags,
+allocation/open/close failures, block short transfers, partial-element counts,
+size-product rejection, and seek/rewind state transitions. Hosted oracles are
+test-only; all library probes remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
 probes. CI additionally executes a pinned `tiny-c-compiler -> mini-libc`
 bootstrap and a pinned `tiny-c-compiler -> mini-libc -> mini-elf-toolchain`
 compile/link/runtime path, so cross-repository integration is an executable gate
-rather than a future roadmap claim. The integration program now creates a file
-through `fopen`, writes and appends through `FILE`, closes and reopens it, reads
-back `ABC` through `fgetc`, and the harness independently verifies the resulting
-file contents in both linker paths.
+rather than a future roadmap claim. The integration program creates `0123456789`
+with `fwrite`, seeks from the end, overwrites bytes with `XY`, rewinds and reads
+back `012345XY89` with `fread`, then seeks again after EOF. The harness
+independently verifies the final file contents in both linker paths.
 
 ## Layout
 
@@ -311,7 +330,7 @@ src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
 src/stdlib/          conversion, search, sorting, arithmetic, allocation, and environment utilities
-src/stdio/           inherited and owned unbuffered stream lifecycle and I/O
+src/stdio/           inherited/owned unbuffered byte, block, and positioning streams
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -328,24 +347,25 @@ declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
 `abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `atexit`, `exit`, `_Exit`,
 `malloc`, `calloc`, `realloc`, and `free`, plus the `div_t`, `ldiv_t`, and
 `lldiv_t` result types; `stdio.h` provides opaque `FILE`, `stdin`, `stdout`,
-`stderr`, `fopen`, `fclose`, `fgetc`, `getc`, `getchar`, `fputc`, `putc`,
-`putchar`, `fputs`, `puts`, `feof`, `ferror`, `clearerr`, and `EOF`; and
+`stderr`, `fopen`, `fclose`, `fread`, `fwrite`, `fseek`, `ftell`, `rewind`,
+`fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`, `puts`, `feof`,
+`ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`, `SEEK_END`, and `EOF`; and
 `errno.h` currently provides the errno lvalue contract plus `ENOENT`, `EIO`,
 `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
-contract, normal-termination ordering, inherited/owned stream state and
-ownership model, allocator ownership rules, cross-toolchain bootstrap boundary,
-and current errno storage limitation.
+contract, normal-termination ordering, inherited/owned stream state, block I/O
+and positioning model, allocator ownership rules, cross-toolchain bootstrap
+boundary, and current errno storage limitation.
 
 ## Next
 
-The owned-file-stream phase is now the executable baseline rather than the
-roadmap target. The next architectural frontier should add **block I/O and
-stream positioning** on top of the existing stream object and raw `lseek`
-boundary: bounded `fread`/`fwrite` semantics plus `fseek`/`ftell`/`rewind`, with
-partial-progress, EOF/error, and position-reset behavior proven through real
-files and the pinned compiler/linker integration path. Buffering, formatted I/O,
-C11 exclusive-create modes, `tmpfile`, threading/TLS, locale expansion,
-`strtoull`, and allocator tuning remain separate follow-on slices rather than
-being mixed into that positioning milestone.
+The unbuffered block-transfer and positioning phase is now the executable
+baseline rather than the roadmap target. The next architectural frontier should
+add **buffered stream state and flush lifecycle**: per-stream buffer ownership,
+`fflush`, deterministic partial-flush/error behavior, read/write transition
+rules, and integration of pending output with `fclose` and normal `exit`.
+That phase will require an explicit live-stream lifecycle instead of relying on
+the kernel to reclaim descriptors. Formatted I/O, `tmpfile`, C11 exclusive-create
+modes, threading/TLS, locale expansion, `strtoull`, and allocator tuning remain
+separate follow-on slices rather than being mixed into the buffering milestone.
