@@ -22,6 +22,26 @@ static int check_parse(const char *text, int base, long expected,
     return 1;
 }
 
+static int check_parse_ll(const char *text, int base, long long expected,
+                          long expected_offset, int expected_errno)
+{
+    char *end = (char *)0;
+    long long value;
+
+    errno = 7;
+    value = strtoll(text, &end, base);
+    if (value != expected) {
+        return 0;
+    }
+    if ((long)(end - text) != expected_offset) {
+        return 0;
+    }
+    if (errno != expected_errno) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char **argv, char **envp)
 {
     static const char message[] = "strtol-ok\n";
@@ -72,9 +92,55 @@ int main(int argc, char **argv, char **envp)
         return 19;
     }
 
+    if (!check_parse_ll("42", 10, 42LL, 2, 7)) return 20;
+    if (!check_parse_ll("  \t-42tail", 10, -42LL, 6, 7)) return 21;
+    if (!check_parse_ll("077", 0, 63LL, 3, 7)) return 22;
+    if (!check_parse_ll("0x1fZ", 0, 31LL, 4, 7)) return 23;
+    if (!check_parse_ll("0X2A!", 16, 42LL, 4, 7)) return 24;
+    if (!check_parse_ll("10102", 2, 10LL, 4, 7)) return 25;
+    if (!check_parse_ll("zZ", 36, 1295LL, 2, 7)) return 26;
+    if (!check_parse_ll("0x", 0, 0LL, 1, 7)) return 27;
+    if (!check_parse_ll("0xg", 16, 0LL, 1, 7)) return 28;
+    if (!check_parse_ll("09", 0, 0LL, 1, 7)) return 29;
+    if (!check_parse_ll("9223372036854775807", 10,
+                        __LONG_LONG_MAX__, 19, 7)) return 30;
+    if (!check_parse_ll("-9223372036854775808", 10,
+                        -__LONG_LONG_MAX__ - 1LL, 20, 7)) return 31;
+    if (!check_parse_ll("9223372036854775808x", 10,
+                        __LONG_LONG_MAX__, 19, ERANGE)) return 32;
+    if (!check_parse_ll("-9223372036854775809x", 10,
+                        -__LONG_LONG_MAX__ - 1LL, 20, ERANGE)) return 33;
+    if (!check_parse_ll("999999999999999999999999tail", 10,
+                        __LONG_LONG_MAX__, 24, ERANGE)) return 34;
+
+    end = (char *)0;
+    errno = 7;
+    if (strtoll(no_digits, &end, 10) != 0 || end != no_digits || errno != 7) {
+        return 35;
+    }
+
+    end = &invalid_sentinel;
+    errno = 7;
+    if (strtoll("123", &end, 1) != 0 || end != &invalid_sentinel ||
+        errno != EINVAL) {
+        return 36;
+    }
+
+    end = &invalid_sentinel;
+    errno = 7;
+    if (strtoll("123", &end, 37) != 0 || end != &invalid_sentinel ||
+        errno != EINVAL) {
+        return 37;
+    }
+
+    errno = 7;
+    if (strtoll("123", (char **)0, 10) != 123LL || errno != 7) {
+        return 38;
+    }
+
     if (mini_sys_write(1, message, sizeof(message) - 1) !=
         (long)(sizeof(message) - 1)) {
-        return 20;
+        return 39;
     }
     return 0;
 }

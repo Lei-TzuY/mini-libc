@@ -118,3 +118,101 @@ long strtol(const char *restrict nptr, char **restrict endptr, int base)
     }
     return (long)value;
 }
+
+long long strtoll(const char *restrict nptr, char **restrict endptr, int base)
+{
+    const unsigned char *s = (const unsigned char *)nptr;
+    unsigned long long value = 0;
+    unsigned long long limit;
+    int negative = 0;
+    int any = 0;
+    int overflow = 0;
+
+    if (base != 0 && (base < 2 || base > 36)) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    while (is_c_space(*s)) {
+        ++s;
+    }
+
+    if (*s == '+' || *s == '-') {
+        negative = *s == '-';
+        ++s;
+    }
+
+    if (base == 0) {
+        if (s[0] == '0') {
+            if (s[1] == 'x' || s[1] == 'X') {
+                int next = digit_value(s[2]);
+
+                if (next >= 0 && next < 16) {
+                    base = 16;
+                    s += 2;
+                } else {
+                    base = 8;
+                }
+            } else {
+                base = 8;
+            }
+        } else {
+            base = 10;
+        }
+    } else if (base == 16 && s[0] == '0' &&
+               (s[1] == 'x' || s[1] == 'X')) {
+        int next = digit_value(s[2]);
+
+        if (next >= 0 && next < 16) {
+            s += 2;
+        }
+    }
+
+    limit = (unsigned long long)__LONG_LONG_MAX__;
+    if (negative) {
+        limit += 1ULL;
+    }
+
+    for (;;) {
+        int digit = digit_value(*s);
+
+        if (digit < 0 || digit >= base) {
+            break;
+        }
+        any = 1;
+        if (!overflow) {
+            unsigned long long udigit = (unsigned long long)digit;
+            unsigned long long ubase = (unsigned long long)base;
+
+            if (value > (limit - udigit) / ubase) {
+                overflow = 1;
+            } else {
+                value = value * ubase + udigit;
+            }
+        }
+        ++s;
+    }
+
+    if (!any) {
+        if (endptr != (char **)0) {
+            *endptr = (char *)nptr;
+        }
+        return 0;
+    }
+
+    if (endptr != (char **)0) {
+        *endptr = (char *)s;
+    }
+
+    if (overflow) {
+        errno = ERANGE;
+        return negative ? -__LONG_LONG_MAX__ - 1LL : __LONG_LONG_MAX__;
+    }
+    if (negative) {
+        if (value == (unsigned long long)__LONG_LONG_MAX__ + 1ULL) {
+            return -__LONG_LONG_MAX__ - 1LL;
+        }
+        return -(long long)value;
+    }
+    return (long long)value;
+}

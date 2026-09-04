@@ -21,6 +21,7 @@ typedef struct {
 int atoi(const char *nptr);
 long strtol(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
+long long strtoll(const char *restrict nptr, char **restrict endptr, int base);
 char *getenv(const char *name);
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
               int (*compar)(const void *, const void *));

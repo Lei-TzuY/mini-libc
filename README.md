@@ -87,13 +87,13 @@ or copying. Implementations stay deliberately simple so overlap direction,
 unsigned-byte comparisons, termination/padding semantics, search behavior, and
 hidden state remain easy to audit.
 
-The current `stdlib.h` integer-conversion surface contains `atoi`, `strtol`, and
-`strtoul`. `atoi` skips the six C whitespace characters, accepts one optional
-`+` or `-`, consumes decimal digits until the first non-digit, and returns zero
-when no digits are consumed. ISO C does not define `atoi` overflow behavior;
-mini-libc chooses a deterministic policy instead: positive overflow saturates
-to `INT_MAX` and negative overflow to `INT_MIN`, without relying on signed-
-overflow undefined behavior.
+The current `stdlib.h` integer-conversion surface contains `atoi`, `strtol`,
+`strtoul`, and `strtoll`. `atoi` skips the six C whitespace characters, accepts
+one optional `+` or `-`, consumes decimal digits until the first non-digit, and
+returns zero when no digits are consumed. ISO C does not define `atoi` overflow
+behavior; mini-libc chooses a deterministic policy instead: positive overflow
+saturates to `INT_MAX` and negative overflow to `INT_MIN`, without relying on
+signed-overflow undefined behavior.
 
 `strtol` accepts base 0 or bases 2 through 36, handles the standard octal and
 hexadecimal prefixes, reports the first unconsumed character through `endptr`,
@@ -109,6 +109,13 @@ A magnitude above `ULONG_MAX` returns `ULONG_MAX` and sets `ERANGE`. A leading
 minus is accepted by the C conversion contract: when the magnitude is
 representable, the result is its unsigned negation modulo `ULONG_MAX + 1`; for
 example, `strtoul("-1", ..., 10)` returns `ULONG_MAX` without setting `ERANGE`.
+
+`strtoll` mirrors the `strtol` whitespace, sign, base, prefix, `endptr`, and
+invalid-base rules while accumulating against the `long long` range. Positive
+and negative range errors return `LLONG_MAX` and `LLONG_MIN` respectively and
+set `ERANGE`; successful conversions and no-conversion cases preserve `errno`.
+The implementation continues consuming the full valid digit sequence after an
+overflow so the reported `endptr` remains correct.
 
 `bsearch` performs comparator-driven binary search over a caller-owned sorted
 array without allocating. A zero-element search returns null without invoking
@@ -264,23 +271,21 @@ current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
 `isspace`, `isupper`, `isxdigit`, `tolower`, and `toupper`; `string.h` declares
 only implemented memory/string routines including `memchr`, `strcat`, `strncat`,
 `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`; `stdlib.h`
-declares `atoi`, `strtol`, `strtoul`, `getenv`, `bsearch`, `qsort`, `abs`,
-`labs`, `llabs`, `div`, `ldiv`, `lldiv`, `malloc`, `calloc`, `realloc`, and
-`free`, plus the `div_t`, `ldiv_t`, and `lldiv_t` result types; `stdio.h` provides
-`EOF`, `putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
-contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
+`abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `malloc`, `calloc`, `realloc`,
+and `free`, plus the `div_t`, `ldiv_t`, and `lldiv_t` result types; `stdio.h`
+provides `EOF`, `putchar`, and `puts`; and `errno.h` currently provides the errno
+lvalue contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With the `int`, `long`, and `long long` absolute-value and quotient/remainder
-families in place, the next bounded `stdlib.h` conversion slice can add
-`strtoll` only, mirroring the existing `strtol` base/prefix/endptr/errno contract
-with checked `long long` range handling. `strtoull` should remain a separate
-later slice rather than being stacked into the same PR. Locale-sensitive
-`strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`, input routines,
-environment mutation, threading/TLS, and mmap-backed large allocations should
-also remain separate. Cross-repository integration will wait until mini-libc is
-stable on the system assembler/linker bootstrap path.
+With signed `long long` conversion in place, the next bounded `stdlib.h`
+conversion slice can add `strtoull` only, mirroring the existing `strtoul`
+base/prefix/endptr/errno contract with checked `unsigned long long` range
+handling. Locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`,
+input routines, environment mutation, threading/TLS, and mmap-backed large
+allocations should remain separate. Cross-repository integration will wait until
+mini-libc is stable on the system assembler/linker bootstrap path.
