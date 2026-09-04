@@ -15,9 +15,33 @@ boundary for the System V AMD64 function-call convention, and calls
 
 `__mini_start` decodes `argc`, `argv`, and `envp`, records the original
 environment vector through the implementation-only `__mini_set_envp` hook,
-invokes `main(int, char **, char **)`, then forwards the returned status to
-`mini_sys_exit`. There are currently no constructors, destructors, TLS setup,
-`atexit` handlers, or other libc initialization hooks.
+invokes `main(int, char **, char **)`, then passes the returned status to the
+libc `exit` path. There are currently no constructors, destructors, TLS setup,
+or other pre-main initialization hooks.
+
+## Normal termination ABI
+
+`<stdlib.h>` exposes `atexit`, `exit`, and `_Exit`. `atexit` records callbacks in
+one process-global fixed-capacity registry. The registry accepts 32 simultaneous
+registrations, satisfying the C minimum guarantee, and the same callback may be
+registered more than once. Successful registration returns zero; a full registry
+returns a nonzero value without disturbing existing entries. A null callback is
+also rejected with a nonzero result as a defensive extension. The registry is
+single-threaded state and is not TLS-backed or synchronized.
+
+Normal termination happens either when `main` returns or when code calls
+`exit(status)`. Registered callbacks are removed from the registry immediately
+before they are invoked, so callbacks run in reverse registration order and a
+callback registered by a callback during termination remains eligible for the
+same termination sequence. After the registry is drained, `exit` delegates to
+`_Exit(status)`.
+
+`_Exit(status)` bypasses the callback registry and calls raw `mini_sys_exit`
+directly. It therefore provides the immediate-termination path required when no
+normal-exit callbacks should run. mini-libc currently has no `FILE` stream
+object model, buffering, or `tmpfile`, so `exit` has no stream-flush/close or
+temporary-file cleanup phase yet. Adding those facilities later must extend the
+normal-termination sequence rather than bypassing this callback boundary.
 
 ## Function ABI
 
@@ -171,7 +195,11 @@ and an mmap-backed large-allocation path are later milestones.
 
 ## ELF expectations
 
-Milestone executables are linked with the system static linker only as a
-bootstrap tool. They contain no `PT_INTERP`, no `DT_NEEDED` dependency, and no
-undefined symbols. `tests/verify-no-host-libc.sh` enforces these properties.
-There is no dynamic loader or shared-library support yet.
+Milestone executables contain no `PT_INTERP`, no `DT_NEEDED` dependency, and no
+undefined symbols; `tests/verify-no-host-libc.sh` enforces these properties. The
+ordinary local `make` path still uses the system assembler, archive tool, and
+static linker as bootstrap tools. CI additionally pins `tiny-c-compiler` and
+proves that it can compile every production C source, then pins
+`mini-elf-toolchain` and proves that the resulting mini-libc objects can be
+linked and executed without the host libc. There is no dynamic loader or
+shared-library support yet.
