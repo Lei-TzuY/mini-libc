@@ -5,14 +5,6 @@
 
 #include "stdio_internal.h"
 
-static FILE mini_stdin = {0, MINI_FILE_READABLE, 0};
-static FILE mini_stdout = {1, MINI_FILE_WRITABLE, 0};
-static FILE mini_stderr = {2, MINI_FILE_WRITABLE, 0};
-
-FILE *__mini_stdin = &mini_stdin;
-FILE *__mini_stdout = &mini_stdout;
-FILE *__mini_stderr = &mini_stderr;
-
 static int mark_error(FILE *stream, int error)
 {
     if (stream != (FILE *)0) {
@@ -20,27 +12,6 @@ static int mark_error(FILE *stream, int error)
     }
     errno = error;
     return EOF;
-}
-
-static int write_all(FILE *stream, const char *buffer, size_t length)
-{
-    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
-        return mark_error(stream, EINVAL);
-    }
-
-    while (length != 0) {
-        long result = mini_sys_write(stream->fd, buffer, (unsigned long)length);
-
-        if (result < 0) {
-            return mark_error(stream, (int)-result);
-        }
-        if (result == 0) {
-            return mark_error(stream, EIO);
-        }
-        buffer += (size_t)result;
-        length -= (size_t)result;
-    }
-    return 0;
 }
 
 int fgetc(FILE *stream)
@@ -51,18 +22,29 @@ int fgetc(FILE *stream)
     if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
         return mark_error(stream, EINVAL);
     }
+    if ((stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U) {
+        return mark_error(stream, EINVAL);
+    }
     if ((stream->state & MINI_FILE_EOF) != 0U) {
         return EOF;
     }
 
     result = mini_sys_read(stream->fd, &byte, 1);
     if (result < 0) {
+        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
         return mark_error(stream, (int)-result);
     }
     if (result == 0) {
         stream->state |= MINI_FILE_EOF;
+        stream->state &= ~MINI_FILE_READ_NEEDS_POSITION;
         return EOF;
     }
+    if (result != 1) {
+        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+        return mark_error(stream, EIO);
+    }
+
+    stream->state |= MINI_FILE_READ_NEEDS_POSITION;
     return (int)byte;
 }
 
@@ -80,7 +62,7 @@ int fputc(int c, FILE *stream)
 {
     unsigned char byte = (unsigned char)c;
 
-    if (write_all(stream, (const char *)&byte, 1) == EOF) {
+    if (__mini_stdio_write(stream, &byte, 1) != 1) {
         return EOF;
     }
     return (int)byte;
@@ -100,10 +82,13 @@ int fputs(const char *restrict s, FILE *restrict stream)
 {
     size_t length = 0;
 
+    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
+        return mark_error(stream, EINVAL);
+    }
     while (s[length] != '\0') {
         ++length;
     }
-    if (write_all(stream, s, length) == EOF) {
+    if (__mini_stdio_write(stream, (const unsigned char *)s, length) != length) {
         return EOF;
     }
     return 0;
