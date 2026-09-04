@@ -56,6 +56,12 @@ if [ "$ctype_output" != "ctype-ok" ]; then
     exit 1
 fi
 
+bsearch_output="$(./build/bsearch_probe)"
+if [ "$bsearch_output" != "bsearch-ok" ]; then
+    echo "unexpected bsearch probe output: $bsearch_output" >&2
+    exit 1
+fi
+
 atoi_output="$(./build/atoi_probe)"
 if [ "$atoi_output" != "atoi-ok" ]; then
     echo "unexpected atoi probe output: $atoi_output" >&2
@@ -118,10 +124,11 @@ fi
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
+./build/bsearch_differential
 ./build/atoi_differential
 ./build/strtol_differential
 ./build/strtoul_differential
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime, syscall, memory, string, strtok, strerror, ctype, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"
+echo "runtime, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"

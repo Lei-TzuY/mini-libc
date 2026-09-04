@@ -22,6 +22,7 @@ STRING_RENAMES := -Dstrlen=mini_test_strlen -Dstrcmp=mini_test_strcmp \
 ATOI_RENAMES := -Datoi=mini_test_atoi
 STRTOL_RENAMES := -Dstrtol=mini_test_strtol
 STRTOUL_RENAMES := -Dstrtoul=mini_test_strtoul
+BSEARCH_RENAMES := -Dbsearch=mini_test_bsearch
 ALLOCATOR_RENAMES := -Dmalloc=mini_test_malloc -Drealloc=mini_test_realloc \
                      -Dfree=mini_test_free -Dmini_sys_brk=mini_test_brk
 STDIO_RENAMES := -Dmini_sys_write=mini_test_write
@@ -31,18 +32,20 @@ LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
 LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
             $(BUILD)/strerror.o $(BUILD)/ctype.o $(BUILD)/atoi.o \
-            $(BUILD)/strtol.o $(BUILD)/strtoul.o $(BUILD)/allocator.o \
-            $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o $(BUILD)/errno.o
+            $(BUILD)/strtol.o $(BUILD)/strtoul.o $(BUILD)/bsearch.o \
+            $(BUILD)/allocator.o $(BUILD)/calloc.o $(BUILD)/getenv.o \
+            $(BUILD)/stdio.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
-            $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/atoi_probe \
-            $(BUILD)/errno_probe $(BUILD)/strtol_probe $(BUILD)/strtoul_probe \
-            $(BUILD)/allocator_probe $(BUILD)/calloc_probe $(BUILD)/realloc_probe \
-            $(BUILD)/getenv_probe $(BUILD)/stdio_probe
+            $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
+            $(BUILD)/atoi_probe $(BUILD)/errno_probe $(BUILD)/strtol_probe \
+            $(BUILD)/strtoul_probe $(BUILD)/allocator_probe $(BUILD)/calloc_probe \
+            $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
-              $(BUILD)/strtok_differential $(BUILD)/atoi_differential \
-              $(BUILD)/strtol_differential $(BUILD)/strtoul_differential \
-              $(BUILD)/allocator_failure_test $(BUILD)/stdio_write_test
+              $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
+              $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
+              $(BUILD)/strtoul_differential $(BUILD)/allocator_failure_test \
+              $(BUILD)/stdio_write_test
 
 .PHONY: all clean test inspect
 
@@ -79,6 +82,9 @@ $(BUILD)/strtol.o: src/stdlib/strtol.c include/stdlib.h include/errno.h | $(BUIL
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/strtoul.o: src/stdlib/strtoul.c include/stdlib.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/bsearch.o: src/stdlib/bsearch.c include/stdlib.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/allocator.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h include/string.h | $(BUILD)
@@ -128,6 +134,15 @@ $(BUILD)/strerror_probe.o: tests/strerror_probe.c include/mini/syscall.h include
 
 $(BUILD)/ctype_probe.o: tests/ctype_probe.c include/mini/syscall.h include/ctype.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/bsearch_probe.o: tests/bsearch_probe.c include/mini/syscall.h include/stdlib.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/bsearch_diff_impl.o: src/stdlib/bsearch.c include/stdlib.h include/stddef.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(BSEARCH_RENAMES) -c $< -o $@
+
+$(BUILD)/bsearch_differential.o: tests/bsearch_differential.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/string_diff_impl.o: src/string/string.c include/string.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(STRING_RENAMES) -c $< -o $@
@@ -219,6 +234,9 @@ $(BUILD)/strerror_probe: $(BUILD)/strerror_probe.o $(CRT0) $(LIBC)
 $(BUILD)/ctype_probe: $(BUILD)/ctype_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/ctype_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/bsearch_probe: $(BUILD)/bsearch_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/bsearch_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/atoi_probe: $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/atoi_probe.o $(CRT0) $(LIBC)
 
@@ -253,6 +271,9 @@ $(BUILD)/string_differential: $(BUILD)/string_differential.o $(BUILD)/string_dif
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/strtok_differential: $(BUILD)/strtok_differential.o $(BUILD)/string_diff_impl.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+$(BUILD)/bsearch_differential: $(BUILD)/bsearch_differential.o $(BUILD)/bsearch_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/atoi_differential: $(BUILD)/atoi_differential.o $(BUILD)/atoi_diff_impl.o
