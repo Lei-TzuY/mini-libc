@@ -34,3 +34,30 @@ jobs:
         env:
           MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
         run: ./tests/verify-tiny-c-compiler.sh
+
+  mini-toolchain-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out pinned tiny-c-compiler
+        uses: actions/checkout@v4
+        with:
+          repository: Lei-TzuY/tiny-c-compiler
+          ref: 5607c3152d319353c42f05ed44ff53479272a74f
+          path: .integration/tiny-c-compiler
+      - name: Check out pinned mini-elf-toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: Lei-TzuY/mini-elf-toolchain
+          ref: 3e0f2da92e21b9399dfa4139b56c2b6b52c3c1a5
+          path: .integration/mini-elf-toolchain
+      - name: Build integration toolchains
+        run: |
+          make -C .integration/tiny-c-compiler minicc
+          cargo build --manifest-path .integration/mini-elf-toolchain/Cargo.toml --bin mini-elf-toolchain
+      - name: Compile, link, and run the three-repo bootstrap
+        env:
+          MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
+          MINI_ELF_LINKER: ${{ github.workspace }}/.integration/mini-elf-toolchain/target/debug/mini-elf-toolchain
+          OUT: build/mini-toolchain-integration
+        run: ./tests/verify-tiny-c-compiler.sh

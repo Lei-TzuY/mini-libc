@@ -25,8 +25,16 @@ done
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
-"$LD" -static -e _start --build-id=none -o "$OUT/integration" \
-    "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
+
+if [ -n "${MINI_ELF_LINKER:-}" ]; then
+    "$MINI_ELF_LINKER" link -o "$OUT/integration" \
+        "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    linker_name="mini-elf-toolchain"
+else
+    "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
+        "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    linker_name="GNU ld"
+fi
 
 output=$(MINI_TINY_C=yes "$OUT/integration" arg)
 if [ "$output" != "tiny-c-integration-ok" ]; then
@@ -36,4 +44,4 @@ fi
 
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 
-echo "tiny-c-compiler -> mini-libc compile/link/runtime integration passed"
+echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
