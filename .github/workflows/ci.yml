@@ -17,3 +17,20 @@ jobs:
         run: make clean test CC=${{ matrix.cc }}
       - name: Verify host-libc independence
         run: make inspect CC=${{ matrix.cc }}
+
+  tiny-c-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out pinned tiny-c-compiler
+        uses: actions/checkout@v4
+        with:
+          repository: Lei-TzuY/tiny-c-compiler
+          ref: 5607c3152d319353c42f05ed44ff53479272a74f
+          path: .integration/tiny-c-compiler
+      - name: Build tiny-c-compiler
+        run: make -C .integration/tiny-c-compiler minicc
+      - name: Compile and run mini-libc through tiny-c-compiler
+        env:
+          MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
+        run: ./tests/verify-tiny-c-compiler.sh
