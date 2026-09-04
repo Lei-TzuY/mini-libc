@@ -126,21 +126,22 @@ easy to audit for arbitrary element sizes. Duplicate elements are supported but
 no stability guarantee is part of the public contract. Calls leave an existing
 `errno` value unchanged; algorithmic optimizations remain a separate concern.
 
-`abs` and `labs` provide the ISO C signed absolute-value operations for `int`
-and `long`. Zero and positive inputs are returned unchanged, while negative
-inputs are negated when the positive magnitude is representable. Calls leave an
-existing `errno` value unchanged and use no hidden state. The overflow cases
-`abs(INT_MIN)` and `labs(LONG_MIN)` remain outside the defined contract; mini-libc
-does not add a non-standard saturation policy for them.
+`abs`, `labs`, and `llabs` provide the ISO C signed absolute-value operations for
+`int`, `long`, and `long long`. Zero and positive inputs are returned unchanged,
+while negative inputs are negated when the positive magnitude is representable.
+Calls leave an existing `errno` value unchanged and use no hidden state. The
+overflow cases `abs(INT_MIN)`, `labs(LONG_MIN)`, and `llabs(LLONG_MIN)` remain
+outside the defined contract; mini-libc does not add a non-standard saturation
+policy for them.
 
-`div` and `ldiv` provide ISO C quotient/remainder results through public `div_t`
-and `ldiv_t` structures. Quotients truncate toward zero; the remainder is zero
-or has the same sign as the numerator, its magnitude is smaller than the
-denominator magnitude, and `numer == quot * denom + rem` for defined inputs.
-Calls leave an existing `errno` value unchanged and allocate no storage. Division
-by zero and the unrepresentable `INT_MIN / -1` and `LONG_MIN / -1` cases remain
-outside the defined contract; mini-libc does not invent recovery semantics for
-them.
+`div`, `ldiv`, and `lldiv` provide ISO C quotient/remainder results through
+public `div_t`, `ldiv_t`, and `lldiv_t` structures. Quotients truncate toward
+zero; the remainder is zero or has the same sign as the numerator, its magnitude
+is smaller than the denominator magnitude, and `numer == quot * denom + rem` for
+defined inputs. Calls leave an existing `errno` value unchanged and allocate no
+storage. Division by zero and the unrepresentable `INT_MIN / -1`,
+`LONG_MIN / -1`, and `LLONG_MIN / -1` cases remain outside the defined contract;
+mini-libc does not invent recovery semantics for them.
 
 `getenv` retains the original `envp` vector decoded at process startup and
 scans it without allocating or copying. A lookup matches only an exact
@@ -223,18 +224,18 @@ complete `unsigned char` domain and verifies that all implemented classification
 and conversion routines preserve an existing `errno` value. The `bsearch` probe
 also covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
 duplicate inputs, generic three-byte records, boundary sentinels, signed
-absolute-value boundary-adjacent representable values, `div`/`ldiv` sign
-quadrants, quotient/remainder invariants, and errno preservation. Hosted
-differential executables compare production memory/string/conversion/search
-routines against host libc where the target contract is comparable, including a
-state-isolated `strtok` differential and 10,000 fixed-seed sorted-array `bsearch`
-cases. The same hosted search test also runs 10,000 fixed-seed `qsort` ordering/
-multiset property cases against the production sorter. A test-only fake-`brk`
-allocator harness deterministically verifies heap-growth refusal and `ENOMEM`
-without linking the freestanding allocator to the host heap. Hosted oracles are
-test-only; all library probes, including `allocator_probe`, `strtok_probe`,
-`strerror_probe`, `ctype_probe`, and `bsearch_probe`, remain freestanding
-mini-libc executables.
+absolute-value boundary-adjacent representable values across `int`, `long`, and
+`long long`, `div`/`ldiv`/`lldiv` sign quadrants, quotient/remainder invariants,
+and errno preservation. Hosted differential executables compare production
+memory/string/conversion/search routines against host libc where the target
+contract is comparable, including a state-isolated `strtok` differential and
+10,000 fixed-seed sorted-array `bsearch` cases. The same hosted search test also
+runs 10,000 fixed-seed `qsort` ordering/multiset property cases against the
+production sorter. A test-only fake-`brk` allocator harness deterministically
+verifies heap-growth refusal and `ENOMEM` without linking the freestanding
+allocator to the host heap. Hosted oracles are test-only; all library probes,
+including `allocator_probe`, `strtok_probe`, `strerror_probe`, `ctype_probe`, and
+`bsearch_probe`, remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -264,23 +265,22 @@ current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
 only implemented memory/string routines including `memchr`, `strcat`, `strncat`,
 `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`; `stdlib.h`
 declares `atoi`, `strtol`, `strtoul`, `getenv`, `bsearch`, `qsort`, `abs`,
-`labs`, `div`, `ldiv`, `malloc`, `calloc`, `realloc`, and `free`, plus the
-`div_t` and `ldiv_t` result types; `stdio.h` provides `EOF`, `putchar`, and
-`puts`; and `errno.h` currently provides the errno lvalue contract plus `EIO`,
-`ENOMEM`, `EINVAL`, and `ERANGE`.
+`labs`, `llabs`, `div`, `ldiv`, `lldiv`, `malloc`, `calloc`, `realloc`, and
+`free`, plus the `div_t`, `ldiv_t`, and `lldiv_t` result types; `stdio.h` provides
+`EOF`, `putchar`, and `puts`; and `errno.h` currently provides the errno lvalue
+contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With the `int`/`long` absolute-value and quotient/remainder families in place,
-the next bounded `stdlib.h` arithmetic slice can add paired `llabs` + `lldiv`,
-including the public `lldiv_t` result structure and the same explicit
-quotient/remainder invariants for `long long`. The unrepresentable
-`LLONG_MIN / -1` case and `llabs(LLONG_MIN)` remain outside the defined contract
-and must not gain invented saturation or recovery semantics. `strtoll`/
-`strtoull`, locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering,
-`FILE`, input routines, environment mutation, threading/TLS, and mmap-backed
-large allocations should remain separate. Cross-repository integration will
-wait until mini-libc is stable on the system assembler/linker bootstrap path.
+With the `int`, `long`, and `long long` absolute-value and quotient/remainder
+families in place, the next bounded `stdlib.h` conversion slice can add
+`strtoll` only, mirroring the existing `strtol` base/prefix/endptr/errno contract
+with checked `long long` range handling. `strtoull` should remain a separate
+later slice rather than being stacked into the same PR. Locale-sensitive
+`strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`, input routines,
+environment mutation, threading/TLS, and mmap-backed large allocations should
+also remain separate. Cross-repository integration will wait until mini-libc is
+stable on the system assembler/linker bootstrap path.

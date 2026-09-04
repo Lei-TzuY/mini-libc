@@ -110,6 +110,13 @@ static unsigned long long_magnitude(long value)
     return value < 0 ? 0UL - bits : bits;
 }
 
+static unsigned long long long_long_magnitude(long long value)
+{
+    unsigned long long bits = (unsigned long long)value;
+
+    return value < 0 ? 0ULL - bits : bits;
+}
+
 static int div_matches(int numer, int denom, int quot, int rem)
 {
     div_t result = div(numer, denom);
@@ -134,6 +141,20 @@ static int ldiv_matches(long numer, long denom, long quot, long rem)
         return 0;
     }
     return long_magnitude(result.rem) < long_magnitude(denom);
+}
+
+static int lldiv_matches(long long numer, long long denom, long long quot,
+                         long long rem)
+{
+    lldiv_t result = lldiv(numer, denom);
+
+    if (result.quot != quot || result.rem != rem) {
+        return 0;
+    }
+    if (result.rem != 0 && ((result.rem < 0) != (numer < 0))) {
+        return 0;
+    }
+    return long_long_magnitude(result.rem) < long_long_magnitude(denom);
 }
 
 int main(int argc, char **argv, char **envp)
@@ -163,6 +184,8 @@ int main(int argc, char **argv, char **envp)
     int denom;
     long lnumer;
     long ldenom;
+    long long llnumer;
+    long long lldenom;
 
     (void)argc;
     (void)argv;
@@ -334,8 +357,47 @@ int main(int argc, char **argv, char **envp)
         }
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    if (llabs(0LL) != 0LL || llabs(1LL) != 1LL || llabs(-1LL) != 1LL ||
+        llabs(__LONG_LONG_MAX__) != __LONG_LONG_MAX__ ||
+        llabs(-__LONG_LONG_MAX__) != __LONG_LONG_MAX__ || errno != ERANGE) {
         return 22;
+    }
+
+    if (!lldiv_matches(7LL, 3LL, 2LL, 1LL) ||
+        !lldiv_matches(-7LL, 3LL, -2LL, -1LL) ||
+        !lldiv_matches(7LL, -3LL, -2LL, 1LL) ||
+        !lldiv_matches(-7LL, -3LL, 2LL, -1LL) ||
+        !lldiv_matches(0LL, 7LL, 0LL, 0LL) || errno != ERANGE) {
+        return 23;
+    }
+
+    if (!lldiv_matches(__LONG_LONG_MAX__, -1LL, -__LONG_LONG_MAX__, 0LL) ||
+        !lldiv_matches(-__LONG_LONG_MAX__ - 1LL, 2LL,
+                       (-__LONG_LONG_MAX__ - 1LL) / 2LL,
+                       (-__LONG_LONG_MAX__ - 1LL) % 2LL) ||
+        errno != ERANGE) {
+        return 24;
+    }
+
+    for (llnumer = -256; llnumer <= 256; ++llnumer) {
+        for (lldenom = -32; lldenom <= 32; ++lldenom) {
+            lldiv_t result;
+
+            if (lldenom == 0) {
+                continue;
+            }
+            result = lldiv(llnumer, lldenom);
+            if (!lldiv_matches(llnumer, lldenom, llnumer / lldenom,
+                               llnumer % lldenom) ||
+                result.quot * lldenom + result.rem != llnumer ||
+                errno != ERANGE) {
+                return 25;
+            }
+        }
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 26;
     }
     return 0;
 }

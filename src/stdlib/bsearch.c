@@ -67,6 +67,11 @@ long labs(long j)
     return j < 0 ? -j : j;
 }
 
+long long llabs(long long j)
+{
+    return j < 0 ? -j : j;
+}
+
 div_t div(int numer, int denom)
 {
     div_t result;
@@ -79,6 +84,15 @@ div_t div(int numer, int denom)
 ldiv_t ldiv(long numer, long denom)
 {
     ldiv_t result;
+
+    result.quot = numer / denom;
+    result.rem = numer % denom;
+    return result;
+}
+
+lldiv_t lldiv(long long numer, long long denom)
+{
+    lldiv_t result;
 
     result.quot = numer / denom;
     result.rem = numer % denom;
