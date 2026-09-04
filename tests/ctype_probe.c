@@ -44,6 +44,12 @@ static int model_upper(int c)
     return c >= 'A' && c <= 'Z';
 }
 
+static int model_xdigit(int c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') ||
+           (c >= 'a' && c <= 'f');
+}
+
 static int model_tolower(int c)
 {
     return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
@@ -66,8 +72,8 @@ int main(int argc, char **argv, char **envp)
     errno = ERANGE;
     if (isalpha(EOF) != 0 || isalnum(EOF) != 0 || isdigit(EOF) != 0 ||
         isgraph(EOF) != 0 || islower(EOF) != 0 || isprint(EOF) != 0 ||
-        isspace(EOF) != 0 || isupper(EOF) != 0 || tolower(EOF) != EOF ||
-        toupper(EOF) != EOF || errno != ERANGE) {
+        isspace(EOF) != 0 || isupper(EOF) != 0 || isxdigit(EOF) != 0 ||
+        tolower(EOF) != EOF || toupper(EOF) != EOF || errno != ERANGE) {
         return 1;
     }
 
@@ -100,19 +106,22 @@ int main(int argc, char **argv, char **envp)
         if ((isupper(c) != 0) != model_upper(c)) {
             return 10;
         }
-        if (tolower(c) != model_tolower(c)) {
+        if ((isxdigit(c) != 0) != model_xdigit(c)) {
             return 11;
         }
-        if (toupper(c) != model_toupper(c)) {
+        if (tolower(c) != model_tolower(c)) {
             return 12;
         }
-        if (errno != ERANGE) {
+        if (toupper(c) != model_toupper(c)) {
             return 13;
+        }
+        if (errno != ERANGE) {
+            return 14;
         }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 14;
+        return 15;
     }
     return 0;
 }
