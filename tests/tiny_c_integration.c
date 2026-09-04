@@ -35,7 +35,8 @@ int main(int argc, char **argv, char **envp)
         return 5;
     }
 
-    if (puts(buffer) == EOF) {
+    if (stdout == (FILE *)0 || fputs(buffer, stdout) == EOF ||
+        fputc('\n', stdout) == EOF || ferror(stdout)) {
         free(buffer);
         return 6;
     }
