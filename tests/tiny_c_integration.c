@@ -9,6 +9,7 @@ int main(int argc, char **argv, char **envp)
     char *value;
     char *io_path;
     char *buffer;
+    char io_buffer[11];
     FILE *stream;
 
     (void)envp;
@@ -42,41 +43,54 @@ int main(int argc, char **argv, char **envp)
         return 6;
     }
 
-    stream = fopen(io_path, "w");
-    if (stream == (FILE *)0 || fputs("AB", stream) == EOF ||
-        fclose(stream) != 0) {
+    stream = fopen(io_path, "w+");
+    if (stream == (FILE *)0 || fwrite("0123456789", 2, 5, stream) != 5 ||
+        ftell(stream) != 10L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         free(buffer);
         return 7;
     }
 
-    stream = fopen(io_path, "a");
-    if (stream == (FILE *)0 || fputc('C', stream) != 'C' ||
-        fclose(stream) != 0) {
+    if (fseek(stream, -4L, SEEK_END) != 0 || ftell(stream) != 6L ||
+        fwrite("XY", 1, 2, stream) != 2 || ftell(stream) != 8L) {
+        fclose(stream);
         free(buffer);
         return 8;
     }
 
-    stream = fopen(io_path, "r");
-    if (stream == (FILE *)0) {
+    rewind(stream);
+    if (ferror(stream) || feof(stream) || ftell(stream) != 0L ||
+        fread(io_buffer, 2, 5, stream) != 5) {
+        fclose(stream);
         free(buffer);
         return 9;
     }
-    if (fgetc(stream) != 'A' || fgetc(stream) != 'B' ||
-        fgetc(stream) != 'C' || fgetc(stream) != EOF ||
-        !feof(stream) || ferror(stream)) {
+    io_buffer[10] = '\0';
+    if (strcmp(io_buffer, "012345XY89") != 0 ||
+        fread(io_buffer, 1, 1, stream) != 0 || !feof(stream)) {
         fclose(stream);
         free(buffer);
         return 10;
     }
-    if (fclose(stream) != 0) {
+
+    if (fseek(stream, 3L, SEEK_SET) != 0 || feof(stream) ||
+        fread(io_buffer, 1, 4, stream) != 4) {
+        fclose(stream);
         free(buffer);
         return 11;
+    }
+    io_buffer[4] = '\0';
+    if (strcmp(io_buffer, "345X") != 0 || fclose(stream) != 0) {
+        free(buffer);
+        return 12;
     }
 
     if (stdout == (FILE *)0 || fputs(buffer, stdout) == EOF ||
         fputc('\n', stdout) == EOF || ferror(stdout)) {
         free(buffer);
-        return 12;
+        return 13;
     }
     free(buffer);
     return 0;
