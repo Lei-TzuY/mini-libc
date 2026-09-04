@@ -44,8 +44,8 @@ if [ "$output" != "tiny-c-integration-ok" ]; then
     rm -f "$io_path"
     exit 1
 fi
-if [ "$(cat "$io_path")" != "ABC" ]; then
-    echo "unexpected tiny-c-compiler owned file contents" >&2
+if [ "$(cat "$io_path")" != "012345XY89" ]; then
+    echo "unexpected tiny-c-compiler positioned file contents" >&2
     rm -f "$io_path"
     exit 1
 fi

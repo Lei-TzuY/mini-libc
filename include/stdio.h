@@ -1,7 +1,12 @@
 #ifndef MINI_LIBC_STDIO_H
 #define MINI_LIBC_STDIO_H
 
+#include <stddef.h>
+
 #define EOF (-1)
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 typedef struct __mini_FILE FILE;
 
@@ -15,6 +20,13 @@ extern FILE *__mini_stderr;
 
 FILE *fopen(const char *restrict filename, const char *restrict mode);
 int fclose(FILE *stream);
+size_t fread(void *restrict ptr, size_t size, size_t nmemb,
+             FILE *restrict stream);
+size_t fwrite(const void *restrict ptr, size_t size, size_t nmemb,
+              FILE *restrict stream);
+int fseek(FILE *stream, long offset, int whence);
+long ftell(FILE *stream);
+void rewind(FILE *stream);
 int fgetc(FILE *stream);
 int getc(FILE *stream);
 int getchar(void);
