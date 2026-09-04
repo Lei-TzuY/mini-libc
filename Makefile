@@ -170,7 +170,7 @@ $(BUILD)/string_differential.o: tests/string_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/strtok_differential.o: tests/strtok_differential.c | $(BUILD)
-	$(CC) $(HOST_LDFLAGS) -o $@ $^
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/atoi_probe.o: tests/atoi_probe.c include/mini/syscall.h include/stdlib.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
