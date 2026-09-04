@@ -38,11 +38,12 @@ same termination sequence. After the registry is drained, `exit` delegates to
 
 `_Exit(status)` bypasses the callback registry and calls raw `mini_sys_exit`
 directly. It therefore provides the immediate-termination path required when no
-normal-exit callbacks should run. mini-libc now has inherited unbuffered standard
-`FILE` streams, but no buffered stream state, dynamically owned streams, or
-`tmpfile` objects, so `exit` has no user-space flush/close or temporary-file
-cleanup phase yet. The kernel closes inherited descriptors when the process
-terminates. Future buffering or owned-stream support must extend normal
+normal-exit callbacks should run. mini-libc now has inherited and dynamically
+owned unbuffered `FILE` streams. Owned streams can be explicitly disassociated
+with `fclose`, but there is no process-global open-stream registry, buffered
+stream state, or `tmpfile` object yet, so `exit` does not perform a user-space
+stream sweep. The kernel still closes descriptors remaining open when the process
+terminates. Future buffering or temporary-file support must extend normal
 termination rather than bypassing this callback boundary.
 
 ## Function ABI
@@ -61,8 +62,8 @@ The `syscall` instruction uses:
 - return value: `rax`
 - clobbers: `rcx`, `r11`, condition codes as defined by the architecture
 
-The six-argument `mmap` wrapper explicitly moves the fourth C argument from
-`rcx` to `r10` before executing `syscall`.
+The six-argument `mmap` wrapper and four-argument `openat` wrapper explicitly
+move the fourth C argument from `rcx` to `r10` before executing `syscall`.
 
 Implemented x86-64 Linux syscall numbers are:
 
@@ -76,6 +77,7 @@ Implemented x86-64 Linux syscall numbers are:
 | `mini_sys_munmap` | 11 |
 | `mini_sys_brk` | 12 |
 | `mini_sys_exit` | 60 |
+| `mini_sys_openat` | 257 |
 
 The wrappers expose the kernel's raw `rax` convention rather than translating it
 to POSIX libc results. For the ordinary integer-returning calls, failures remain
@@ -86,13 +88,13 @@ break rather than `-ENOMEM`. No raw wrapper updates libc `errno`.
 
 ## errno storage ABI
 
-`<errno.h>` currently exposes the Linux values `EIO = 5`, `ENOMEM = 12`,
-`EINVAL = 22`, and `ERANGE = 34` and defines `errno` as a modifiable `int` lvalue backed by
-`__mini_errno_location()`. The accessor currently returns one process-global,
-zero-initialized BSS slot. This is deliberately not thread-local because
-mini-libc has no TLS runtime yet. Keeping access behind the
-implementation-reserved accessor allows a later TLS implementation without
-changing source code that uses the `errno` macro.
+`<errno.h>` currently exposes the Linux values `ENOENT = 2`, `EIO = 5`,
+`ENOMEM = 12`, `EINVAL = 22`, and `ERANGE = 34` and defines `errno` as a
+modifiable `int` lvalue backed by `__mini_errno_location()`. The accessor
+currently returns one process-global, zero-initialized BSS slot. This is
+deliberately not thread-local because mini-libc has no TLS runtime yet. Keeping
+access behind the implementation-reserved accessor allows a later TLS
+implementation without changing source code that uses the `errno` macro.
 
 `strtol` and `strtoul` use `EINVAL` for unsupported bases and `ERANGE` for range
 overflow. Successful conversions and valid-base no-conversion cases do not clear
@@ -109,11 +111,19 @@ from this libc error contract.
 The stdio stream layer maps a negative raw `read` or `write` result to the
 corresponding positive libc `errno` value and sets that stream's error indicator.
 A zero-progress write while bytes remain is treated as `EIO` to prevent an
-unbounded retry loop. Calling an input operation on a write-only inherited stream
-or an output operation on the read-only inherited stream is rejected with
-`EINVAL` and sets the stream error indicator. A true end-of-file read is not an
-error: it sets only the EOF indicator and leaves an existing `errno` unchanged.
-Successful stream operations also leave an existing `errno` value unchanged.
+unbounded retry loop. Calling an input operation on a write-only stream or an
+output operation on a read-only stream is rejected with `EINVAL` and sets the
+stream error indicator. A true end-of-file read is not an error: it sets only
+the EOF indicator and leaves an existing `errno` unchanged. Successful stream
+operations also leave an existing `errno` value unchanged.
+
+`fopen` rejects a null filename or unsupported mode with `EINVAL` before issuing
+`openat`. A pathname failure maps the negative raw `openat` result to positive
+libc `errno`; for example, a missing read target reports `ENOENT`. If allocating
+the private `FILE` object fails, allocator `ENOMEM` is preserved and no open
+syscall is issued. `fclose` maps a raw close failure to positive `errno` and
+returns `EOF`; an owned stream object is released even when close reports an
+error.
 
 The current errno storage is suitable for the single-threaded runtime milestone
 only. Future threading/TLS work must preserve the `errno` lvalue contract while
@@ -137,14 +147,13 @@ empty names, and names containing `=` return null. Lookups do not modify
 `setenv`, `putenv`, or `unsetenv`; adding mutation later must define how retained
 storage and returned pointers are updated or invalidated.
 
-## Standard stream ABI
+## Stream ABI
 
 `<stdio.h>` exposes an opaque `FILE` type plus the predefined `stdin`, `stdout`,
 and `stderr` expressions. Their public names resolve to implementation-reserved
 `FILE *` objects, keeping the concrete stream layout out of the source-level ABI.
-The current three objects are process-global and bind directly to inherited Linux
+The three inherited objects are process-global and bind directly to Linux
 descriptors 0, 1, and 2. `stdin` is readable; `stdout` and `stderr` are writable.
-There is no dynamic stream creation or descriptor ownership transfer yet.
 
 `fgetc`, `getc`, and `getchar` read one byte through raw `mini_sys_read`. A
 successful byte is returned as `unsigned char` converted to `int`. A raw zero
@@ -163,10 +172,31 @@ cannot spin forever. Successful output returns a nonnegative result and does not
 clear an already-set error indicator.
 
 `feof` and `ferror` expose the sticky EOF/error indicators. `clearerr` clears both
-without changing descriptor binding or stream mode. The stream layer is
-intentionally unbuffered and single-threaded. There is no `fflush`, `fread`,
-`fwrite`, `fopen`, `fclose`, seeking API, stream allocator, locking, or formatted
-I/O yet. Those capabilities must build on this object/state boundary rather than
+without changing descriptor binding or stream mode.
+
+`fopen` creates pathname-backed owned streams while reusing the same private
+`FILE` representation. Mode strings currently support `r`, `w`, and `a`, with
+at most one optional `+` and at most one optional `b` in either order. On the
+Linux target, `b` does not change kernel flags. Plain `r` maps to read-only;
+plain `w` maps to write-only plus `O_CREAT|O_TRUNC`; plain `a` maps to write-only
+plus `O_CREAT|O_APPEND`. `+` selects read/write while retaining the create,
+truncate, or append semantics implied by the first character. New files are
+requested with mode `0666`, subject to the process umask. The current milestone
+does not implement C11 exclusive-create `x` modes.
+
+Before opening, `fopen` allocates private stream state through mini-libc `malloc`.
+The pathname is then opened with `mini_sys_openat(AT_FDCWD, ...)`. If the open
+fails, the temporary object is freed before the raw error is published through
+`errno`. A successful owned stream stores the returned descriptor and explicit
+read/write capability bits. `fclose` calls raw `mini_sys_close`; owned streams
+free their private object whether close succeeds or fails. The predefined
+inherited streams are not heap-owned; if explicitly closed they are invalidated
+in place rather than freed.
+
+The entire stream layer is intentionally unbuffered and single-threaded. There
+is no `fflush`, `fread`, `fwrite`, public `fseek`/`ftell`/`rewind`, formatted I/O,
+`tmpfile`, locking, or automatic registry of owned streams yet. Those
+capabilities must extend this stream object/ownership boundary rather than
 reintroducing descriptor-specific stdio paths.
 
 ## Allocator ABI and ownership
@@ -191,10 +221,10 @@ adjacent free block when sufficient, can extend a tail allocation through raw
 `min(old_requested_size, new_size)` bytes, then frees the old block. If resize
 fails, the old allocation remains owned by the caller with its contents intact.
 Nonzero `malloc` requests are rounded up to 16-byte multiples with checked
-arithmetic. A request whose rounding, header addition, or program-break calculation would
-overflow returns null and sets `ENOMEM`. Heap growth succeeds only when raw `mini_sys_brk(target)` returns
-the requested target; an unchanged break is treated as allocation failure and
-also produces `ENOMEM`.
+arithmetic. A request whose rounding, header addition, or program-break
+calculation would overflow returns null and sets `ENOMEM`. Heap growth succeeds
+only when raw `mini_sys_brk(target)` returns the requested target; an unchanged
+break is treated as allocation failure and also produces `ENOMEM`.
 
 Freed blocks remain inside the allocator arena. Allocation uses first-fit reuse,
 splits a free block only when the remainder can hold another header plus at
@@ -217,5 +247,7 @@ ordinary local `make` path still uses the system assembler, archive tool, and
 static linker as bootstrap tools. CI additionally pins `tiny-c-compiler` and
 proves that it can compile every production C source, then pins
 `mini-elf-toolchain` and proves that the resulting mini-libc objects can be
-linked and executed without the host libc. There is no dynamic loader or
-shared-library support yet.
+linked and executed without the host libc. The pinned integration executable
+also exercises owned-file creation, append, close, reopen, readback, and EOF;
+the harness independently verifies the resulting file contents. There is no
+dynamic loader or shared-library support yet.
