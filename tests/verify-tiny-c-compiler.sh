@@ -36,11 +36,20 @@ else
     linker_name="GNU ld"
 fi
 
-output=$(MINI_TINY_C=yes "$OUT/integration" arg)
+io_path="$OUT/owned-file.tmp"
+rm -f "$io_path"
+output=$(MINI_TINY_C=yes MINI_IO_PATH="$io_path" "$OUT/integration" arg)
 if [ "$output" != "tiny-c-integration-ok" ]; then
     echo "unexpected tiny-c-compiler integration output: $output" >&2
+    rm -f "$io_path"
     exit 1
 fi
+if [ "$(cat "$io_path")" != "ABC" ]; then
+    echo "unexpected tiny-c-compiler owned file contents" >&2
+    rm -f "$io_path"
+    exit 1
+fi
+rm -f "$io_path"
 
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 
