@@ -5,8 +5,8 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: executable runtime lifecycle, core libc primitives,
-allocation, environment access, write-only stdio, and cross-toolchain bootstrap
+## Current milestone: executable runtime lifecycle, standard streams, core libc
+primitives, allocation, environment access, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
 
@@ -171,15 +171,23 @@ unsuccessful lookups leave `errno` unchanged. The returned value pointer
 aliases the process environment storage. mini-libc does not currently expose
 the POSIX `environ` global or environment mutation APIs.
 
-The minimal `stdio.h` surface provides `EOF`, `putchar`, and `puts` as
-unbuffered write-only standard-output operations. `putchar` writes the
-`unsigned char` conversion of its argument and returns that byte as an `int` on
-success. `puts` writes the complete string followed by a newline and returns a
-nonnegative value on success. Both routines retry positive short writes, map a
-negative raw `write` result to libc `errno`, and return `EOF` on failure. A
-zero-progress write is treated as `EIO` so the retry loop cannot stall forever.
-Successful calls leave an existing `errno` value unchanged. `FILE`, `stdout`,
-buffering, formatted I/O, and input routines are not exposed yet.
+The `stdio.h` surface now has an opaque `FILE` type and predefined `stdin`,
+`stdout`, and `stderr` expressions backed by inherited descriptors 0, 1, and 2.
+The concrete stream layout stays private. `stdin` is readable; `stdout` and
+`stderr` are writable. `fgetc`/`getc`/`getchar` provide one-byte unbuffered input,
+while `fputc`/`putc`, `fputs`, `putchar`, and `puts` provide unbuffered output.
+`feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error state.
+
+Input EOF sets only the EOF indicator and leaves `errno` unchanged; later reads
+remain at EOF until `clearerr`. Raw read/write failures set the stream error
+indicator and map the negative kernel result to positive libc `errno`. Output
+retries positive short writes and treats a zero-progress write as `EIO` so it
+cannot spin forever. Calls in the wrong inherited-stream direction are rejected
+with `EINVAL`. Successful operations preserve `errno`, and a previous error
+indicator remains set until explicitly cleared. The current stream layer is
+single-threaded and deliberately unbuffered: it does not yet expose `fflush`,
+`fread`/`fwrite`, `fopen`/`fclose`, seeking, formatted I/O, or dynamic stream
+allocation.
 
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
@@ -234,27 +242,28 @@ printable/punctuation/uppercase/whitespace classification plus ASCII case
 conversion, allocator alignment/reuse/split/coalescing behavior, `calloc`
 zeroing/overflow semantics, `realloc` in-place/move/failure semantics, fixed-seed
 allocation/resize stress, startup-backed `getenv` exact-match/empty/missing
-semantics, write-only stdio success/short-write/error behavior, and the errno
-lvalue/storage contract. The `strtok` probe covers leading delimiter runs,
-delimiter changes between continuation calls, empty input and delimiter sets,
-end-of-stream, high-byte delimiters, sequence reset, errno preservation, and
-fixed-seed model comparison. The `strerror` probe locks the four exposed errno
-messages, deterministic unknown-code behavior, stable static storage across
-later calls, and errno preservation. The `ctype` probe checks `EOF` plus every
-value in the complete `unsigned char` domain and verifies that all implemented
-classification and conversion routines preserve an existing `errno` value. The
-`bsearch` probe also covers `qsort` zero/one-element no-comparator-call behavior,
-sorted/reverse/duplicate inputs, generic three-byte records, boundary sentinels,
-signed absolute-value boundary-adjacent representable values across `int`,
-`long`, and `long long`, `div`/`ldiv`/`lldiv` sign quadrants,
-quotient/remainder invariants, and errno preservation. Hosted differential
-executables compare production memory/string/conversion/search routines against
-host libc where the target contract is comparable, including a state-isolated
-`strtok` differential and 10,000 fixed-seed sorted-array `bsearch` cases. The
-same hosted search test also runs 10,000 fixed-seed `qsort` ordering/multiset
-property cases against the production sorter. A test-only fake-`brk` allocator
-harness deterministically verifies heap-growth refusal and `ENOMEM` without
-linking the freestanding allocator to the host heap. Hosted oracles are test-only;
+semantics, inherited standard-stream input/output, short-write retry, sticky
+EOF/error indicators, direction errors, and the errno lvalue/storage contract.
+The `strtok` probe covers leading delimiter runs, delimiter changes between
+continuation calls, empty input and delimiter sets, end-of-stream, high-byte
+delimiters, sequence reset, errno preservation, and fixed-seed model comparison.
+The `strerror` probe locks the four exposed errno messages, deterministic
+unknown-code behavior, stable static storage across later calls, and errno
+preservation. The `ctype` probe checks `EOF` plus every value in the complete
+`unsigned char` domain and verifies that all implemented classification and
+conversion routines preserve an existing `errno` value. The `bsearch` probe also
+covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
+duplicate inputs, generic three-byte records, boundary sentinels, signed
+absolute-value boundary-adjacent representable values across `int`, `long`, and
+`long long`, `div`/`ldiv`/`lldiv` sign quadrants, quotient/remainder invariants,
+and errno preservation. Hosted differential executables compare production
+memory/string/conversion/search routines against host libc where the target
+contract is comparable, including a state-isolated `strtok` differential and
+10,000 fixed-seed sorted-array `bsearch` cases. The same hosted search test also
+runs 10,000 fixed-seed `qsort` ordering/multiset property cases against the
+production sorter. Test-only fake syscall/allocator harnesses deterministically
+verify allocator heap-growth refusal and stdio EOF/error/short-write state
+without depending on host libc stream behavior. Hosted oracles are test-only;
 all library probes remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
@@ -262,7 +271,9 @@ symbols in every freestanding milestone executable, including all library
 probes. CI additionally executes a pinned `tiny-c-compiler -> mini-libc`
 bootstrap and a pinned `tiny-c-compiler -> mini-libc -> mini-elf-toolchain`
 compile/link/runtime path, so cross-repository integration is an executable gate
-rather than a future roadmap claim.
+rather than a future roadmap claim. The integration program now routes output
+through the `FILE`/`stdout` layer, so stream support is exercised rather than
+merely compiled into the archive.
 
 ## Layout
 
@@ -274,7 +285,7 @@ src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
 src/stdlib/          conversion, search, sorting, arithmetic, allocation, and environment utilities
-src/stdio/           unbuffered write-only standard I/O
+src/stdio/           unbuffered standard stream objects and I/O
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -290,22 +301,23 @@ only implemented memory/string routines including `memchr`, `strcat`, `strncat`,
 declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
 `abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `atexit`, `exit`, `_Exit`,
 `malloc`, `calloc`, `realloc`, and `free`, plus the `div_t`, `ldiv_t`, and
-`lldiv_t` result types; `stdio.h` provides `EOF`, `putchar`, and `puts`; and
-`errno.h` currently provides the errno lvalue contract plus `EIO`, `ENOMEM`,
-`EINVAL`, and `ERANGE`.
+`lldiv_t` result types; `stdio.h` provides opaque `FILE`, `stdin`, `stdout`,
+`stderr`, `fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`, `puts`,
+`feof`, `ferror`, `clearerr`, and `EOF`; and `errno.h` currently provides the
+errno lvalue contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
-contract, normal-termination ordering, allocator ownership rules, cross-toolchain
-bootstrap boundary, and current errno storage limitation.
+contract, normal-termination ordering, standard-stream state model, allocator
+ownership rules, cross-toolchain bootstrap boundary, and current errno storage
+limitation.
 
 ## Next
 
-The previous primitive-expansion phase is closed: the runtime now has a real
-normal-termination lifecycle and executable compiler/libc/linker integration.
-The next architectural frontier should build a minimal standard stream object
-layer on top of the existing raw descriptor I/O: define a bounded `FILE` model
-for the inherited standard streams and prove unbuffered input/output plus stream
-state end to end before adding buffering, formatting, or pathname-based file
-opening. `strtoull`, locale expansion, environment mutation, threading/TLS, and
-allocator tuning remain lower-priority independent slices rather than the main
-phase driver.
+The inherited-standard-stream phase is now the executable baseline rather than
+the roadmap target. The next architectural frontier should add **owned file
+stream lifecycle**: introduce the minimal pathname/open syscall boundary, create
+and close non-standard `FILE` objects with explicit descriptor ownership, and
+prove file-backed input/output plus error cleanup end to end. Buffering,
+formatting, seeking, `tmpfile`, threading/TLS, locale expansion, `strtoull`, and
+allocator tuning remain separate follow-on slices rather than being mixed into
+that ownership milestone.
