@@ -96,6 +96,46 @@ static int triples_valid(const struct triple *values, size_t count)
            seen_30 == 1;
 }
 
+static unsigned int int_magnitude(int value)
+{
+    unsigned int bits = (unsigned int)value;
+
+    return value < 0 ? 0U - bits : bits;
+}
+
+static unsigned long long_magnitude(long value)
+{
+    unsigned long bits = (unsigned long)value;
+
+    return value < 0 ? 0UL - bits : bits;
+}
+
+static int div_matches(int numer, int denom, int quot, int rem)
+{
+    div_t result = div(numer, denom);
+
+    if (result.quot != quot || result.rem != rem) {
+        return 0;
+    }
+    if (result.rem != 0 && ((result.rem < 0) != (numer < 0))) {
+        return 0;
+    }
+    return int_magnitude(result.rem) < int_magnitude(denom);
+}
+
+static int ldiv_matches(long numer, long denom, long quot, long rem)
+{
+    ldiv_t result = ldiv(numer, denom);
+
+    if (result.quot != quot || result.rem != rem) {
+        return 0;
+    }
+    if (result.rem != 0 && ((result.rem < 0) != (numer < 0))) {
+        return 0;
+    }
+    return long_magnitude(result.rem) < long_magnitude(denom);
+}
+
 int main(int argc, char **argv, char **envp)
 {
     static const char ok[] = "bsearch-ok\n";
@@ -119,6 +159,10 @@ int main(int argc, char **argv, char **envp)
     int key;
     int *found;
     struct record *record;
+    int numer;
+    int denom;
+    long lnumer;
+    long ldenom;
 
     (void)argc;
     (void)argv;
@@ -230,8 +274,68 @@ int main(int argc, char **argv, char **envp)
         return 15;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    if (!div_matches(7, 3, 2, 1) || !div_matches(-7, 3, -2, -1) ||
+        !div_matches(7, -3, -2, 1) || !div_matches(-7, -3, 2, -1) ||
+        !div_matches(0, 7, 0, 0) || errno != ERANGE) {
         return 16;
+    }
+
+    if (!div_matches(__INT_MAX__, -1, -__INT_MAX__, 0) ||
+        !div_matches(-__INT_MAX__ - 1, 2, (-__INT_MAX__ - 1) / 2,
+                     (-__INT_MAX__ - 1) % 2) ||
+        errno != ERANGE) {
+        return 17;
+    }
+
+    for (numer = -64; numer <= 64; ++numer) {
+        for (denom = -16; denom <= 16; ++denom) {
+            div_t result;
+
+            if (denom == 0) {
+                continue;
+            }
+            result = div(numer, denom);
+            if (!div_matches(numer, denom, numer / denom, numer % denom) ||
+                result.quot * denom + result.rem != numer || errno != ERANGE) {
+                return 18;
+            }
+        }
+    }
+
+    if (!ldiv_matches(7L, 3L, 2L, 1L) ||
+        !ldiv_matches(-7L, 3L, -2L, -1L) ||
+        !ldiv_matches(7L, -3L, -2L, 1L) ||
+        !ldiv_matches(-7L, -3L, 2L, -1L) ||
+        !ldiv_matches(0L, 7L, 0L, 0L) || errno != ERANGE) {
+        return 19;
+    }
+
+    if (!ldiv_matches(__LONG_MAX__, -1L, -__LONG_MAX__, 0L) ||
+        !ldiv_matches(-__LONG_MAX__ - 1L, 2L, (-__LONG_MAX__ - 1L) / 2L,
+                      (-__LONG_MAX__ - 1L) % 2L) ||
+        errno != ERANGE) {
+        return 20;
+    }
+
+    for (lnumer = -128; lnumer <= 128; ++lnumer) {
+        for (ldenom = -24; ldenom <= 24; ++ldenom) {
+            ldiv_t result;
+
+            if (ldenom == 0) {
+                continue;
+            }
+            result = ldiv(lnumer, ldenom);
+            if (!ldiv_matches(lnumer, ldenom, lnumer / ldenom,
+                              lnumer % ldenom) ||
+                result.quot * ldenom + result.rem != lnumer ||
+                errno != ERANGE) {
+                return 21;
+            }
+        }
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 22;
     }
     return 0;
 }

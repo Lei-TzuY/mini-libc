@@ -133,6 +133,15 @@ existing `errno` value unchanged and use no hidden state. The overflow cases
 `abs(INT_MIN)` and `labs(LONG_MIN)` remain outside the defined contract; mini-libc
 does not add a non-standard saturation policy for them.
 
+`div` and `ldiv` provide ISO C quotient/remainder results through public `div_t`
+and `ldiv_t` structures. Quotients truncate toward zero; the remainder is zero
+or has the same sign as the numerator, its magnitude is smaller than the
+denominator magnitude, and `numer == quot * denom + rem` for defined inputs.
+Calls leave an existing `errno` value unchanged and allocate no storage. Division
+by zero and the unrepresentable `INT_MIN / -1` and `LONG_MIN / -1` cases remain
+outside the defined contract; mini-libc does not invent recovery semantics for
+them.
+
 `getenv` retains the original `envp` vector decoded at process startup and
 scans it without allocating or copying. A lookup matches only an exact
 `NAME=` prefix, so `FOO` does not match `FOOBAR`. An empty environment value
@@ -197,33 +206,35 @@ status, direct syscall behavior, mmap/munmap, deterministic memory/string/intege
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
 membership-scan, counting-scan, stateful tokenization, deterministic error-
 message edge cases, generic binary search/comparison sorting, signed absolute-
-value utilities, and exhaustive C-locale alphabetic/alphanumeric/blank/control/
-digit/graphical/hexadecimal-digit/lowercase/printable/punctuation/uppercase/
-whitespace classification plus ASCII case conversion, allocator alignment/reuse/
-split/coalescing behavior, `calloc` zeroing/overflow semantics, `realloc` in-
-place/move/failure semantics, fixed-seed allocation/resize stress, startup-backed
-`getenv` exact-match/empty/missing semantics, write-only stdio success/short-
-write/error behavior, and the errno lvalue/storage contract. The `strtok` probe
-covers leading delimiter runs, delimiter changes between continuation calls,
-empty input and delimiter sets, end-of-stream, high-byte delimiters, sequence
-reset, errno preservation, and fixed-seed model comparison. The `strerror` probe
-locks the four exposed errno messages, deterministic unknown-code behavior,
-stable static storage across later calls, and errno preservation. The `ctype`
-probe checks `EOF` plus every value in the complete `unsigned char` domain and
-verifies that all implemented classification and conversion routines preserve
-an existing `errno` value. The `bsearch` probe also covers `qsort` zero/one-
-element no-comparator-call behavior, sorted/reverse/duplicate inputs, generic
-three-byte records, boundary sentinels, signed absolute-value boundary-adjacent
-representable values, and errno preservation. Hosted differential executables
-compare production memory/string/conversion/search routines against host libc
-where the target contract is comparable, including a state-isolated `strtok`
-differential and 10,000 fixed-seed sorted-array `bsearch` cases. The same hosted
-search test also runs 10,000 fixed-seed `qsort` ordering/multiset property cases
-against the production sorter. A test-only fake-`brk` allocator harness
-deterministically verifies heap-growth refusal and `ENOMEM` without linking the
-freestanding allocator to the host heap. Hosted oracles are test-only; all
-library probes, including `allocator_probe`, `strtok_probe`, `strerror_probe`,
-`ctype_probe`, and `bsearch_probe`, remain freestanding mini-libc executables.
+value and quotient/remainder utilities, and exhaustive C-locale alphabetic/
+alphanumeric/blank/control/digit/graphical/hexadecimal-digit/lowercase/printable/
+punctuation/uppercase/whitespace classification plus ASCII case conversion,
+allocator alignment/reuse/split/coalescing behavior, `calloc` zeroing/overflow
+semantics, `realloc` in-place/move/failure semantics, fixed-seed allocation/
+resize stress, startup-backed `getenv` exact-match/empty/missing semantics,
+write-only stdio success/short-write/error behavior, and the errno lvalue/storage
+contract. The `strtok` probe covers leading delimiter runs, delimiter changes
+between continuation calls, empty input and delimiter sets, end-of-stream,
+high-byte delimiters, sequence reset, errno preservation, and fixed-seed model
+comparison. The `strerror` probe locks the four exposed errno messages,
+deterministic unknown-code behavior, stable static storage across later calls,
+and errno preservation. The `ctype` probe checks `EOF` plus every value in the
+complete `unsigned char` domain and verifies that all implemented classification
+and conversion routines preserve an existing `errno` value. The `bsearch` probe
+also covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
+duplicate inputs, generic three-byte records, boundary sentinels, signed
+absolute-value boundary-adjacent representable values, `div`/`ldiv` sign
+quadrants, quotient/remainder invariants, and errno preservation. Hosted
+differential executables compare production memory/string/conversion/search
+routines against host libc where the target contract is comparable, including a
+state-isolated `strtok` differential and 10,000 fixed-seed sorted-array `bsearch`
+cases. The same hosted search test also runs 10,000 fixed-seed `qsort` ordering/
+multiset property cases against the production sorter. A test-only fake-`brk`
+allocator harness deterministically verifies heap-growth refusal and `ENOMEM`
+without linking the freestanding allocator to the host heap. Hosted oracles are
+test-only; all library probes, including `allocator_probe`, `strtok_probe`,
+`strerror_probe`, `ctype_probe`, and `bsearch_probe`, remain freestanding
+mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -253,21 +264,23 @@ current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
 only implemented memory/string routines including `memchr`, `strcat`, `strncat`,
 `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`; `stdlib.h`
 declares `atoi`, `strtol`, `strtoul`, `getenv`, `bsearch`, `qsort`, `abs`,
-`labs`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h` provides `EOF`,
-`putchar`, and `puts`; and `errno.h` currently provides the errno lvalue contract
-plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+`labs`, `div`, `ldiv`, `malloc`, `calloc`, `realloc`, and `free`, plus the
+`div_t` and `ldiv_t` result types; `stdio.h` provides `EOF`, `putchar`, and
+`puts`; and `errno.h` currently provides the errno lvalue contract plus `EIO`,
+`ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With comparator-driven search/sort and signed absolute-value utilities in place,
-the next bounded `stdlib.h` slice can add paired `div` + `ldiv`, including the
-public result structures and explicit quotient/remainder invariants. Division by
-zero and the unrepresentable `INT_MIN / -1` and `LONG_MIN / -1` cases remain
-outside the defined contract and must not gain invented recovery semantics.
-Locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`, input
-routines, environment mutation, threading/TLS, and mmap-backed large allocations
-should remain separate. Cross-repository integration will wait until mini-libc
-is stable on the system assembler/linker bootstrap path.
+With the `int`/`long` absolute-value and quotient/remainder families in place,
+the next bounded `stdlib.h` arithmetic slice can add paired `llabs` + `lldiv`,
+including the public `lldiv_t` result structure and the same explicit
+quotient/remainder invariants for `long long`. The unrepresentable
+`LLONG_MIN / -1` case and `llabs(LLONG_MIN)` remain outside the defined contract
+and must not gain invented saturation or recovery semantics. `strtoll`/
+`strtoull`, locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering,
+`FILE`, input routines, environment mutation, threading/TLS, and mmap-backed
+large allocations should remain separate. Cross-repository integration will
+wait until mini-libc is stable on the system assembler/linker bootstrap path.
