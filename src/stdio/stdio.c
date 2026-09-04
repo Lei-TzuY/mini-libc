@@ -18,9 +18,9 @@ static FILE mini_stdin = {0, MINI_FILE_READABLE, 0};
 static FILE mini_stdout = {1, MINI_FILE_WRITABLE, 0};
 static FILE mini_stderr = {2, MINI_FILE_WRITABLE, 0};
 
-FILE *stdin = &mini_stdin;
-FILE *stdout = &mini_stdout;
-FILE *stderr = &mini_stderr;
+FILE *__mini_stdin = &mini_stdin;
+FILE *__mini_stdout = &mini_stdout;
+FILE *__mini_stderr = &mini_stderr;
 
 static int mark_error(FILE *stream, int error)
 {
