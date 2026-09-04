@@ -79,16 +79,18 @@ int main(void)
         fclose(stream);
         return 10;
     }
-
-    if (fseek(stream, 0L, SEEK_SET) != 0 ||
-        fwrite("ABCDE", 1, 5, stream) != 5 ||
-        fseek(stream, 5L, SEEK_SET) != 0) {
-        fclose(stream);
+    if (fclose(stream) != 0) {
         return 11;
     }
-    if (fseek(stream, 0L, SEEK_SET) != 0) {
-        fclose(stream);
+
+    stream = fopen(path, "w+");
+    if (stream == (FILE *)0) {
         return 12;
+    }
+    if (fwrite("ABCDE", 1, 5, stream) != 5 ||
+        fseek(stream, 0L, SEEK_SET) != 0) {
+        fclose(stream);
+        return 13;
     }
 
     buffer[5] = 0x7fU;
@@ -96,22 +98,22 @@ int main(void)
     if (count != 2 || !same_bytes(buffer, "ABCDE", 5) ||
         buffer[5] != 0x7fU || !feof(stream) || ferror(stream)) {
         fclose(stream);
-        return 13;
+        return 14;
     }
 
     errno = ERANGE;
     if (fread(buffer, 0, 99, stream) != 0 ||
         fwrite(buffer, 99, 0, stream) != 0 || errno != ERANGE) {
         fclose(stream);
-        return 14;
-    }
-
-    if (fclose(stream) != 0) {
         return 15;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    if (fclose(stream) != 0) {
         return 16;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 17;
     }
     return 0;
 }
