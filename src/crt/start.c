@@ -1,4 +1,4 @@
-#include <mini/syscall.h>
+#include <stdlib.h>
 
 extern int main(int argc, char **argv, char **envp);
 extern void __mini_set_envp(char **envp);
@@ -14,5 +14,5 @@ _Noreturn void __mini_start(long *initial_stack)
     __mini_set_envp(envp);
     status = main(argc, argv, envp);
 
-    mini_sys_exit(status);
+    exit(status);
 }

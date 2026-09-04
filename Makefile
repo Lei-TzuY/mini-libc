@@ -30,11 +30,12 @@ STDIO_RENAMES := -Dmini_sys_write=mini_test_write
 BUILD := build
 LIBC := $(BUILD)/libc.a
 CRT0 := $(BUILD)/crt0.o
-LIB_OBJS := $(BUILD)/start.o $(BUILD)/syscall.o $(BUILD)/memory.o $(BUILD)/string.o \
-            $(BUILD)/strerror.o $(BUILD)/ctype.o $(BUILD)/atoi.o \
-            $(BUILD)/strtol.o $(BUILD)/strtoul.o $(BUILD)/bsearch.o \
-            $(BUILD)/allocator.o $(BUILD)/calloc.o $(BUILD)/getenv.o \
-            $(BUILD)/stdio.o $(BUILD)/errno.o
+LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
+            $(BUILD)/memory.o $(BUILD)/string.o $(BUILD)/strerror.o \
+            $(BUILD)/ctype.o $(BUILD)/atoi.o $(BUILD)/strtol.o \
+            $(BUILD)/strtoul.o $(BUILD)/bsearch.o $(BUILD)/allocator.o \
+            $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o \
+            $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -57,7 +58,10 @@ $(BUILD):
 $(CRT0): src/crt/crt0.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/start.o: src/crt/start.c include/mini/syscall.h | $(BUILD)
+$(BUILD)/start.o: src/crt/start.c include/stdlib.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/termination.o: src/crt/termination.c include/stdlib.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/syscall.o: src/syscall/syscall.S | $(BUILD)
@@ -108,7 +112,7 @@ $(LIBC): $(LIB_OBJS)
 $(BUILD)/%.o: examples/%.c include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/runtime_probe.o: tests/runtime_probe.c include/mini/syscall.h | $(BUILD)
+$(BUILD)/runtime_probe.o: tests/runtime_probe.c include/mini/syscall.h include/stdlib.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/syscall_probe.o: tests/syscall_probe.c include/mini/syscall.h | $(BUILD)
