@@ -152,7 +152,7 @@ $(BUILD)/string_diff_impl.o: src/string/string.c include/string.h include/stddef
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(STRING_RENAMES) -c $< -o $@
 
 $(BUILD)/string_differential.o: tests/string_differential.c | $(BUILD)
-	$(CC) $(HOST_CFLAGS) -o $@ $^
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/strtok_differential.o: tests/strtok_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
