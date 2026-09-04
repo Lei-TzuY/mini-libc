@@ -49,17 +49,16 @@ long ftell(FILE *stream)
 
 void rewind(FILE *stream)
 {
+    long result;
+
     if (!valid_stream(stream)) {
         errno = EINVAL;
         return;
     }
 
     stream->state &= ~(MINI_FILE_EOF | MINI_FILE_ERROR);
-    if (mini_sys_lseek(stream->fd, 0L, SEEK_SET) < 0) {
-        long result = mini_sys_lseek(stream->fd, 0L, SEEK_CUR);
-
-        if (result < 0) {
-            errno = (int)-result;
-        }
+    result = mini_sys_lseek(stream->fd, 0L, SEEK_SET);
+    if (result < 0) {
+        errno = (int)-result;
     }
 }
