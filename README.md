@@ -59,12 +59,13 @@ is not overwritten by later `strerror` calls; callers must treat that storage as
 read-only. The routine does not allocate, does not perform locale lookup, and
 leaves an existing `errno` value unchanged.
 
-The minimal `ctype.h` surface currently provides `isalpha`, `isalnum`, `isdigit`,
-`isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `isxdigit`, `tolower`, and
-`toupper` with a fixed C-locale classification and case-conversion contract.
-`isalpha` recognizes only the ASCII letters `A` through `Z` and `a` through `z`;
+The minimal `ctype.h` surface currently provides `isalpha`, `isalnum`, `iscntrl`,
+`isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `isxdigit`,
+`tolower`, and `toupper` with a fixed C-locale classification and case-conversion
+contract. `isalpha` recognizes only the ASCII letters `A` through `Z` and `a` through `z`;
 `isdigit` recognizes only the ASCII bytes `0` through `9`; `isalnum` recognizes
-exactly the union of those two classes. `isgraph` recognizes the graphical ASCII
+exactly the union of those two classes. `iscntrl` recognizes ASCII control
+bytes `0x00` through `0x1f` plus `0x7f`. `isgraph` recognizes the graphical ASCII
 bytes `!` through `~`, while `isprint` additionally includes ASCII space and
 therefore recognizes bytes from space through `~`. `isxdigit` recognizes only
 ASCII decimal digits plus `A` through `F` and `a` through `f`. `islower`
@@ -169,8 +170,8 @@ make inspect
 status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
 membership-scan, counting-scan, stateful tokenization, deterministic error-
-message edge cases, and exhaustive C-locale alphabetic/alphanumeric/digit/
-graphical/hexadecimal-digit/lowercase/printable/uppercase/whitespace
+message edge cases, and exhaustive C-locale alphabetic/alphanumeric/control/
+digit/graphical/hexadecimal-digit/lowercase/printable/uppercase/whitespace
 classification plus ASCII case conversion, allocator alignment/reuse/split/
 coalescing behavior, `calloc` zeroing/overflow semantics, `realloc` in-place/
 move/failure semantics, fixed-seed allocation/resize stress, startup-backed
@@ -215,8 +216,8 @@ docs/                ABI contracts and design notes
 
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
-`isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `isxdigit`,
-`tolower`, and `toupper`; `string.h` declares only implemented memory/string
+`iscntrl`, `isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`,
+`isxdigit`, `tolower`, and `toupper`; `string.h` declares only implemented memory/string
 routines including `memchr`, `strcat`, `strncat`, `strstr`, `strspn`, `strcspn`,
 `strpbrk`, `strtok`, and `strerror`; `stdlib.h` declares `atoi`, `strtol`,
 `strtoul`, `getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h`
@@ -228,11 +229,11 @@ contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With hexadecimal-digit classification in place, the next bounded `ctype.h`
-slice can add `iscntrl` only, preserving the same explicit `EOF`/`unsigned char`
+With control-byte classification in place, the next bounded `ctype.h` slice can
+add `ispunct` only, preserving the same explicit `EOF`/`unsigned char`
 argument-domain contract and exhaustive byte-domain tests while recognizing the
-ASCII control-byte ranges `0x00..0x1f` plus `0x7f`. `ispunct` and locale-aware
-behavior should remain separate later slices. Locale-sensitive `strcoll`/
+printable graphical bytes that are neither alphanumeric nor space. Locale-aware
+behavior should remain a separate later slice. Locale-sensitive `strcoll`/
 `strxfrm`, formatted I/O, buffering, `FILE`, input routines, environment
 mutation, threading/TLS, and mmap-backed large allocations should also remain
 separate. Cross-repository integration will wait until mini-libc is stable on
