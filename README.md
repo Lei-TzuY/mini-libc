@@ -5,8 +5,8 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: runtime, core libc primitives, integer conversion,
-allocation, environment access, and write-only stdio
+## Current milestone: executable runtime lifecycle, core libc primitives,
+allocation, environment access, write-only stdio, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
 
@@ -15,6 +15,9 @@ Linux process entry
   -> _start (mini-libc crt0)
   -> decode argc / argv / envp
   -> main(argc, argv, envp)
+  -> exit(main_status)
+  -> atexit handlers in reverse registration order
+  -> _Exit(main_status)
   -> mini_sys_exit(main_status)
   -> SYS_exit
 ```
@@ -29,6 +32,15 @@ The raw syscall layer currently implements `read`, `write`, `close`, `lseek`,
 are negative errno values, while raw `brk` returns the resulting program break
 and reports refusal by returning the unchanged break. Raw syscall wrappers do
 not update libc `errno`.
+
+Normal process termination is now a libc lifecycle rather than a direct jump
+from `main` to the raw syscall. `atexit` supports 32 simultaneous callback
+registrations, including repeated registration of the same function; callbacks
+run in reverse registration order on both `exit(status)` and return from `main`.
+`_Exit(status)` bypasses callbacks and terminates immediately through the raw
+syscall boundary. The registry is process-global and single-threaded, matching
+the rest of the current runtime state model. There is no buffered stream or
+`tmpfile` cleanup phase yet because those facilities are not implemented.
 
 The standard `string.h` surface includes the memory primitives `memcpy`,
 `memmove`, `memset`, `memcmp`, and `memchr`, plus `strlen`, `strcmp`, `strncmp`,
@@ -210,50 +222,54 @@ make inspect
 ```
 
 `make test` verifies process-stack decoding, propagation of `main`'s return
-status, direct syscall behavior, mmap/munmap, deterministic memory/string/integer
-conversion, bounded memory search, string-copy/bounded-concatenation, search,
-membership-scan, counting-scan, stateful tokenization, deterministic error-
-message edge cases, generic binary search/comparison sorting, signed absolute-
-value and quotient/remainder utilities, and exhaustive C-locale alphabetic/
-alphanumeric/blank/control/digit/graphical/hexadecimal-digit/lowercase/printable/
-punctuation/uppercase/whitespace classification plus ASCII case conversion,
-allocator alignment/reuse/split/coalescing behavior, `calloc` zeroing/overflow
-semantics, `realloc` in-place/move/failure semantics, fixed-seed allocation/
-resize stress, startup-backed `getenv` exact-match/empty/missing semantics,
-write-only stdio success/short-write/error behavior, and the errno lvalue/storage
-contract. The `strtok` probe covers leading delimiter runs, delimiter changes
-between continuation calls, empty input and delimiter sets, end-of-stream,
-high-byte delimiters, sequence reset, errno preservation, and fixed-seed model
-comparison. The `strerror` probe locks the four exposed errno messages,
-deterministic unknown-code behavior, stable static storage across later calls,
-and errno preservation. The `ctype` probe checks `EOF` plus every value in the
-complete `unsigned char` domain and verifies that all implemented classification
-and conversion routines preserve an existing `errno` value. The `bsearch` probe
-also covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
-duplicate inputs, generic three-byte records, boundary sentinels, signed
-absolute-value boundary-adjacent representable values across `int`, `long`, and
-`long long`, `div`/`ldiv`/`lldiv` sign quadrants, quotient/remainder invariants,
-and errno preservation. Hosted differential executables compare production
-memory/string/conversion/search routines against host libc where the target
-contract is comparable, including a state-isolated `strtok` differential and
-10,000 fixed-seed sorted-array `bsearch` cases. The same hosted search test also
-runs 10,000 fixed-seed `qsort` ordering/multiset property cases against the
-production sorter. A test-only fake-`brk` allocator harness deterministically
-verifies heap-growth refusal and `ENOMEM` without linking the freestanding
-allocator to the host heap. Hosted oracles are test-only; all library probes,
-including `allocator_probe`, `strtok_probe`, `strerror_probe`, `ctype_probe`, and
-`bsearch_probe`, remain freestanding mini-libc executables.
+status through the normal `exit` path, LIFO `atexit` execution for both return
+from `main` and explicit `exit`, immediate `_Exit` bypass, the guaranteed
+32-registration capacity, direct syscall behavior, mmap/munmap, deterministic
+memory/string/integer conversion, bounded memory search, string-copy/bounded-
+concatenation, search, membership-scan, counting-scan, stateful tokenization,
+deterministic error-message edge cases, generic binary search/comparison sorting,
+signed absolute-value and quotient/remainder utilities, and exhaustive C-locale
+alphabetic/alphanumeric/blank/control/digit/graphical/hexadecimal-digit/lowercase/
+printable/punctuation/uppercase/whitespace classification plus ASCII case
+conversion, allocator alignment/reuse/split/coalescing behavior, `calloc`
+zeroing/overflow semantics, `realloc` in-place/move/failure semantics, fixed-seed
+allocation/resize stress, startup-backed `getenv` exact-match/empty/missing
+semantics, write-only stdio success/short-write/error behavior, and the errno
+lvalue/storage contract. The `strtok` probe covers leading delimiter runs,
+delimiter changes between continuation calls, empty input and delimiter sets,
+end-of-stream, high-byte delimiters, sequence reset, errno preservation, and
+fixed-seed model comparison. The `strerror` probe locks the four exposed errno
+messages, deterministic unknown-code behavior, stable static storage across
+later calls, and errno preservation. The `ctype` probe checks `EOF` plus every
+value in the complete `unsigned char` domain and verifies that all implemented
+classification and conversion routines preserve an existing `errno` value. The
+`bsearch` probe also covers `qsort` zero/one-element no-comparator-call behavior,
+sorted/reverse/duplicate inputs, generic three-byte records, boundary sentinels,
+signed absolute-value boundary-adjacent representable values across `int`,
+`long`, and `long long`, `div`/`ldiv`/`lldiv` sign quadrants,
+quotient/remainder invariants, and errno preservation. Hosted differential
+executables compare production memory/string/conversion/search routines against
+host libc where the target contract is comparable, including a state-isolated
+`strtok` differential and 10,000 fixed-seed sorted-array `bsearch` cases. The
+same hosted search test also runs 10,000 fixed-seed `qsort` ordering/multiset
+property cases against the production sorter. A test-only fake-`brk` allocator
+harness deterministically verifies heap-growth refusal and `ENOMEM` without
+linking the freestanding allocator to the host heap. Hosted oracles are test-only;
+all library probes remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
-probes.
+probes. CI additionally executes a pinned `tiny-c-compiler -> mini-libc`
+bootstrap and a pinned `tiny-c-compiler -> mini-libc -> mini-elf-toolchain`
+compile/link/runtime path, so cross-repository integration is an executable gate
+rather than a future roadmap claim.
 
 ## Layout
 
 ```text
 include/             implemented standard public headers
 include/mini/        implemented project-specific public APIs
-src/crt/             process entry and startup
+src/crt/             process entry, normal termination, and startup state
 src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
@@ -272,20 +288,24 @@ current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
 only implemented memory/string routines including `memchr`, `strcat`, `strncat`,
 `strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`; `stdlib.h`
 declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
-`abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `malloc`, `calloc`, `realloc`,
-and `free`, plus the `div_t`, `ldiv_t`, and `lldiv_t` result types; `stdio.h`
-provides `EOF`, `putchar`, and `puts`; and `errno.h` currently provides the errno
-lvalue contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+`abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `atexit`, `exit`, `_Exit`,
+`malloc`, `calloc`, `realloc`, and `free`, plus the `div_t`, `ldiv_t`, and
+`lldiv_t` result types; `stdio.h` provides `EOF`, `putchar`, and `puts`; and
+`errno.h` currently provides the errno lvalue contract plus `EIO`, `ENOMEM`,
+`EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
-contract, allocator ownership rules, and current errno storage limitation.
+contract, normal-termination ordering, allocator ownership rules, cross-toolchain
+bootstrap boundary, and current errno storage limitation.
 
 ## Next
 
-With signed `long long` conversion in place, the next bounded `stdlib.h`
-conversion slice can add `strtoull` only, mirroring the existing `strtoul`
-base/prefix/endptr/errno contract with checked `unsigned long long` range
-handling. Locale-sensitive `strcoll`/`strxfrm`, formatted I/O, buffering, `FILE`,
-input routines, environment mutation, threading/TLS, and mmap-backed large
-allocations should remain separate. Cross-repository integration will wait until
-mini-libc is stable on the system assembler/linker bootstrap path.
+The previous primitive-expansion phase is closed: the runtime now has a real
+normal-termination lifecycle and executable compiler/libc/linker integration.
+The next architectural frontier should build a minimal standard stream object
+layer on top of the existing raw descriptor I/O: define a bounded `FILE` model
+for the inherited standard streams and prove unbuffered input/output plus stream
+state end to end before adding buffering, formatting, or pathname-based file
+opening. `strtoull`, locale expansion, environment mutation, threading/TLS, and
+allocator tuning remain lower-priority independent slices rather than the main
+phase driver.
