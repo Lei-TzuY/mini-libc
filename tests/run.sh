@@ -184,6 +184,29 @@ if [ "$(cat "$file_stream_path")" != "ABC" ]; then
 fi
 rm -f "$file_stream_path"
 
+block_io_path=build/block_io_probe.tmp
+rm -f "$block_io_path"
+set +e
+block_io_output="$(./build/block_io_probe)"
+block_io_status=$?
+set -e
+if [ "$block_io_status" -ne 0 ]; then
+    echo "block I/O probe returned $block_io_status" >&2
+    rm -f "$block_io_path"
+    exit 1
+fi
+if [ "$block_io_output" != "block-io-ok" ]; then
+    echo "unexpected block I/O output: $block_io_output" >&2
+    rm -f "$block_io_path"
+    exit 1
+fi
+if [ "$(cat "$block_io_path")" != "ABCDE" ]; then
+    echo "unexpected block I/O file contents" >&2
+    rm -f "$block_io_path"
+    exit 1
+fi
+rm -f "$block_io_path"
+
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
@@ -193,5 +216,6 @@ rm -f "$file_stream_path"
 ./build/strtoul_differential
 ./build/allocator_failure_test
 ./build/stdio_write_test
+./build/stdio_block_test
 
-echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned stdio, compiler-neutrality, and differential probes passed"
+echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block stdio, positioning, compiler-neutrality, and differential probes passed"
