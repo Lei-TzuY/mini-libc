@@ -57,6 +57,15 @@ mini_sys_brk:
     ret
     .size mini_sys_brk, .-mini_sys_brk
 
+    .globl mini_sys_openat
+    .type mini_sys_openat, @function
+mini_sys_openat:
+    movq %rcx, %r10
+    movl $257, %eax
+    syscall
+    ret
+    .size mini_sys_openat, .-mini_sys_openat
+
     .globl mini_sys_exit
     .type mini_sys_exit, @function
 mini_sys_exit:
