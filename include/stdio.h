@@ -13,6 +13,8 @@ extern FILE *__mini_stderr;
 #define stdout (__mini_stdout)
 #define stderr (__mini_stderr)
 
+FILE *fopen(const char *restrict filename, const char *restrict mode);
+int fclose(FILE *stream);
 int fgetc(FILE *stream);
 int getc(FILE *stream);
 int getchar(void);

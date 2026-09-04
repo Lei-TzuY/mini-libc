@@ -25,7 +25,9 @@ STRTOUL_RENAMES := -Dstrtoul=mini_test_strtoul
 BSEARCH_RENAMES := -Dbsearch=mini_test_bsearch
 ALLOCATOR_RENAMES := -Dmalloc=mini_test_malloc -Drealloc=mini_test_realloc \
                      -Dfree=mini_test_free -Dmini_sys_brk=mini_test_brk
-STDIO_RENAMES := -Dmini_sys_write=mini_test_write
+STDIO_RENAMES := -Dmini_sys_read=mini_test_read -Dmini_sys_write=mini_test_write
+FILE_RENAMES := -Dmini_sys_openat=mini_test_openat -Dmini_sys_close=mini_test_close \
+                -Dmalloc=mini_test_malloc -Dfree=mini_test_free
 
 BUILD := build
 LIBC := $(BUILD)/libc.a
@@ -35,13 +37,14 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/ctype.o $(BUILD)/atoi.o $(BUILD)/strtol.o \
             $(BUILD)/strtoul.o $(BUILD)/bsearch.o $(BUILD)/allocator.o \
             $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o \
-            $(BUILD)/errno.o
+            $(BUILD)/file_stream.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
             $(BUILD)/atoi_probe $(BUILD)/errno_probe $(BUILD)/strtol_probe \
             $(BUILD)/strtoul_probe $(BUILD)/allocator_probe $(BUILD)/calloc_probe \
-            $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe
+            $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
+            $(BUILD)/file_stream_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
@@ -100,7 +103,10 @@ $(BUILD)/calloc.o: src/stdlib/calloc.c include/stdlib.h include/stddef.h include
 $(BUILD)/getenv.o: src/stdlib/getenv.c include/stdlib.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/stdio.o: src/stdio/stdio.c include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/stdio.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/file_stream.o: src/stdio/file.c src/stdio/stdio_internal.h include/stdio.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/errno.o: src/errno/errno.c include/errno.h | $(BUILD)
@@ -202,8 +208,14 @@ $(BUILD)/getenv_probe.o: tests/getenv_probe.c include/mini/syscall.h include/std
 $(BUILD)/stdio_probe.o: tests/stdio_probe.c include/mini/syscall.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/stdio_test_impl.o: src/stdio/stdio.c include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/file_stream_probe.o: tests/file_stream_probe.c include/mini/syscall.h include/stdio.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/stdio_test_impl.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(STDIO_RENAMES) -c $< -o $@
+
+$(BUILD)/file_stream_test_impl.o: src/stdio/file.c src/stdio/stdio_internal.h include/stdio.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(FILE_RENAMES) -c $< -o $@
 
 $(BUILD)/stdio_write_test.o: tests/stdio_write_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
@@ -268,6 +280,9 @@ $(BUILD)/getenv_probe: $(BUILD)/getenv_probe.o $(CRT0) $(LIBC)
 $(BUILD)/stdio_probe: $(BUILD)/stdio_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/stdio_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/file_stream_probe: $(BUILD)/file_stream_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/file_stream_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
@@ -292,7 +307,7 @@ $(BUILD)/strtoul_differential: $(BUILD)/strtoul_differential.o $(BUILD)/strtoul_
 $(BUILD)/allocator_failure_test: $(BUILD)/allocator_failure_test.o $(BUILD)/allocator_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-$(BUILD)/stdio_write_test: $(BUILD)/stdio_write_test.o $(BUILD)/stdio_test_impl.o $(BUILD)/errno.o
+$(BUILD)/stdio_write_test: $(BUILD)/stdio_write_test.o $(BUILD)/stdio_test_impl.o $(BUILD)/file_stream_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 test: all

@@ -3,6 +3,7 @@
 
 char *strerror(int errnum)
 {
+    static char enoent[] = "No such file or directory";
     static char eio[] = "Input/output error";
     static char enomem[] = "Cannot allocate memory";
     static char einval[] = "Invalid argument";
@@ -10,6 +11,8 @@ char *strerror(int errnum)
     static char unknown[] = "Unknown error";
 
     switch (errnum) {
+    case ENOENT:
+        return enoent;
     case EIO:
         return eio;
     case ENOMEM:

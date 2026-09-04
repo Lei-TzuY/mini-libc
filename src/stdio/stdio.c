@@ -3,16 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define MINI_FILE_READABLE 1U
-#define MINI_FILE_WRITABLE 2U
-#define MINI_FILE_EOF 4U
-#define MINI_FILE_ERROR 8U
-
-struct __mini_FILE {
-    int fd;
-    unsigned int mode;
-    unsigned int state;
-};
+#include "stdio_internal.h"
 
 static FILE mini_stdin = {0, MINI_FILE_READABLE, 0};
 static FILE mini_stdout = {1, MINI_FILE_WRITABLE, 0};

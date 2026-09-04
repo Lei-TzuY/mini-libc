@@ -161,6 +161,29 @@ if [ "$stdio_stderr_output" != "stderr-ok" ]; then
     exit 1
 fi
 
+file_stream_path=build/file-stream-probe.tmp
+rm -f "$file_stream_path"
+set +e
+file_stream_output="$(./build/file_stream_probe "$file_stream_path")"
+file_stream_status=$?
+set -e
+if [ "$file_stream_status" -ne 0 ]; then
+    echo "file stream probe returned $file_stream_status" >&2
+    rm -f "$file_stream_path"
+    exit 1
+fi
+if [ "$file_stream_output" != "file-stream-ok" ]; then
+    echo "unexpected file stream output: $file_stream_output" >&2
+    rm -f "$file_stream_path"
+    exit 1
+fi
+if [ "$(cat "$file_stream_path")" != "ABC" ]; then
+    echo "unexpected owned file contents" >&2
+    rm -f "$file_stream_path"
+    exit 1
+fi
+rm -f "$file_stream_path"
+
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
@@ -171,4 +194,4 @@ fi
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, standard-stream stdio, compiler-neutrality, and differential probes passed"
+echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned stdio, compiler-neutrality, and differential probes passed"
