@@ -136,6 +136,11 @@ int main(void)
         read_call_count != 1) {
         return 2;
     }
+    result = fgetc(stdin);
+    if (result != EOF || errno != ERANGE || !feof(stdin) || ferror(stdin) ||
+        read_call_count != 1) {
+        return 15;
+    }
     clearerr(stdin);
     if (feof(stdin) || ferror(stdin)) {
         return 3;
