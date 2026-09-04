@@ -18,6 +18,11 @@ static int model_alnum(int c)
     return model_alpha(c) || model_digit(c);
 }
 
+static int model_blank(int c)
+{
+    return c == ' ' || c == '\t';
+}
+
 static int model_cntrl(int c)
 {
     return (c >= 0x00 && c <= 0x1f) || c == 0x7f;
@@ -80,21 +85,26 @@ int main(int argc, char **argv, char **envp)
     (void)envp;
 
     errno = ERANGE;
-    if (isalpha(EOF) != 0 || isalnum(EOF) != 0 || iscntrl(EOF) != 0 ||
-        isdigit(EOF) != 0 || isgraph(EOF) != 0 || islower(EOF) != 0 ||
-        isprint(EOF) != 0 || ispunct(EOF) != 0 || isspace(EOF) != 0 ||
-        isupper(EOF) != 0 || isxdigit(EOF) != 0 || tolower(EOF) != EOF ||
-        toupper(EOF) != EOF || errno != ERANGE) {
+    if (isalpha(EOF) != 0 || isalnum(EOF) != 0 || isblank(EOF) != 0 ||
+        iscntrl(EOF) != 0 || isdigit(EOF) != 0 || isgraph(EOF) != 0 ||
+        islower(EOF) != 0 || isprint(EOF) != 0 || ispunct(EOF) != 0 ||
+        isspace(EOF) != 0 || isupper(EOF) != 0 || isxdigit(EOF) != 0 ||
+        tolower(EOF) != EOF || toupper(EOF) != EOF || errno != ERANGE) {
         return 1;
+    }
+
+    if (isblank(' ') == 0 || isblank('\t') == 0 || isblank('\n') != 0 ||
+        isblank('A') != 0 || isblank(0x80) != 0) {
+        return 2;
     }
 
     if (iscntrl(0x00) == 0 || iscntrl(0x1f) == 0 || iscntrl(0x20) != 0 ||
         iscntrl(0x7f) == 0 || iscntrl(0x80) != 0) {
-        return 2;
+        return 3;
     }
 
     if (isprint(' ') == 0 || isgraph(' ') != 0) {
-        return 3;
+        return 4;
     }
 
     if (ispunct('!') == 0 || ispunct('/') == 0 || ispunct(':') == 0 ||
@@ -102,56 +112,59 @@ int main(int argc, char **argv, char **envp)
         ispunct('{') == 0 || ispunct('~') == 0 || ispunct(' ') != 0 ||
         ispunct('0') != 0 || ispunct('A') != 0 || ispunct('z') != 0 ||
         ispunct(0x7f) != 0 || ispunct(0x80) != 0) {
-        return 4;
+        return 5;
     }
 
     for (c = 0; c <= 255; ++c) {
         if ((isalpha(c) != 0) != model_alpha(c)) {
-            return 5;
-        }
-        if ((isalnum(c) != 0) != model_alnum(c)) {
             return 6;
         }
-        if ((iscntrl(c) != 0) != model_cntrl(c)) {
+        if ((isalnum(c) != 0) != model_alnum(c)) {
             return 7;
         }
-        if ((isdigit(c) != 0) != model_digit(c)) {
+        if ((isblank(c) != 0) != model_blank(c)) {
             return 8;
         }
-        if ((isgraph(c) != 0) != model_graph(c)) {
+        if ((iscntrl(c) != 0) != model_cntrl(c)) {
             return 9;
         }
-        if ((islower(c) != 0) != model_lower(c)) {
+        if ((isdigit(c) != 0) != model_digit(c)) {
             return 10;
         }
-        if ((isprint(c) != 0) != model_print(c)) {
+        if ((isgraph(c) != 0) != model_graph(c)) {
             return 11;
         }
-        if ((ispunct(c) != 0) != model_punct(c)) {
+        if ((islower(c) != 0) != model_lower(c)) {
             return 12;
         }
-        if ((isspace(c) != 0) != model_space(c)) {
+        if ((isprint(c) != 0) != model_print(c)) {
             return 13;
         }
-        if ((isupper(c) != 0) != model_upper(c)) {
+        if ((ispunct(c) != 0) != model_punct(c)) {
             return 14;
         }
-        if ((isxdigit(c) != 0) != model_xdigit(c)) {
+        if ((isspace(c) != 0) != model_space(c)) {
             return 15;
         }
-        if (tolower(c) != model_tolower(c)) {
+        if ((isupper(c) != 0) != model_upper(c)) {
             return 16;
         }
-        if (toupper(c) != model_toupper(c)) {
+        if ((isxdigit(c) != 0) != model_xdigit(c)) {
             return 17;
         }
-        if (errno != ERANGE) {
+        if (tolower(c) != model_tolower(c)) {
             return 18;
+        }
+        if (toupper(c) != model_toupper(c)) {
+            return 19;
+        }
+        if (errno != ERANGE) {
+            return 20;
         }
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 19;
+        return 21;
     }
     return 0;
 }

@@ -5,6 +5,11 @@ int isalpha(int c)
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
+int isblank(int c)
+{
+    return c == ' ' || c == '\t';
+}
+
 int isdigit(int c)
 {
     return c >= '0' && c <= '9';
