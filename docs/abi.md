@@ -38,10 +38,12 @@ same termination sequence. After the registry is drained, `exit` delegates to
 
 `_Exit(status)` bypasses the callback registry and calls raw `mini_sys_exit`
 directly. It therefore provides the immediate-termination path required when no
-normal-exit callbacks should run. mini-libc currently has no `FILE` stream
-object model, buffering, or `tmpfile`, so `exit` has no stream-flush/close or
-temporary-file cleanup phase yet. Adding those facilities later must extend the
-normal-termination sequence rather than bypassing this callback boundary.
+normal-exit callbacks should run. mini-libc now has inherited unbuffered standard
+`FILE` streams, but no buffered stream state, dynamically owned streams, or
+`tmpfile` objects, so `exit` has no user-space flush/close or temporary-file
+cleanup phase yet. The kernel closes inherited descriptors when the process
+terminates. Future buffering or owned-stream support must extend normal
+termination rather than bypassing this callback boundary.
 
 ## Function ABI
 
@@ -101,16 +103,21 @@ long range; magnitude overflow still returns `ULONG_MAX` and sets `ERANGE`.
 growth. `calloc` uses `ENOMEM` when `nmemb * size` would overflow. `realloc`
 uses `ENOMEM` when the requested size cannot be represented or when a required
 replacement allocation cannot be obtained. Successful allocation/resizing calls
-do not clear an existing errno value. Raw
-`mini_sys_*` calls remain separate from this libc error contract. `putchar` and
-`puts` translate a negative raw `write` result to its positive libc `errno`
-value. A zero-progress write while bytes remain is treated as `EIO` to prevent
-an unbounded retry loop. Successful stdio writes do not clear an existing
-`errno` value.
+do not clear an existing errno value. Raw `mini_sys_*` calls remain separate
+from this libc error contract.
 
-The current storage is suitable for the single-threaded runtime milestone only.
-Future threading/TLS work must preserve the `errno` lvalue contract while making
-the backing slot thread-local.
+The stdio stream layer maps a negative raw `read` or `write` result to the
+corresponding positive libc `errno` value and sets that stream's error indicator.
+A zero-progress write while bytes remain is treated as `EIO` to prevent an
+unbounded retry loop. Calling an input operation on a write-only inherited stream
+or an output operation on the read-only inherited stream is rejected with
+`EINVAL` and sets the stream error indicator. A true end-of-file read is not an
+error: it sets only the EOF indicator and leaves an existing `errno` unchanged.
+Successful stream operations also leave an existing `errno` value unchanged.
+
+The current errno storage is suitable for the single-threaded runtime milestone
+only. Future threading/TLS work must preserve the `errno` lvalue contract while
+making the backing slot thread-local.
 
 ## Environment access ABI
 
@@ -130,28 +137,37 @@ empty names, and names containing `=` return null. Lookups do not modify
 `setenv`, `putenv`, or `unsetenv`; adding mutation later must define how retained
 storage and returned pointers are updated or invalidated.
 
-## Write-only stdio ABI
+## Standard stream ABI
 
-`<stdio.h>` currently defines only `EOF`, `putchar`, and `puts`. There is no
-`FILE` object model, `stdin`/`stdout`/`stderr` symbol, buffering, formatted I/O,
-or input API yet. The implemented functions target the Linux process standard
-output descriptor directly through raw `mini_sys_write(1, ...)`; this keeps the
-observable standard-output behavior real without pretending a stream layer
-exists.
+`<stdio.h>` exposes an opaque `FILE` type plus the predefined `stdin`, `stdout`,
+and `stderr` expressions. Their public names resolve to implementation-reserved
+`FILE *` objects, keeping the concrete stream layout out of the source-level ABI.
+The current three objects are process-global and bind directly to inherited Linux
+descriptors 0, 1, and 2. `stdin` is readable; `stdout` and `stderr` are writable.
+There is no dynamic stream creation or descriptor ownership transfer yet.
 
-`putchar(c)` converts `c` to `unsigned char`, writes exactly that byte, and
-returns the byte converted back to `int` on success. `puts(s)` writes all bytes
-before the terminating null and then one newline; it returns zero on success,
-which satisfies the standard nonnegative-success contract. Positive short
-writes advance the buffer and retry the unwritten suffix. A negative raw return
-sets `errno` to the corresponding positive Linux errno value and returns `EOF`.
-A zero raw return while bytes remain sets `EIO` and returns `EOF`. Partial output
-may therefore be visible before a later failure, while the first failing raw
-operation determines the reported errno.
+`fgetc`, `getc`, and `getchar` read one byte through raw `mini_sys_read`. A
+successful byte is returned as `unsigned char` converted to `int`. A raw zero
+result sets the stream EOF indicator and returns `EOF`; once set, that indicator
+is sticky and later reads return `EOF` without issuing another syscall until
+`clearerr` clears it. A negative raw result sets the error indicator, updates
+`errno`, and returns `EOF`.
 
-These calls are deliberately unbuffered and single-operation-state-free.
-Adding `FILE`, stream error indicators, buffering, or formatted I/O requires a
-separate ABI design rather than silently changing this minimal surface.
+`fputc` and `putc` write the `unsigned char` conversion of their argument to the
+selected stream. `putchar` is the `stdout` specialization. `fputs` writes all
+bytes before the source terminator without appending anything; `puts` writes the
+string to `stdout` and then appends one newline. Output retries positive short
+writes until the requested bytes are consumed. A negative raw return sets the
+stream error indicator and `errno`; a zero-progress write sets `EIO` so output
+cannot spin forever. Successful output returns a nonnegative result and does not
+clear an already-set error indicator.
+
+`feof` and `ferror` expose the sticky EOF/error indicators. `clearerr` clears both
+without changing descriptor binding or stream mode. The stream layer is
+intentionally unbuffered and single-threaded. There is no `fflush`, `fread`,
+`fwrite`, `fopen`, `fclose`, seeking API, stream allocator, locking, or formatted
+I/O yet. Those capabilities must build on this object/state boundary rather than
+reintroducing descriptor-specific stdio paths.
 
 ## Allocator ABI and ownership
 

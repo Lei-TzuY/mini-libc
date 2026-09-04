@@ -3,7 +3,26 @@
 
 #define EOF (-1)
 
+typedef struct __mini_FILE FILE;
+
+extern FILE *__mini_stdin;
+extern FILE *__mini_stdout;
+extern FILE *__mini_stderr;
+
+#define stdin (__mini_stdin)
+#define stdout (__mini_stdout)
+#define stderr (__mini_stderr)
+
+int fgetc(FILE *stream);
+int getc(FILE *stream);
+int getchar(void);
+int fputc(int c, FILE *stream);
+int putc(int c, FILE *stream);
 int putchar(int c);
+int fputs(const char *restrict s, FILE *restrict stream);
 int puts(const char *s);
+int feof(FILE *stream);
+int ferror(FILE *stream);
+void clearerr(FILE *stream);
 
 #endif

@@ -138,13 +138,26 @@ if [ "$getenv_output" != "getenv-ok" ]; then
     exit 1
 fi
 
-stdio_output="$(./build/stdio_probe)"
-expected_stdio_output='AABC
-
+stdio_stderr_file=build/stdio_probe.stderr
+set +e
+stdio_output="$(printf 'xy' | ./build/stdio_probe 2>"$stdio_stderr_file")"
+stdio_status=$?
+set -e
+stdio_stderr_output="$(cat "$stdio_stderr_file")"
+rm -f "$stdio_stderr_file"
+if [ "$stdio_status" -ne 0 ]; then
+    echo "stdio probe returned $stdio_status" >&2
+    exit 1
+fi
+expected_stdio_output='ABCDEFG
 stdio-ok'
 if [ "$stdio_output" != "$expected_stdio_output" ]; then
-    echo "unexpected stdio probe output:" >&2
+    echo "unexpected stdio stdout:" >&2
     printf '%s\n' "$stdio_output" >&2
+    exit 1
+fi
+if [ "$stdio_stderr_output" != "stderr-ok" ]; then
+    echo "unexpected stdio stderr: $stdio_stderr_output" >&2
     exit 1
 fi
 
@@ -158,4 +171,4 @@ fi
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, compiler-neutrality, and differential probes passed"
+echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, standard-stream stdio, compiler-neutrality, and differential probes passed"
