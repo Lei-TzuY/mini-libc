@@ -22,6 +22,31 @@ if [ "$runtime_output" != "runtime-ok" ]; then
     exit 1
 fi
 
+check_termination_case() {
+    mode="$1"
+    expected_status="$2"
+    expected_output="$3"
+
+    set +e
+    actual_output="$(./build/runtime_probe "$mode")"
+    actual_status=$?
+    set -e
+
+    if [ "$actual_status" -ne "$expected_status" ]; then
+        echo "termination mode $mode returned $actual_status, expected $expected_status" >&2
+        exit 1
+    fi
+    if [ "$actual_output" != "$expected_output" ]; then
+        echo "termination mode $mode output '$actual_output', expected '$expected_output'" >&2
+        exit 1
+    fi
+}
+
+check_termination_case return-exit 23 CBA
+check_termination_case call-exit 24 CBA
+check_termination_case quick-exit 25 ''
+check_termination_case capacity 26 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
 syscall_output="$(./build/syscall_probe)"
 if [ "$syscall_output" != "syscall-ok" ]; then
     echo "unexpected syscall probe output: $syscall_output" >&2
@@ -133,4 +158,4 @@ fi
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, compiler-neutrality, and differential probes passed"
+echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, compiler-neutrality, and differential probes passed"
