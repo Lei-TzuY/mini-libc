@@ -218,8 +218,20 @@ int main(int argc, char **argv, char **envp)
         return 13;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    if (abs(0) != 0 || abs(1) != 1 || abs(-1) != 1 ||
+        abs(__INT_MAX__) != __INT_MAX__ || abs(-__INT_MAX__) != __INT_MAX__ ||
+        errno != ERANGE) {
         return 14;
+    }
+
+    if (labs(0L) != 0L || labs(1L) != 1L || labs(-1L) != 1L ||
+        labs(__LONG_MAX__) != __LONG_MAX__ ||
+        labs(-__LONG_MAX__) != __LONG_MAX__ || errno != ERANGE) {
+        return 15;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 16;
     }
     return 0;
 }

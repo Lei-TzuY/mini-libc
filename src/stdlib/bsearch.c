@@ -56,3 +56,13 @@ void qsort(void *base, size_t nmemb, size_t size,
         }
     }
 }
+
+int abs(int j)
+{
+    return j < 0 ? -j : j;
+}
+
+long labs(long j)
+{
+    return j < 0 ? -j : j;
+}
