@@ -60,24 +60,26 @@ read-only. The routine does not allocate, does not perform locale lookup, and
 leaves an existing `errno` value unchanged.
 
 The minimal `ctype.h` surface currently provides `isalpha`, `isalnum`, `iscntrl`,
-`isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`, `isxdigit`,
-`tolower`, and `toupper` with a fixed C-locale classification and case-conversion
-contract. `isalpha` recognizes only the ASCII letters `A` through `Z` and `a` through `z`;
-`isdigit` recognizes only the ASCII bytes `0` through `9`; `isalnum` recognizes
-exactly the union of those two classes. `iscntrl` recognizes ASCII control
-bytes `0x00` through `0x1f` plus `0x7f`. `isgraph` recognizes the graphical ASCII
-bytes `!` through `~`, while `isprint` additionally includes ASCII space and
-therefore recognizes bytes from space through `~`. `isxdigit` recognizes only
-ASCII decimal digits plus `A` through `F` and `a` through `f`. `islower`
-recognizes only `a` through `z`, while `isupper` recognizes only `A` through `Z`.
-`isspace` recognizes space plus `\t`, `\n`, `\v`, `\f`, and `\r`. `tolower`
-maps `A` through `Z` to the corresponding lowercase ASCII letters and otherwise
-returns its valid input unchanged; `toupper` maps `a` through `z` to uppercase
-and otherwise returns its valid input unchanged. Their defined argument domain
-follows ISO C: callers pass either `EOF` or a value representable as `unsigned
-char`. `EOF` and every byte outside a matching classification produce zero from
-the classifiers, while both conversion routines return `EOF` unchanged. The
-routines do not allocate, perform locale lookup, or modify `errno`.
+`isdigit`, `isgraph`, `islower`, `isprint`, `ispunct`, `isspace`, `isupper`,
+`isxdigit`, `tolower`, and `toupper` with a fixed C-locale classification and
+case-conversion contract. `isalpha` recognizes only the ASCII letters `A` through
+`Z` and `a` through `z`; `isdigit` recognizes only the ASCII bytes `0` through
+`9`; `isalnum` recognizes exactly the union of those two classes. `iscntrl`
+recognizes ASCII control bytes `0x00` through `0x1f` plus `0x7f`. `isgraph`
+recognizes the graphical ASCII bytes `!` through `~`, while `isprint`
+additionally includes ASCII space and therefore recognizes bytes from space
+through `~`. `ispunct` recognizes exactly the graphical bytes that are not
+alphanumeric. `isxdigit` recognizes only ASCII decimal digits plus `A` through
+`F` and `a` through `f`. `islower` recognizes only `a` through `z`, while
+`isupper` recognizes only `A` through `Z`. `isspace` recognizes space plus `\t`,
+`\n`, `\v`, `\f`, and `\r`. `tolower` maps `A` through `Z` to the corresponding
+lowercase ASCII letters and otherwise returns its valid input unchanged;
+`toupper` maps `a` through `z` to uppercase and otherwise returns its valid input
+unchanged. Their defined argument domain follows ISO C: callers pass either
+`EOF` or a value representable as `unsigned char`. `EOF` and every byte outside
+a matching classification produce zero from the classifiers, while both
+conversion routines return `EOF` unchanged. The routines do not allocate,
+perform locale lookup, or modify `errno`.
 
 The searches and scans compare byte representations directly without allocating
 or copying. Implementations stay deliberately simple so overlap direction,
@@ -171,10 +173,10 @@ status, direct syscall behavior, mmap/munmap, deterministic memory/string/intege
 conversion, bounded memory search, string-copy/bounded-concatenation, search,
 membership-scan, counting-scan, stateful tokenization, deterministic error-
 message edge cases, and exhaustive C-locale alphabetic/alphanumeric/control/
-digit/graphical/hexadecimal-digit/lowercase/printable/uppercase/whitespace
-classification plus ASCII case conversion, allocator alignment/reuse/split/
-coalescing behavior, `calloc` zeroing/overflow semantics, `realloc` in-place/
-move/failure semantics, fixed-seed allocation/resize stress, startup-backed
+digit/graphical/hexadecimal-digit/lowercase/printable/punctuation/uppercase/
+whitespace classification plus ASCII case conversion, allocator alignment/reuse/
+split/coalescing behavior, `calloc` zeroing/overflow semantics, `realloc` in-
+place/move/failure semantics, fixed-seed allocation/resize stress, startup-backed
 `getenv` exact-match/empty/missing semantics, write-only stdio success/short-
 write/error behavior, and the errno lvalue/storage contract. The `strtok` probe
 covers leading delimiter runs, delimiter changes between continuation calls,
@@ -216,25 +218,26 @@ docs/                ABI contracts and design notes
 
 Standard headers are added only as their required surface becomes real. The
 current `stddef.h` provides `size_t`; `ctype.h` provides `isalpha`, `isalnum`,
-`iscntrl`, `isdigit`, `isgraph`, `islower`, `isprint`, `isspace`, `isupper`,
-`isxdigit`, `tolower`, and `toupper`; `string.h` declares only implemented memory/string
-routines including `memchr`, `strcat`, `strncat`, `strstr`, `strspn`, `strcspn`,
-`strpbrk`, `strtok`, and `strerror`; `stdlib.h` declares `atoi`, `strtol`,
-`strtoul`, `getenv`, `malloc`, `calloc`, `realloc`, and `free`; `stdio.h`
-provides `EOF`, `putchar`, and `puts`; and `errno.h` currently provides the errno
-lvalue contract plus `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+`iscntrl`, `isdigit`, `isgraph`, `islower`, `isprint`, `ispunct`, `isspace`,
+`isupper`, `isxdigit`, `tolower`, and `toupper`; `string.h` declares only
+implemented memory/string routines including `memchr`, `strcat`, `strncat`,
+`strstr`, `strspn`, `strcspn`, `strpbrk`, `strtok`, and `strerror`; `stdlib.h`
+declares `atoi`, `strtol`, `strtoul`, `getenv`, `malloc`, `calloc`, `realloc`,
+and `free`; `stdio.h` provides `EOF`, `putchar`, and `puts`; and `errno.h`
+currently provides the errno lvalue contract plus `EIO`, `ENOMEM`, `EINVAL`, and
+`ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, allocator ownership rules, and current errno storage limitation.
 
 ## Next
 
-With control-byte classification in place, the next bounded `ctype.h` slice can
-add `ispunct` only, preserving the same explicit `EOF`/`unsigned char`
-argument-domain contract and exhaustive byte-domain tests while recognizing the
-printable graphical bytes that are neither alphanumeric nor space. Locale-aware
-behavior should remain a separate later slice. Locale-sensitive `strcoll`/
-`strxfrm`, formatted I/O, buffering, `FILE`, input routines, environment
-mutation, threading/TLS, and mmap-backed large allocations should also remain
-separate. Cross-repository integration will wait until mini-libc is stable on
-the system assembler/linker bootstrap path.
+With punctuation classification in place, the next bounded `ctype.h` slice can
+add `isblank` only, preserving the same explicit `EOF`/`unsigned char`
+argument-domain contract and exhaustive byte-domain tests while recognizing only
+ASCII space and horizontal tab in the fixed C locale. Locale-aware behavior
+should remain a separate later slice. Locale-sensitive `strcoll`/`strxfrm`,
+formatted I/O, buffering, `FILE`, input routines, environment mutation,
+threading/TLS, and mmap-backed large allocations should also remain separate.
+Cross-repository integration will wait until mini-libc is stable on the system
+assembler/linker bootstrap path.
