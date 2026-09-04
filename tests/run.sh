@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+./tests/verify-compiler-neutral-c.sh
+
 hello_output="$(./build/hello)"
 if [ "$hello_output" != "hello from mini-libc" ]; then
     echo "unexpected hello output: $hello_output" >&2
@@ -131,4 +133,4 @@ fi
 ./build/allocator_failure_test
 ./build/stdio_write_test
 
-echo "runtime, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, and differential probes passed"
+echo "runtime, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, stdio, compiler-neutrality, and differential probes passed"

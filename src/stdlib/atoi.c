@@ -9,7 +9,8 @@ static int is_c_space(unsigned char c)
 int atoi(const char *nptr)
 {
     const unsigned char *s = (const unsigned char *)nptr;
-    unsigned int limit = (unsigned int)__INT_MAX__;
+    const unsigned int int_max = ~0U >> 1;
+    unsigned int limit = int_max;
     unsigned int value = 0;
     int negative = 0;
     int overflow = 0;
@@ -41,11 +42,11 @@ int atoi(const char *nptr)
     }
 
     if (overflow) {
-        return negative ? -__INT_MAX__ - 1 : __INT_MAX__;
+        return negative ? -(int)int_max - 1 : (int)int_max;
     }
     if (negative) {
-        if (value == (unsigned int)__INT_MAX__ + 1U) {
-            return -__INT_MAX__ - 1;
+        if (value == int_max + 1U) {
+            return -(int)int_max - 1;
         }
         return -(int)value;
     }

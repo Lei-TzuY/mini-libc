@@ -6,6 +6,8 @@
 
 #define MINI_ALLOC_ALIGNMENT 16UL
 
+typedef unsigned long mini_uintptr_t;
+
 struct mini_block {
     size_t size;
     struct mini_block *next;
@@ -18,7 +20,7 @@ _Static_assert(sizeof(struct mini_block) == 32,
 
 static struct mini_block *block_head;
 static struct mini_block *block_tail;
-static __UINTPTR_TYPE__ heap_end;
+static mini_uintptr_t heap_end;
 static int heap_initialized;
 
 static int align_size(size_t size, size_t *aligned)
@@ -35,8 +37,8 @@ static int align_size(size_t size, size_t *aligned)
 
 static int initialize_heap(void)
 {
-    __UINTPTR_TYPE__ current;
-    __UINTPTR_TYPE__ aligned;
+    mini_uintptr_t current;
+    mini_uintptr_t aligned;
     long result;
 
     if (heap_initialized) {
@@ -47,16 +49,16 @@ static int initialize_heap(void)
     if (result <= 0) {
         return 0;
     }
-    current = (__UINTPTR_TYPE__)result;
-    if (current > (__UINTPTR_TYPE__)-1 - (MINI_ALLOC_ALIGNMENT - 1UL)) {
+    current = (mini_uintptr_t)result;
+    if (current > (mini_uintptr_t)-1 - (MINI_ALLOC_ALIGNMENT - 1UL)) {
         return 0;
     }
     aligned = (current + (MINI_ALLOC_ALIGNMENT - 1UL)) &
-              ~(__UINTPTR_TYPE__)(MINI_ALLOC_ALIGNMENT - 1UL);
+              ~(mini_uintptr_t)(MINI_ALLOC_ALIGNMENT - 1UL);
 
     if (aligned != current) {
         result = mini_sys_brk((void *)aligned);
-        if ((__UINTPTR_TYPE__)result != aligned) {
+        if ((mini_uintptr_t)result != aligned) {
             return 0;
         }
     }
@@ -107,7 +109,7 @@ static struct mini_block *find_free_block(size_t size)
 static struct mini_block *grow_heap(size_t size)
 {
     const size_t header_size = sizeof(struct mini_block);
-    __UINTPTR_TYPE__ target;
+    mini_uintptr_t target;
     struct mini_block *block;
     long result;
 
@@ -117,13 +119,13 @@ static struct mini_block *grow_heap(size_t size)
     if (size > (size_t)-1 - header_size) {
         return (struct mini_block *)0;
     }
-    if (heap_end > (__UINTPTR_TYPE__)-1 - (__UINTPTR_TYPE__)(header_size + size)) {
+    if (heap_end > (mini_uintptr_t)-1 - (mini_uintptr_t)(header_size + size)) {
         return (struct mini_block *)0;
     }
 
-    target = heap_end + (__UINTPTR_TYPE__)(header_size + size);
+    target = heap_end + (mini_uintptr_t)(header_size + size);
     result = mini_sys_brk((void *)target);
-    if ((__UINTPTR_TYPE__)result != target) {
+    if ((mini_uintptr_t)result != target) {
         return (struct mini_block *)0;
     }
 
@@ -276,11 +278,11 @@ void *realloc(void *ptr, size_t size)
         if (next == block_tail) {
             size_t growth = aligned - combined;
 
-            if (heap_end <= (__UINTPTR_TYPE__)-1 - (__UINTPTR_TYPE__)growth) {
-                __UINTPTR_TYPE__ target = heap_end + (__UINTPTR_TYPE__)growth;
+            if (heap_end <= (mini_uintptr_t)-1 - (mini_uintptr_t)growth) {
+                mini_uintptr_t target = heap_end + (mini_uintptr_t)growth;
                 long result = mini_sys_brk((void *)target);
 
-                if ((__UINTPTR_TYPE__)result == target) {
+                if ((mini_uintptr_t)result == target) {
                     heap_end = target;
                     merge_with_next(block);
                     block->size = aligned;
@@ -295,11 +297,11 @@ void *realloc(void *ptr, size_t size)
     if (block == block_tail) {
         size_t growth = aligned - block->size;
 
-        if (heap_end <= (__UINTPTR_TYPE__)-1 - (__UINTPTR_TYPE__)growth) {
-            __UINTPTR_TYPE__ target = heap_end + (__UINTPTR_TYPE__)growth;
+        if (heap_end <= (mini_uintptr_t)-1 - (mini_uintptr_t)growth) {
+            mini_uintptr_t target = heap_end + (mini_uintptr_t)growth;
             long result = mini_sys_brk((void *)target);
 
-            if ((__UINTPTR_TYPE__)result == target) {
+            if ((mini_uintptr_t)result == target) {
                 heap_end = target;
                 block->size = aligned;
                 block->requested_size = size;

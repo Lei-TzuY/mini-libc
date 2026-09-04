@@ -24,6 +24,7 @@ static int digit_value(unsigned char c)
 long strtol(const char *restrict nptr, char **restrict endptr, int base)
 {
     const unsigned char *s = (const unsigned char *)nptr;
+    const unsigned long long_max = ~0UL >> 1;
     unsigned long value = 0;
     unsigned long limit;
     int negative = 0;
@@ -70,7 +71,7 @@ long strtol(const char *restrict nptr, char **restrict endptr, int base)
         }
     }
 
-    limit = (unsigned long)__LONG_MAX__;
+    limit = long_max;
     if (negative) {
         limit += 1UL;
     }
@@ -108,11 +109,11 @@ long strtol(const char *restrict nptr, char **restrict endptr, int base)
 
     if (overflow) {
         errno = ERANGE;
-        return negative ? -__LONG_MAX__ - 1L : __LONG_MAX__;
+        return negative ? -(long)long_max - 1L : (long)long_max;
     }
     if (negative) {
-        if (value == (unsigned long)__LONG_MAX__ + 1UL) {
-            return -__LONG_MAX__ - 1L;
+        if (value == long_max + 1UL) {
+            return -(long)long_max - 1L;
         }
         return -(long)value;
     }
@@ -122,6 +123,7 @@ long strtol(const char *restrict nptr, char **restrict endptr, int base)
 long long strtoll(const char *restrict nptr, char **restrict endptr, int base)
 {
     const unsigned char *s = (const unsigned char *)nptr;
+    const unsigned long long long_long_max = ~0ULL >> 1;
     unsigned long long value = 0;
     unsigned long long limit;
     int negative = 0;
@@ -168,7 +170,7 @@ long long strtoll(const char *restrict nptr, char **restrict endptr, int base)
         }
     }
 
-    limit = (unsigned long long)__LONG_LONG_MAX__;
+    limit = long_long_max;
     if (negative) {
         limit += 1ULL;
     }
@@ -206,11 +208,12 @@ long long strtoll(const char *restrict nptr, char **restrict endptr, int base)
 
     if (overflow) {
         errno = ERANGE;
-        return negative ? -__LONG_LONG_MAX__ - 1LL : __LONG_LONG_MAX__;
+        return negative ? -(long long)long_long_max - 1LL :
+                          (long long)long_long_max;
     }
     if (negative) {
-        if (value == (unsigned long long)__LONG_LONG_MAX__ + 1ULL) {
-            return -__LONG_LONG_MAX__ - 1LL;
+        if (value == long_long_max + 1ULL) {
+            return -(long long)long_long_max - 1LL;
         }
         return -(long long)value;
     }

@@ -3,7 +3,7 @@
 extern int main(int argc, char **argv, char **envp);
 extern void __mini_set_envp(char **envp);
 
-__attribute__((noreturn)) void __mini_start(long *initial_stack)
+_Noreturn void __mini_start(long *initial_stack)
 {
     long raw_argc = initial_stack[0];
     int argc = (int)raw_argc;

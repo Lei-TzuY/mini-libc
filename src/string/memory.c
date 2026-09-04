@@ -1,5 +1,7 @@
 #include <string.h>
 
+typedef unsigned long mini_uintptr_t;
+
 void *memcpy(void *restrict dest, const void *restrict src, size_t n)
 {
     unsigned char *d = dest;
@@ -16,8 +18,8 @@ void *memmove(void *dest, const void *src, size_t n)
 {
     unsigned char *d = dest;
     const unsigned char *s = src;
-    __UINTPTR_TYPE__ d_addr = (__UINTPTR_TYPE__)dest;
-    __UINTPTR_TYPE__ s_addr = (__UINTPTR_TYPE__)src;
+    mini_uintptr_t d_addr = (mini_uintptr_t)dest;
+    mini_uintptr_t s_addr = (mini_uintptr_t)src;
     size_t i;
 
     if (d_addr <= s_addr) {
