@@ -18,7 +18,8 @@ $CC -Iinclude $CFLAGS \
 $CC -Iinclude $CFLAGS -c src/stdio/position.c -o "$OUT/position.o"
 $CC -Iinclude $CFLAGS -c tests/stdio_buffering_test.c -o "$OUT/test.o"
 $CC -Iinclude $CFLAGS -c src/errno/errno.c -o "$OUT/errno.o"
+$CC $CFLAGS -c tests/stdio_lock_fake.c -o "$OUT/stdio_lock_fake.o"
 $CC -no-pie -o "$OUT/test" "$OUT/test.o" "$OUT/stdio.o" "$OUT/file.o" \
-    "$OUT/position.o" "$OUT/errno.o"
+    "$OUT/position.o" "$OUT/errno.o" "$OUT/stdio_lock_fake.o"
 
 "$OUT/test"
