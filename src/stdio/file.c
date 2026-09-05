@@ -69,6 +69,96 @@ static int parse_open_mode(const char *mode, int *flags,
     return 1;
 }
 
+void __mini_stdio_release_buffer(FILE *stream)
+{
+    if (stream == (FILE *)0) {
+        return;
+    }
+    if ((stream->mode & MINI_FILE_BUFFER_OWNED) != 0U &&
+        stream->write_buffer != (unsigned char *)0) {
+        free(stream->write_buffer);
+    }
+    stream->mode &= ~MINI_FILE_BUFFER_OWNED;
+    stream->write_buffer = (unsigned char *)0;
+    stream->read_buffer = (unsigned char *)0;
+    stream->buffer_size = 0;
+}
+
+int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size)
+{
+    unsigned char *new_buffer = (unsigned char *)buf;
+    unsigned int new_owned = 0U;
+    int saved_errno = errno;
+    int sync_error;
+
+    if (stream == (FILE *)0 ||
+        (stream->mode & (MINI_FILE_READABLE | MINI_FILE_WRITABLE)) == 0U ||
+        (mode != _IOFBF && mode != _IOLBF && mode != _IONBF) ||
+        (mode != _IONBF && size == 0U)) {
+        errno = EINVAL;
+        return EOF;
+    }
+
+    if (mode != _IONBF && new_buffer == (unsigned char *)0) {
+        new_buffer = (unsigned char *)malloc(size);
+        if (new_buffer == (unsigned char *)0) {
+            return EOF;
+        }
+        new_owned = MINI_FILE_BUFFER_OWNED;
+    }
+
+    if ((stream->mode & MINI_FILE_WRITABLE) != 0U && fflush(stream) == EOF) {
+        sync_error = errno;
+        if (new_owned != 0U) {
+            free(new_buffer);
+        }
+        errno = sync_error;
+        return EOF;
+    }
+    if ((stream->mode & MINI_FILE_READABLE) != 0U &&
+        ((stream->state & MINI_FILE_READ_NEEDS_POSITION) != 0U ||
+         stream->read_offset != stream->read_length ||
+         stream->pushback_valid != 0U) &&
+        __mini_stdio_sync_input(stream) == EOF) {
+        sync_error = errno;
+        if (new_owned != 0U) {
+            free(new_buffer);
+        }
+        errno = sync_error;
+        return EOF;
+    }
+
+    __mini_stdio_release_buffer(stream);
+    stream->mode &= ~(MINI_FILE_UNBUFFERED | MINI_FILE_LINE_BUFFERED);
+    if (mode == _IONBF) {
+        stream->mode |= MINI_FILE_UNBUFFERED;
+    } else if (mode == _IOLBF) {
+        stream->mode |= MINI_FILE_LINE_BUFFERED;
+    }
+    stream->mode |= new_owned;
+    if (mode != _IONBF) {
+        stream->write_buffer = new_buffer;
+        stream->read_buffer = new_buffer;
+        stream->buffer_size = size;
+    }
+    stream->write_length = 0;
+    stream->read_offset = 0;
+    stream->read_length = 0;
+    stream->pushback_valid = 0U;
+    stream->pushback_byte = 0U;
+    errno = saved_errno;
+    return 0;
+}
+
+void setbuf(FILE *restrict stream, char *restrict buf)
+{
+    if (buf == (char *)0) {
+        (void)setvbuf(stream, (char *)0, _IONBF, 0U);
+    } else {
+        (void)setvbuf(stream, buf, _IOFBF, BUFSIZ);
+    }
+}
+
 FILE *fopen(const char *restrict filename, const char *restrict mode)
 {
     FILE *stream;
@@ -101,10 +191,13 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
     stream->state = 0;
     stream->next = (FILE *)0;
     stream->write_length = 0;
+    stream->write_buffer = (unsigned char *)0;
     stream->read_offset = 0;
     stream->read_length = 0;
     stream->pushback_valid = 0U;
     stream->pushback_byte = 0U;
+    stream->read_buffer = (unsigned char *)0;
+    stream->buffer_size = 0;
     __mini_stdio_register(stream);
     return stream;
 }
@@ -136,6 +229,7 @@ int fclose(FILE *stream)
     }
 
     __mini_stdio_unregister(stream);
+    __mini_stdio_release_buffer(stream);
     if (owned) {
         free(stream);
     } else {
