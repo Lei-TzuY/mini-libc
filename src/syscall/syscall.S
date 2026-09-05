@@ -66,6 +66,23 @@ mini_sys_openat:
     ret
     .size mini_sys_openat, .-mini_sys_openat
 
+    .globl mini_sys_unlinkat
+    .type mini_sys_unlinkat, @function
+mini_sys_unlinkat:
+    movl $263, %eax
+    syscall
+    ret
+    .size mini_sys_unlinkat, .-mini_sys_unlinkat
+
+    .globl mini_sys_renameat
+    .type mini_sys_renameat, @function
+mini_sys_renameat:
+    movq %rcx, %r10
+    movl $264, %eax
+    syscall
+    ret
+    .size mini_sys_renameat, .-mini_sys_renameat
+
     .globl mini_sys_exit
     .type mini_sys_exit, @function
 mini_sys_exit:
