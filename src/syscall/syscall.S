@@ -166,4 +166,12 @@ mini_sys_exit:
     ud2
     .size mini_sys_exit, .-mini_sys_exit
 
+    .globl mini_sys_exit_group
+    .type mini_sys_exit_group, @function
+mini_sys_exit_group:
+    movl $231, %eax
+    syscall
+    ud2
+    .size mini_sys_exit_group, .-mini_sys_exit_group
+
     .section .note.GNU-stack,"",@progbits
