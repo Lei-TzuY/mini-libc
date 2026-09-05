@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define MINI_STDIO_SYNC_PUBLIC_WRAPPER 1
 #include "stdio_internal.h"
 
 int __mini_setvbuf_unlocked(FILE *restrict stream, char *restrict buf,
