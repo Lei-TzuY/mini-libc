@@ -117,10 +117,13 @@ int main(int argc, char **argv, char **envp)
     float file_scan_float = 0.0f;
     float memory_scan_float = 0.0f;
     float stdin_scan_float = 0.0f;
+    float parsed_float = 0.0f;
     double file_scan_double = 0.0;
     double memory_scan_double = 0.0;
     double memory_scan_negative_zero = 1.0;
     double stdin_scan_double = 0.0;
+    double parsed_double = 0.0;
+    double hex_scan_double = 0.0;
     int formatted;
 
     (void)envp;
@@ -142,6 +145,18 @@ int main(int argc, char **argv, char **envp)
     errno = EIO;
     if (strtol("123x", &end, 10) != 123 || *end != 'x' || errno != EIO) {
         return 4;
+    }
+    parsed_double = strtod("0x1.8p1x", &end);
+    if (parsed_double != 3.0 || *end != 'x' || errno != EIO) {
+        return 37;
+    }
+    parsed_float = strtof("-1.5e2x", &end);
+    if (parsed_float != -150.0f || *end != 'x' || errno != EIO) {
+        return 38;
+    }
+    if (tiny_vsscanf("0x1.8p1", "%la", &hex_scan_double) != 1 ||
+        hex_scan_double != 3.0 || errno != EIO) {
+        return 39;
     }
 
     buffer = malloc(32);
