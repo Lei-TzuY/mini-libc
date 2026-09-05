@@ -38,6 +38,8 @@ int putc(int c, FILE *stream);
 int putchar(int c);
 int fputs(const char *restrict s, FILE *restrict stream);
 int puts(const char *s);
+int fscanf(FILE *restrict stream, const char *restrict format, ...);
+int scanf(const char *restrict format, ...);
 int fprintf(FILE *restrict stream, const char *restrict format, ...);
 int printf(const char *restrict format, ...);
 int feof(FILE *stream);
