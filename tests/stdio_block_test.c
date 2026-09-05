@@ -20,20 +20,21 @@ struct seek_step {
     long result;
 };
 
-static struct read_step reads[24];
+static struct read_step reads[64];
 static size_t read_count;
 static size_t read_index;
-static struct write_step writes[24];
+static struct write_step writes[64];
 static size_t write_count;
 static size_t write_index;
-static struct seek_step seeks[24];
+static struct seek_step seeks[64];
 static size_t seek_count;
 static size_t seek_index;
-static unsigned long requested[24];
+static unsigned long read_requested[64];
+static unsigned long write_requested[64];
 static size_t read_calls;
 static size_t write_calls;
 static size_t seek_calls;
-static unsigned char output[64];
+static unsigned char output[512];
 static size_t output_length;
 
 static void reset_scripts(void)
@@ -82,11 +83,11 @@ long mini_test_read(int fd, void *buf, unsigned long count)
     unsigned char *bytes = (unsigned char *)buf;
     size_t i;
 
-    if (read_index >= read_count || read_calls >= 24) {
+    if (read_index >= read_count || read_calls >= 64) {
         return -EINVAL;
     }
     step = &reads[read_index++];
-    requested[read_calls++] = count;
+    read_requested[read_calls++] = count;
     if (fd != step->fd || step->result > (long)count) {
         return -EINVAL;
     }
@@ -104,11 +105,11 @@ long mini_test_write(int fd, const void *buf, unsigned long count)
     const unsigned char *bytes = (const unsigned char *)buf;
     size_t i;
 
-    if (write_index >= write_count || write_calls >= 24) {
+    if (write_index >= write_count || write_calls >= 64) {
         return -EINVAL;
     }
     step = &writes[write_index++];
-    requested[write_calls++] = count;
+    write_requested[write_calls++] = count;
     if (fd != step->fd || step->result > (long)count) {
         return -EINVAL;
     }
@@ -127,7 +128,7 @@ long mini_test_lseek(int fd, long offset, int whence)
 {
     const struct seek_step *step;
 
-    if (seek_index >= seek_count || seek_calls >= 24) {
+    if (seek_index >= seek_count || seek_calls >= 64) {
         return -EINVAL;
     }
     step = &seeks[seek_index++];
@@ -154,7 +155,9 @@ static int bytes_equal(const unsigned char *actual, const char *expected,
 int main(void)
 {
     unsigned char buffer[8];
+    unsigned char large[260];
     size_t result;
+    size_t i;
     long position;
 
     reset_scripts();
@@ -174,8 +177,8 @@ int main(void)
     result = fread(buffer, 2, 3, stdin);
     if (result != 2 || !bytes_equal(buffer, "ABCDE", 5) ||
         buffer[5] != 0x7fU || !feof(stdin) || ferror(stdin) ||
-        errno != ERANGE || read_calls != 3 || requested[0] != 6 ||
-        requested[1] != 3 || requested[2] != 1) {
+        errno != ERANGE || read_calls != 3 || read_requested[0] != 6 ||
+        read_requested[1] != 3 || read_requested[2] != 1) {
         return 2;
     }
 
@@ -186,9 +189,10 @@ int main(void)
     result = fread(buffer, 2, 2, stdin);
     if (result != 1 || !bytes_equal(buffer, "AB", 2) ||
         !ferror(stdin) || feof(stdin) || errno != EIO || read_calls != 2 ||
-        requested[0] != 4 || requested[1] != 2) {
+        read_requested[0] != 4 || read_requested[1] != 2) {
         return 3;
     }
+    clearerr(stdin);
 
     reset_scripts();
     errno = ERANGE;
@@ -196,144 +200,210 @@ int main(void)
         !ferror(stdout) || read_calls != 0) {
         return 4;
     }
+    clearerr(stdout);
 
     reset_scripts();
+    errno = ERANGE;
+    result = fwrite("ABCDEF", 2, 3, stdout);
+    if (result != 3 || write_calls != 0 || output_length != 0 ||
+        errno != ERANGE || ferror(stdout)) {
+        return 5;
+    }
     push_write(1, 3);
     push_write(1, 2);
     push_write(1, 1);
-    errno = ERANGE;
-    result = fwrite("ABCDEF", 2, 3, stdout);
-    if (result != 3 || output_length != 6 ||
-        !bytes_equal(output, "ABCDEF", 6) || ferror(stdout) ||
-        errno != ERANGE || write_calls != 3 || requested[0] != 6 ||
-        requested[1] != 3 || requested[2] != 1) {
-        return 5;
-    }
-
-    reset_scripts();
-    push_write(1, 3);
-    push_write(1, -EIO);
-    errno = ERANGE;
-    result = fwrite("ABCDEF", 2, 3, stdout);
-    if (result != 1 || output_length != 3 ||
-        !bytes_equal(output, "ABC", 3) || !ferror(stdout) ||
-        errno != EIO || write_calls != 2) {
+    if (fflush(stdout) != 0 || !bytes_equal(output, "ABCDEF", 6) ||
+        output_length != 6 || write_calls != 3 ||
+        write_requested[0] != 6 || write_requested[1] != 3 ||
+        write_requested[2] != 1 || errno != ERANGE) {
         return 6;
     }
 
+    for (i = 0; i < 256; ++i) {
+        large[i] = 'A';
+    }
+    large[256] = 'W';
+    large[257] = 'X';
+    large[258] = 'Y';
+    large[259] = 'Z';
+
     reset_scripts();
-    push_write(1, 2);
-    push_write(1, 0);
-    errno = ERANGE;
-    result = fwrite("ABCD", 2, 2, stdout);
-    if (result != 1 || output_length != 2 || !ferror(stdout) ||
-        errno != EIO || write_calls != 2) {
+    if (fwrite(large, 1, 256, stdout) != 256 || write_calls != 0) {
         return 7;
+    }
+    push_write(1, 128);
+    push_write(1, -EIO);
+    errno = ERANGE;
+    if (fwrite(large + 256, 1, 4, stdout) != 0 || errno != EIO ||
+        !ferror(stdout) || output_length != 128 || write_calls != 2 ||
+        write_requested[0] != 256 || write_requested[1] != 128) {
+        return 8;
+    }
+    clearerr(stdout);
+    push_write(1, 128);
+    errno = ERANGE;
+    if (fflush(stdout) != 0 || errno != ERANGE || ferror(stdout) ||
+        output_length != 256) {
+        return 9;
+    }
+    if (fwrite(large + 256, 1, 4, stdout) != 4 || write_calls != 3) {
+        return 10;
+    }
+    push_write(1, 4);
+    if (fflush(stdout) != 0 || output_length != 260) {
+        return 11;
+    }
+    for (i = 0; i < 256; ++i) {
+        if (output[i] != 'A') {
+            return 12;
+        }
+    }
+    if (!bytes_equal(output + 256, "WXYZ", 4)) {
+        return 13;
     }
 
     reset_scripts();
-    errno = ERANGE;
-    if (fread(buffer, (size_t)-1, 2, stdin) != 0 || errno != EINVAL ||
-        !ferror(stdin) || read_calls != 0) {
-        return 8;
-    }
-    clearerr(stdin);
     errno = ERANGE;
     if (fwrite(buffer, (size_t)-1, 2, stdout) != 0 || errno != EINVAL ||
         !ferror(stdout) || write_calls != 0) {
-        return 9;
-    }
-
-    reset_scripts();
-    push_read(0, 0, "");
-    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
-        return 10;
-    }
-    errno = ERANGE;
-    if (fwrite("X", 1, 1, stdin) != 0 || errno != EINVAL || !ferror(stdin)) {
-        return 11;
-    }
-    push_seek(0, 5L, SEEK_SET, 5L);
-    errno = ERANGE;
-    if (fseek(stdin, 5L, SEEK_SET) != 0 || feof(stdin) || !ferror(stdin) ||
-        errno != ERANGE || seek_calls != 1) {
-        return 12;
-    }
-
-    reset_scripts();
-    push_read(0, 0, "");
-    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
-        return 13;
-    }
-    push_seek(0, 0L, SEEK_SET, -EIO);
-    errno = ERANGE;
-    if (fseek(stdin, 0L, SEEK_SET) == 0 || errno != EIO || !feof(stdin) ||
-        ferror(stdin) || seek_calls != 1) {
         return 14;
     }
+    clearerr(stdout);
 
     reset_scripts();
-    errno = ERANGE;
-    if (fseek(stdin, 0L, 99) == 0 || errno != EINVAL || seek_calls != 0 ||
-        ferror(stdin) || feof(stdin)) {
+    if (fwrite("AB", 1, 2, stdout) != 2 || write_calls != 0) {
         return 15;
     }
-
-    reset_scripts();
-    push_seek(0, 0L, SEEK_CUR, 17L);
+    push_write(1, 2);
+    push_seek(1, 5L, SEEK_SET, 5L);
     errno = ERANGE;
-    position = ftell(stdin);
-    if (position != 17L || errno != ERANGE || seek_calls != 1) {
+    if (fseek(stdout, 5L, SEEK_SET) != 0 || errno != ERANGE ||
+        output_length != 2 || !bytes_equal(output, "AB", 2) ||
+        seek_calls != 1) {
         return 16;
     }
-    push_seek(0, 0L, SEEK_CUR, -EIO);
-    errno = ERANGE;
-    position = ftell(stdin);
-    if (position != -1L || errno != EIO || seek_calls != 2 || ferror(stdin)) {
+    push_seek(1, 0L, SEEK_CUR, 5L);
+    if (ftell(stdout) != 5L || seek_calls != 2) {
         return 17;
     }
-
-    reset_scripts();
-    push_read(0, 0, "");
-    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
+    if (fwrite("C", 1, 1, stdout) != 1) {
         return 18;
     }
-    errno = ERANGE;
-    if (fwrite("X", 1, 1, stdin) != 0 || !ferror(stdin)) {
+    push_seek(1, 0L, SEEK_CUR, 5L);
+    position = ftell(stdout);
+    if (position != 6L || seek_calls != 3 || output_length != 2) {
         return 19;
     }
-    push_seek(0, 0L, SEEK_SET, 0L);
-    errno = ERANGE;
-    rewind(stdin);
-    if (feof(stdin) || ferror(stdin) || errno != ERANGE || seek_calls != 1) {
+    push_write(1, 1);
+    push_seek(1, 0L, SEEK_SET, 0L);
+    rewind(stdout);
+    if (ferror(stdout) || feof(stdout) || output_length != 3 ||
+        !bytes_equal(output, "ABC", 3) || seek_calls != 4) {
         return 20;
     }
 
     reset_scripts();
-    push_read(0, 0, "");
-    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
+    if (fwrite("D", 1, 1, stdout) != 1) {
         return 21;
     }
+    push_write(1, -EIO);
     errno = ERANGE;
-    if (fwrite("X", 1, 1, stdin) != 0 || !ferror(stdin)) {
+    if (fseek(stdout, 7L, SEEK_SET) == 0 || errno != EIO ||
+        !ferror(stdout) || seek_calls != 0 || output_length != 0) {
         return 22;
+    }
+    clearerr(stdout);
+    push_write(1, 1);
+    push_seek(1, 7L, SEEK_SET, 7L);
+    errno = ERANGE;
+    if (fseek(stdout, 7L, SEEK_SET) != 0 || errno != ERANGE ||
+        ferror(stdout) || seek_calls != 1 || !bytes_equal(output, "D", 1)) {
+        return 23;
+    }
+
+    reset_scripts();
+    if (fwrite("E", 1, 1, stdout) != 1) {
+        return 24;
+    }
+    push_write(1, 1);
+    push_seek(1, 0L, SEEK_SET, -EIO);
+    errno = ERANGE;
+    if (fseek(stdout, 0L, SEEK_SET) == 0 || errno != EIO ||
+        seek_calls != 1 || !bytes_equal(output, "E", 1)) {
+        return 25;
+    }
+    errno = ERANGE;
+    if (fflush(stdout) != 0 || errno != ERANGE) {
+        return 26;
+    }
+
+    reset_scripts();
+    push_read(0, 0, "");
+    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
+        return 27;
+    }
+    push_seek(0, 0L, SEEK_SET, 0L);
+    errno = ERANGE;
+    if (fseek(stdin, 0L, SEEK_SET) != 0 || feof(stdin) || errno != ERANGE) {
+        return 28;
+    }
+    push_read(0, 1, "Q");
+    if (fread(buffer, 1, 1, stdin) != 1 || buffer[0] != 'Q') {
+        return 29;
+    }
+
+    reset_scripts();
+    push_read(0, 0, "");
+    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
+        return 30;
+    }
+    push_seek(0, 0L, SEEK_SET, -EIO);
+    errno = ERANGE;
+    if (fseek(stdin, 0L, SEEK_SET) == 0 || errno != EIO || !feof(stdin) ||
+        seek_calls != 1) {
+        return 31;
+    }
+
+    reset_scripts();
+    errno = ERANGE;
+    if (fseek(stdin, 0L, 99) == 0 || errno != EINVAL || seek_calls != 0) {
+        return 32;
+    }
+    push_seek(0, 0L, SEEK_CUR, 17L);
+    errno = ERANGE;
+    if (ftell(stdin) != 17L || errno != ERANGE || seek_calls != 1) {
+        return 33;
+    }
+    push_seek(0, 0L, SEEK_CUR, -EIO);
+    if (ftell(stdin) != -1L || errno != EIO || seek_calls != 2 || ferror(stdin)) {
+        return 34;
+    }
+
+    reset_scripts();
+    push_read(0, 0, "");
+    if (fread(buffer, 1, 1, stdin) != 0 || !feof(stdin)) {
+        return 35;
+    }
+    errno = ERANGE;
+    if (fwrite("X", 1, 1, stdin) != 0 || errno != EINVAL || !ferror(stdin)) {
+        return 36;
     }
     push_seek(0, 0L, SEEK_SET, -EIO);
     errno = ERANGE;
     rewind(stdin);
     if (feof(stdin) || ferror(stdin) || errno != EIO || seek_calls != 1) {
-        return 23;
+        return 37;
     }
 
     reset_scripts();
     errno = ERANGE;
     if (ftell((FILE *)0) != -1L || errno != EINVAL || seek_calls != 0) {
-        return 24;
+        return 38;
     }
     errno = ERANGE;
     if (fseek((FILE *)0, 0L, SEEK_SET) == 0 || errno != EINVAL ||
         seek_calls != 0) {
-        return 25;
+        return 39;
     }
 
     return 0;
