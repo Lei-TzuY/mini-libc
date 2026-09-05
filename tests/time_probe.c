@@ -42,9 +42,7 @@ int main(void)
     if (after == (clock_t)-1 || after < before || errno != EIO) {
         return 5;
     }
-    if (work == 0UL && after < before) {
-        return 6;
-    }
+    (void)work;
 
     errno = EIO;
     if (timespec_get(&realtime, 99) != 0 || errno != EINVAL) {
