@@ -43,6 +43,7 @@ int scanf(const char *restrict format, ...);
 int sscanf(const char *restrict s, const char *restrict format, ...);
 int fprintf(FILE *restrict stream, const char *restrict format, ...);
 int printf(const char *restrict format, ...);
+int snprintf(char *restrict s, size_t n, const char *restrict format, ...);
 int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);

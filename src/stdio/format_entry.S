@@ -46,4 +46,26 @@ fprintf:
     ret
 .size fprintf, .-fprintf
 
+.globl snprintf
+.type snprintf, @function
+snprintf:
+    subq $72, %rsp
+
+    movq %rcx, 0(%rsp)
+    movq %r8, 8(%rsp)
+    movq %r9, 16(%rsp)
+    movq $0, 24(%rsp)
+    movq $0, 32(%rsp)
+    leaq 80(%rsp), %rax
+    movq %rax, 40(%rsp)
+    movl $0, 48(%rsp)
+    movl $3, 52(%rsp)
+
+    movq %rsp, %rcx
+    call __mini_snprintf_dispatch
+
+    addq $72, %rsp
+    ret
+.size snprintf, .-snprintf
+
 .section .note.GNU-stack,"",@progbits

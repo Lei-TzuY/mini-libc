@@ -2,6 +2,19 @@
 #include <mini/syscall.h>
 #include <stdio.h>
 
+static int same_string(const char *left, const char *right)
+{
+    size_t i = 0;
+
+    while (left[i] != '\0' && right[i] != '\0') {
+        if (left[i] != right[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return left[i] == right[i];
+}
+
 int main(void)
 {
     static const char expected_basic[] =
@@ -20,6 +33,13 @@ int main(void)
         "min:-2147483648:-9223372036854775808\n";
     static const char expected_fprintf_stack[] =
         "fprintf-stack:1:2:3:4:5\n";
+    static const char expected_snprintf_stack[] =
+        "snprintf-stack:1:2:3:4:5";
+    char memory[64];
+    char truncated[8];
+    char one[1];
+    char untouched;
+    size_t i;
     int result;
 
     if (stdin == (FILE *)0 || stdout == (FILE *)0 || stderr == (FILE *)0 ||
@@ -138,6 +158,49 @@ int main(void)
     }
 
     errno = ERANGE;
+    result = snprintf(memory, sizeof(memory),
+                      "snprintf-stack:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
+    if (result != (int)(sizeof(expected_snprintf_stack) - 1U) ||
+        !same_string(memory, expected_snprintf_stack) || errno != ERANGE ||
+        ferror(stdout)) {
+        return 60;
+    }
+
+    for (i = 0; i < sizeof(truncated); ++i) {
+        truncated[i] = '?';
+    }
+    result = snprintf(truncated, 5U, "abcdef-%d", 42);
+    if (result != 9 || truncated[0] != 'a' || truncated[1] != 'b' ||
+        truncated[2] != 'c' || truncated[3] != 'd' || truncated[4] != '\0' ||
+        truncated[5] != '?' || truncated[6] != '?' || truncated[7] != '?' ||
+        errno != ERANGE || ferror(stdout)) {
+        return 61;
+    }
+
+    one[0] = 'X';
+    result = snprintf(one, sizeof(one), "abc");
+    if (result != 3 || one[0] != '\0' || errno != ERANGE || ferror(stdout)) {
+        return 62;
+    }
+
+    untouched = 'Q';
+    result = snprintf(&untouched, 0U, "abc%d", 7);
+    if (result != 4 || untouched != 'Q' || errno != ERANGE || ferror(stdout)) {
+        return 63;
+    }
+
+    result = snprintf((char *)0, 0U, "zero:%u", 7U);
+    if (result != 6 || errno != ERANGE || ferror(stdout)) {
+        return 64;
+    }
+
+    errno = ERANGE;
+    if (snprintf((char *)0, 1U, "x") != EOF || errno != EINVAL ||
+        ferror(stdout)) {
+        return 65;
+    }
+
+    errno = ERANGE;
     if (printf("%q") != EOF || errno != EINVAL || ferror(stdout)) {
         return 20;
     }
@@ -169,7 +232,14 @@ int main(void)
         return 25;
     }
     clearerr(stdout);
+
     errno = ERANGE;
+    result = snprintf(memory, sizeof(memory), "closed:%u", 7U);
+    if (result != 8 || !same_string(memory, "closed:7") || errno != ERANGE ||
+        ferror(stdout)) {
+        return 66;
+    }
+
     if (printf("%300s", "x") != EOF || !ferror(stdout)) {
         return 26;
     }
