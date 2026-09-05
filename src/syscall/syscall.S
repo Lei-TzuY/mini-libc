@@ -57,6 +57,14 @@ mini_sys_brk:
     ret
     .size mini_sys_brk, .-mini_sys_brk
 
+    .globl mini_sys_clock_gettime
+    .type mini_sys_clock_gettime, @function
+mini_sys_clock_gettime:
+    movl $228, %eax
+    syscall
+    ret
+    .size mini_sys_clock_gettime, .-mini_sys_clock_gettime
+
     .globl mini_sys_openat
     .type mini_sys_openat, @function
 mini_sys_openat:
