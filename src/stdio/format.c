@@ -327,7 +327,7 @@ static int parse_spec(const char **cursor, struct mini_format_spec *spec,
             int precision = word_to_int(next_word(args));
 
             ++p;
-            if (precision < 0) {
+        if (precision < 0) {
                 spec->precision_set = 0;
             } else {
                 spec->precision = (unsigned int)precision;
