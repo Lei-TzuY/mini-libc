@@ -18,10 +18,15 @@ static int same_bytes(const unsigned char *left, const char *right, size_t lengt
 int main(void)
 {
     static const char path[] = "build/block_io_probe.tmp";
+    static const char input_path[] = "build/input_buffer_probe.tmp";
     static const char ok[] = "block-io-ok\n";
     unsigned char buffer[8];
+    unsigned char large[300];
+    unsigned char middle[254];
+    char line[16];
     FILE *stream;
     size_t count;
+    size_t i;
 
     stream = fopen(path, "w+");
     if (stream == (FILE *)0) {
@@ -112,8 +117,112 @@ int main(void)
         return 16;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    for (i = 0; i < sizeof(large); ++i) {
+        large[i] = (unsigned char)'R';
+    }
+    large[0] = (unsigned char)'A';
+    for (i = 1; i < 255; ++i) {
+        large[i] = (unsigned char)'q';
+    }
+    large[255] = (unsigned char)'L';
+    large[256] = (unsigned char)'I';
+    large[257] = (unsigned char)'N';
+    large[258] = (unsigned char)'E';
+    large[259] = (unsigned char)'\n';
+
+    stream = fopen(input_path, "w+");
+    if (stream == (FILE *)0 || fwrite(large, 1, sizeof(large), stream) != sizeof(large) ||
+        fseek(stream, 0L, SEEK_SET) != 0) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         return 17;
+    }
+
+    if (fgetc(stream) != 'A' || ftell(stream) != 1L || feof(stream) ||
+        ferror(stream)) {
+        fclose(stream);
+        return 18;
+    }
+    if (ungetc('Z', stream) != 'Z' || ftell(stream) != 0L || feof(stream) ||
+        fgetc(stream) != 'Z' || ftell(stream) != 1L) {
+        fclose(stream);
+        return 19;
+    }
+
+    if (fread(middle, 1, sizeof(middle), stream) != sizeof(middle) ||
+        ftell(stream) != 255L) {
+        fclose(stream);
+        return 20;
+    }
+    for (i = 0; i < sizeof(middle); ++i) {
+        if (middle[i] != (unsigned char)'q') {
+            fclose(stream);
+            return 21;
+        }
+    }
+
+    if (fgets(line, (int)sizeof(line), stream) != line ||
+        line[0] != 'L' || line[1] != 'I' || line[2] != 'N' ||
+        line[3] != 'E' || line[4] != '\n' || line[5] != '\0' ||
+        ftell(stream) != 260L) {
+        fclose(stream);
+        return 22;
+    }
+
+    errno = ERANGE;
+    if (fgets((char *)0, 2, stream) != (char *)0 || errno != EINVAL ||
+        !ferror(stream) || fseek(stream, 255L, SEEK_SET) != 0 ||
+        !ferror(stream)) {
+        fclose(stream);
+        return 23;
+    }
+    errno = ERANGE;
+    if (fgets(line, (int)sizeof(line), stream) != line ||
+        line[0] != 'L' || line[1] != 'I' || line[2] != 'N' ||
+        line[3] != 'E' || line[4] != '\n' || line[5] != '\0' ||
+        ftell(stream) != 260L || !ferror(stream) || errno != ERANGE) {
+        fclose(stream);
+        return 24;
+    }
+    clearerr(stream);
+
+    if (ungetc('!', stream) != '!' || ftell(stream) != 259L ||
+        fgetc(stream) != '!' || ftell(stream) != 260L) {
+        fclose(stream);
+        return 25;
+    }
+
+    if (fread(large, 1, 40, stream) != 40) {
+        fclose(stream);
+        return 26;
+    }
+    for (i = 0; i < 40; ++i) {
+        if (large[i] != (unsigned char)'R') {
+            fclose(stream);
+            return 27;
+        }
+    }
+    if (fgetc(stream) != EOF || !feof(stream) || ferror(stream)) {
+        fclose(stream);
+        return 28;
+    }
+
+    errno = ERANGE;
+    if (ungetc(EOF, stream) != EOF || errno != ERANGE || !feof(stream)) {
+        fclose(stream);
+        return 29;
+    }
+    if (fputc('X', stream) != 'X' || feof(stream) == 0 || ftell(stream) != 301L) {
+        fclose(stream);
+        return 30;
+    }
+    if (fclose(stream) != 0) {
+        return 31;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 32;
     }
     return 0;
 }

@@ -23,8 +23,14 @@ struct __mini_FILE {
     FILE *next;
     size_t write_length;
     unsigned char write_buffer[MINI_FILE_BUFFER_SIZE];
+    size_t read_offset;
+    size_t read_length;
+    unsigned int pushback_valid;
+    unsigned char pushback_byte;
+    unsigned char read_buffer[MINI_FILE_BUFFER_SIZE];
 };
 
+size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length);
 size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
                           size_t length);
 int __mini_stdio_flush_buffer(FILE *stream);
