@@ -141,17 +141,26 @@ int main(int argc, char **argv)
     if (fopen(argv[1], "rx") != (FILE *)0 || errno != EINVAL) {
         return 19;
     }
+    errno = ERANGE;
+    if (fopen(argv[1], "wxx") != (FILE *)0 || errno != EINVAL) {
+        return 20;
+    }
 
     errno = ERANGE;
     stream = fopen(exclusive_path, "w+bx");
-    if (stream == (FILE *)0 || errno != ERANGE ||
-        fputs("atomic", stream) == EOF || fclose(stream) != 0 ||
-        !file_equals(exclusive_path, "atomic", 6)) {
-        if (stream != (FILE *)0 && ferror(stream)) {
-            fclose(stream);
-        }
+    if (stream == (FILE *)0 || errno != ERANGE) {
         remove_if_present(exclusive_path);
-        return 20;
+        return 21;
+    }
+    if (fputs("atomic", stream) == EOF || ferror(stream) || errno != ERANGE) {
+        fclose(stream);
+        remove_if_present(exclusive_path);
+        return 22;
+    }
+    if (fclose(stream) != 0 || errno != ERANGE ||
+        !file_equals(exclusive_path, "atomic", 6)) {
+        remove_if_present(exclusive_path);
+        return 23;
     }
 
     errno = ERANGE;
@@ -162,7 +171,7 @@ int main(int argc, char **argv)
             fclose(stream);
         }
         remove_if_present(exclusive_path);
-        return 21;
+        return 24;
     }
 
     errno = ERANGE;
@@ -170,7 +179,7 @@ int main(int argc, char **argv)
         !file_equals(renamed_path, "atomic", 6)) {
         remove_if_present(exclusive_path);
         remove_if_present(renamed_path);
-        return 22;
+        return 25;
     }
     errno = ERANGE;
     stream = fopen(exclusive_path, "r");
@@ -179,20 +188,20 @@ int main(int argc, char **argv)
             fclose(stream);
         }
         remove_if_present(renamed_path);
-        return 23;
+        return 26;
     }
     errno = ERANGE;
     if (remove(renamed_path) != 0 || errno != ERANGE) {
         remove_if_present(renamed_path);
-        return 24;
+        return 27;
     }
     errno = ERANGE;
     if (remove(renamed_path) != -1 || errno != ENOENT) {
-        return 25;
+        return 28;
     }
     errno = ERANGE;
     if (rename(exclusive_path, renamed_path) != -1 || errno != ENOENT) {
-        return 26;
+        return 29;
     }
 
     errno = ERANGE;
@@ -203,7 +212,7 @@ int main(int argc, char **argv)
         if (stream != (FILE *)0) {
             fclose(stream);
         }
-        return 27;
+        return 30;
     }
     rewind(stream);
     tmp_word[0] = '\0';
@@ -215,7 +224,7 @@ int main(int argc, char **argv)
         fseek(stream, 0L, SEEK_END) != 0 || fputc('!', stream) != '!' ||
         ftell(stream) != 6L) {
         fclose(stream);
-        return 28;
+        return 31;
     }
     rewind(stream);
     if (fgetc(stream) != 't' || fgetc(stream) != 'm' ||
@@ -223,11 +232,11 @@ int main(int argc, char **argv)
         fgetc(stream) != '7' || fgetc(stream) != '!' ||
         fgetc(stream) != EOF || !feof(stream) || ferror(stream) ||
         fclose(stream) != 0) {
-        return 29;
+        return 32;
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
-        return 30;
+        return 33;
     }
     return 0;
 }
