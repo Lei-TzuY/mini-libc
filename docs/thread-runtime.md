@@ -38,8 +38,15 @@ normal function return through `thrd_exit`.
 the kernel has cleared the word and woken waiters, the parent reads the child's
 integer result, unmaps its stack, and releases the fixed control slot. A second
 join of the released handle is rejected. `thrd_exit` stores the result in the
-current control slot and uses the raw `exit` syscall, which terminates only the
-calling Linux thread in a thread group.
+current control slot and uses raw Linux `SYS_exit`, which terminates only the
+calling thread in the thread group.
+
+Process termination is deliberately distinct. `_Exit`, and therefore the final
+step of normal `exit`, `quick_exit`, and return from `main`, uses raw
+`SYS_exit_group`. Once real C11 threads exist, using `SYS_exit` for those paths
+would strand sibling threads instead of terminating the program. The raw syscall
+layer therefore exposes both operations with separate names rather than hiding
+this Linux lifecycle distinction.
 
 This first ABI therefore supports at most 16 simultaneously outstanding
 mini-libc-created joinable threads. The fixed bound is intentional and is not a
@@ -102,11 +109,18 @@ The freestanding thread probe runs real concurrent kernel threads and verifies:
 - a repeated join and an unlock of an unlocked mutex are rejected;
 - the final marker is written only after all children have been joined.
 
+A second freestanding termination probe keeps a child thread alive, waits until
+that child is ready, and calls `_Exit(37)` from the main thread. The child is
+armed to emit a `survived` marker after a bounded futex wait. Correct
+`SYS_exit_group` behavior must terminate the whole process with status 37 before
+that marker can appear; the previous single-thread-era `SYS_exit` behavior would
+leave the child running and is therefore observably rejected.
+
 The pinned tiny-c integration independently creates two real threads, executes
 3,000 mutex-protected increments, checks parent/child errno isolation, joins an
 explicit `thrd_exit(91)`, and emits `tiny-threads-ok`. The same object graph is
 linked and run through both GNU `ld` and the pinned mini-elf-toolchain. The
-freestanding thread probe and tiny integration are also included in host-libc
+freestanding thread probes and tiny integration are also included in host-libc
 independence inspection.
 
 ## Phase boundary and promotion
