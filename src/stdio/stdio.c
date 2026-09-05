@@ -66,7 +66,8 @@ static void ensure_storage(FILE *stream)
     }
 }
 
-size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
+static size_t stdio_read_unlocked(FILE *stream, unsigned char *buffer,
+                                  size_t length)
 {
     size_t completed = 0;
 
@@ -161,6 +162,16 @@ size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
     return completed;
 }
 
+size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
+{
+    size_t result;
+
+    __mini_stdio_lock();
+    result = stdio_read_unlocked(stream, buffer, length);
+    __mini_stdio_unlock();
+    return result;
+}
+
 static size_t write_raw(FILE *stream, const unsigned char *buffer, size_t length)
 {
     size_t completed = 0;
@@ -185,7 +196,7 @@ static size_t write_raw(FILE *stream, const unsigned char *buffer, size_t length
     return completed;
 }
 
-int __mini_stdio_flush_buffer(FILE *stream)
+static int stdio_flush_buffer_unlocked(FILE *stream)
 {
     size_t completed = 0;
     size_t length;
@@ -222,8 +233,18 @@ int __mini_stdio_flush_buffer(FILE *stream)
     return 0;
 }
 
-size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
-                          size_t length)
+int __mini_stdio_flush_buffer(FILE *stream)
+{
+    int result;
+
+    __mini_stdio_lock();
+    result = stdio_flush_buffer_unlocked(stream);
+    __mini_stdio_unlock();
+    return result;
+}
+
+static size_t stdio_write_unlocked(FILE *stream, const unsigned char *buffer,
+                                   size_t length)
 {
     size_t accepted = 0;
 
@@ -250,7 +271,7 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
         int flush_line = 0;
 
         if (stream->write_length == stream->buffer_size) {
-            if (__mini_stdio_flush_buffer(stream) == EOF) {
+            if (stdio_flush_buffer_unlocked(stream) == EOF) {
                 return accepted;
             }
         }
@@ -275,7 +296,7 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
         stream->write_length += chunk;
         accepted += chunk;
 
-        if (flush_line && __mini_stdio_flush_buffer(stream) == EOF) {
+        if (flush_line && stdio_flush_buffer_unlocked(stream) == EOF) {
             return accepted;
         }
     }
@@ -283,56 +304,75 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
     return accepted;
 }
 
+size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
+                          size_t length)
+{
+    size_t result;
+
+    __mini_stdio_lock();
+    result = stdio_write_unlocked(stream, buffer, length);
+    __mini_stdio_unlock();
+    return result;
+}
+
 void __mini_stdio_register(FILE *stream)
 {
+    __mini_stdio_lock();
     stream->next = mini_stream_head;
     mini_stream_head = stream;
+    __mini_stdio_unlock();
 }
 
 void __mini_stdio_unregister(FILE *stream)
 {
-    FILE **link = &mini_stream_head;
+    FILE **link;
 
+    __mini_stdio_lock();
+    link = &mini_stream_head;
     while (*link != (FILE *)0) {
         if (*link == stream) {
             *link = stream->next;
             stream->next = (FILE *)0;
-            return;
+            break;
         }
         link = &(*link)->next;
     }
+    __mini_stdio_unlock();
 }
 
 int fflush(FILE *stream)
 {
-    if (stream == (FILE *)0) {
-        return __mini_stdio_flush_all();
-    }
-    if ((stream->mode & (MINI_FILE_READABLE | MINI_FILE_WRITABLE)) == 0U) {
-        return mark_error(stream, EINVAL);
-    }
-    if ((stream->mode & MINI_FILE_WRITABLE) == 0U) {
-        return 0;
-    }
-    if (__mini_stdio_flush_buffer(stream) == EOF) {
-        return EOF;
-    }
+    int result = 0;
 
-    stream->state &= ~MINI_FILE_WRITE_NEEDS_SYNC;
-    return 0;
+    __mini_stdio_lock();
+    if (stream == (FILE *)0) {
+        result = __mini_stdio_flush_all();
+    } else if ((stream->mode & (MINI_FILE_READABLE | MINI_FILE_WRITABLE)) == 0U) {
+        result = mark_error(stream, EINVAL);
+    } else if ((stream->mode & MINI_FILE_WRITABLE) != 0U) {
+        result = stdio_flush_buffer_unlocked(stream);
+        if (result != EOF) {
+            stream->state &= ~MINI_FILE_WRITE_NEEDS_SYNC;
+        }
+    }
+    __mini_stdio_unlock();
+    return result;
 }
 
 int __mini_stdio_flush_all(void)
 {
-    FILE *stream = mini_stream_head;
-    int saved_errno = errno;
+    FILE *stream;
+    int saved_errno;
     int first_error = 0;
 
+    __mini_stdio_lock();
+    stream = mini_stream_head;
+    saved_errno = errno;
     while (stream != (FILE *)0) {
         FILE *next = stream->next;
 
-        if ((stream->mode & MINI_FILE_WRITABLE) != 0U && fflush(stream) == EOF &&
-            first_error == 0) {
+        if ((stream->mode & MINI_FILE_WRITABLE) != 0U &&
+            stdio_flush_buffer_unlocked(stream) == EOF && first_error == 0) {
             first_error = errno;
         }
         stream = next;
@@ -340,9 +380,11 @@ int __mini_stdio_flush_all(void)
 
     if (first_error != 0) {
         errno = first_error;
+        __mini_stdio_unlock();
         return EOF;
     }
     errno = saved_errno;
+    __mini_stdio_unlock();
     return 0;
 }
 
@@ -366,7 +408,7 @@ int getchar(void)
     return fgetc(stdin);
 }
 
-char *fgets(char *restrict s, int n, FILE *restrict stream)
+static char *fgets_unlocked(char *restrict s, int n, FILE *restrict stream)
 {
     int count = 0;
 
@@ -408,26 +450,40 @@ char *fgets(char *restrict s, int n, FILE *restrict stream)
     return s;
 }
 
+char *fgets(char *restrict s, int n, FILE *restrict stream)
+{
+    char *result;
+
+    __mini_stdio_lock();
+    result = fgets_unlocked(s, n, stream);
+    __mini_stdio_unlock();
+    return result;
+}
+
 int ungetc(int c, FILE *stream)
 {
+    int result;
+
+    __mini_stdio_lock();
     if (c == EOF) {
-        return EOF;
-    }
-    if (!readable_stream(stream) ||
-        (stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U ||
-        stream->pushback_valid != 0U) {
+        result = EOF;
+    } else if (!readable_stream(stream) ||
+               (stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U ||
+               stream->pushback_valid != 0U) {
         if (stream != (FILE *)0) {
             stream->state |= MINI_FILE_ERROR;
         }
         errno = EINVAL;
-        return EOF;
+        result = EOF;
+    } else {
+        stream->pushback_byte = (unsigned char)c;
+        stream->pushback_valid = 1U;
+        stream->state &= ~MINI_FILE_EOF;
+        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+        result = (int)stream->pushback_byte;
     }
-
-    stream->pushback_byte = (unsigned char)c;
-    stream->pushback_valid = 1U;
-    stream->state &= ~MINI_FILE_EOF;
-    stream->state |= MINI_FILE_READ_NEEDS_POSITION;
-    return (int)stream->pushback_byte;
+    __mini_stdio_unlock();
+    return result;
 }
 
 int fputc(int c, FILE *stream)
@@ -453,40 +509,60 @@ int putchar(int c)
 int fputs(const char *restrict s, FILE *restrict stream)
 {
     size_t length = 0;
+    int result = 0;
 
+    __mini_stdio_lock();
     if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
-        return mark_error(stream, EINVAL);
+        result = mark_error(stream, EINVAL);
+    } else {
+        while (s[length] != '\0') {
+            ++length;
+        }
+        if (stdio_write_unlocked(stream, (const unsigned char *)s, length) != length) {
+            result = EOF;
+        }
     }
-    while (s[length] != '\0') {
-        ++length;
-    }
-    if (__mini_stdio_write(stream, (const unsigned char *)s, length) != length) {
-        return EOF;
-    }
-    return 0;
+    __mini_stdio_unlock();
+    return result;
 }
 
 int puts(const char *s)
 {
+    int result = 0;
+
+    __mini_stdio_lock();
     if (fputs(s, stdout) == EOF || fputc('\n', stdout) == EOF) {
-        return EOF;
+        result = EOF;
     }
-    return 0;
+    __mini_stdio_unlock();
+    return result;
 }
 
 int feof(FILE *stream)
 {
-    return stream != (FILE *)0 && (stream->state & MINI_FILE_EOF) != 0U;
+    int result;
+
+    __mini_stdio_lock();
+    result = stream != (FILE *)0 && (stream->state & MINI_FILE_EOF) != 0U;
+    __mini_stdio_unlock();
+    return result;
 }
 
 int ferror(FILE *stream)
 {
-    return stream != (FILE *)0 && (stream->state & MINI_FILE_ERROR) != 0U;
+    int result;
+
+    __mini_stdio_lock();
+    result = stream != (FILE *)0 && (stream->state & MINI_FILE_ERROR) != 0U;
+    __mini_stdio_unlock();
+    return result;
 }
 
 void clearerr(FILE *stream)
 {
+    __mini_stdio_lock();
     if (stream != (FILE *)0) {
         stream->state &= ~(MINI_FILE_EOF | MINI_FILE_ERROR);
     }
+    __mini_stdio_unlock();
 }
