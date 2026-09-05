@@ -95,13 +95,13 @@ fi
 
 atoi_output="$(./build/atoi_probe)"
 if [ "$atoi_output" != "atoi-ok" ]; then
-    echo "unexpected atoi probe output: $atoi_output" >&2
+    echo "unexpected atoi output: $atoi_output" >&2
     exit 1
 fi
 
 errno_output="$(./build/errno_probe)"
 if [ "$errno_output" != "errno-ok" ]; then
-    echo "unexpected errno probe output: $errno_output" >&2
+    echo "unexpected errno output: $errno_output" >&2
     exit 1
 fi
 
@@ -247,6 +247,8 @@ if [ "$scan_output" != "scan-ok" ]; then
 fi
 rm -f "$scan_path"
 
+sh ./tests/verify-buffering.sh
+
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
@@ -260,4 +262,4 @@ rm -f "$scan_path"
 ./build/stdio_block_test
 ./build/stdio_scan_test
 
-echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, configurable buffering, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
