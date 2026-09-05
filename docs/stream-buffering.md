@@ -53,6 +53,7 @@ pending until one of these events occurs:
 - `fflush` is requested;
 - a positioning operation synchronizes output;
 - the buffering mode changes;
+- `freopen` synchronizes the old association before rebinding;
 - `fclose` runs;
 - normal `exit` performs the live-stream flush sweep.
 
@@ -98,7 +99,14 @@ In particular:
 - configured buffer capacity affects refill/write batching, not logical stream
   positions.
 
-## Close and normal-exit lifecycle
+## Rebinding, close, and normal-exit lifecycle
+
+A successful `freopen` reuses the configured buffering policy and storage in the
+same `FILE` object while replacing the descriptor association and resetting
+logical read/write state. Caller-owned buffers remain caller-owned; libc-owned
+configured buffers remain owned by the stream. See
+[`stream-rebinding.md`](stream-rebinding.md) for failure-state and descriptor-order
+semantics.
 
 `fclose` flushes pending output, closes the descriptor, removes the stream from the
 live-stream registry, releases any libc-owned configured buffer, and then releases
@@ -118,35 +126,33 @@ capacity, the next byte causes the full block to become visible, explicit flush
 publishes the remainder, line buffering publishes a newline-terminated record,
 `setbuf` uses caller storage without transferring ownership, libc-owned storage
 can be installed and replaced, and unbuffered output becomes immediately visible.
-The probe restores the historical final `ABC` file content so earlier pathname
-lifecycle evidence stays intact.
+The same probe now verifies that a caller-provided buffer remains active across a
+successful `freopen` rebind while pending output is first published to the old
+pathname.
 
 A deterministic hosted harness measures raw read/write/seek calls. It proves
 configurable refill sizes, deferred full-buffer writes, newline-driven line flush,
 unbuffered direct output, libc-owned allocation/free, caller-buffer non-ownership,
 input-cache realignment through `SEEK_CUR`, and preservation of unread cached data
-when the realignment seek fails.
+when the realignment seek fails. A dedicated rebinding regression additionally
+locks write/close/open ordering and buffer ownership across success and failure.
 
-The pinned tiny-c integration separately compiles a buffering executable using
-`setvbuf` and `setbuf`. The same executable is linked and run through GNU `ld` and
-the pinned mini-elf-toolchain, checks visibility through independent owned-file
-readers, exercises caller-owned/full/line/unbuffered/libc-owned modes, and passes
-host-libc-independence inspection.
+The pinned tiny-c integration separately compiles buffering and rebinding
+executables. The same executables are linked and run through GNU `ld` and the
+pinned mini-elf-toolchain and remain subject to host-libc-independence inspection.
 
 ## Phase boundary and next frontier
 
-Configurable buffering and buffer ownership are now part of the executable FILE
-baseline. Anonymous `tmpfile()` streams now consume those same policies and the
-same live-stream/termination lifecycle; see [`temporary-streams.md`](temporary-streams.md)
-for their descriptor and ownership contract.
+Configurable buffering, anonymous temporary streams, and `freopen` rebinding are
+now part of one executable FILE ownership/lifecycle baseline. The remaining small
+stdio wrapper surface does not justify another buffering-specific phase.
 
-With anonymous temporary streams integrated, the next higher architectural
-frontier is **stream rebinding lifecycle (`freopen`)**. That phase should preserve
-FILE identity while replacing the underlying pathname descriptor, synchronize
-pending output/unread input correctly, reset logical stream state, handle
-configured buffer ownership without leaks, and work for inherited standard
-streams as well as owned streams.
+The next promotion should re-audit runtime-wide state ownership and reentrancy.
+`errno`, the environment view, the stdio registry, and tokenizer continuation
+state remain process-global; a TLS-backed phase is only valid if the pinned
+compiler and linker can demonstrate the required executable TLS ABI. If that ABI
+is unavailable, the project should move to the next independent subsystem rather
+than weaken its cross-toolchain gate.
 
-`tmpnam`, filesystem namespace helpers, C11 exclusive-create modes,
-wide-character I/O, locale-sensitive behavior, threading/TLS, long-double I/O,
-and allocator tuning remain separate later phases.
+Named temporary-file generation, wide-character/locale behavior, threading/TLS,
+long-double I/O, and allocator tuning remain separate later phases.

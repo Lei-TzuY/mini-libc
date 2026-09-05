@@ -104,6 +104,31 @@ static void initialize_owned_stream(FILE *stream, int fd,
     __mini_stdio_register(stream);
 }
 
+static void reset_rebound_state(FILE *stream)
+{
+    stream->state = 0;
+    stream->write_length = 0;
+    stream->read_offset = 0;
+    stream->read_length = 0;
+    stream->pushback_valid = 0U;
+    stream->pushback_byte = 0U;
+}
+
+static void discard_failed_rebind(FILE *stream, unsigned int owned)
+{
+    __mini_stdio_release_buffer(stream);
+    reset_rebound_state(stream);
+
+    if (owned != 0U) {
+        __mini_stdio_unregister(stream);
+        free(stream);
+        return;
+    }
+
+    stream->fd = -1;
+    stream->mode = 0;
+}
+
 void __mini_stdio_release_buffer(FILE *stream)
 {
     if (stream == (FILE *)0) {
@@ -222,6 +247,61 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
     }
 
     initialize_owned_stream(stream, (int)result, stream_mode);
+    return stream;
+}
+
+FILE *freopen(const char *restrict filename, const char *restrict mode,
+              FILE *restrict stream)
+{
+    unsigned int parsed_mode;
+    unsigned int ownership;
+    unsigned int buffer_policy;
+    int flags;
+    int saved_errno = errno;
+    int first_error = 0;
+    long result;
+
+    if (filename == (const char *)0 || stream == (FILE *)0 ||
+        (stream->mode & (MINI_FILE_READABLE | MINI_FILE_WRITABLE)) == 0U ||
+        !parse_open_mode(mode, &flags, &parsed_mode)) {
+        errno = EINVAL;
+        return (FILE *)0;
+    }
+
+    ownership = stream->mode & MINI_FILE_OWNED;
+    buffer_policy = stream->mode &
+                    (MINI_FILE_UNBUFFERED | MINI_FILE_LINE_BUFFERED |
+                     MINI_FILE_BUFFER_OWNED);
+
+    if ((stream->mode & MINI_FILE_WRITABLE) != 0U &&
+        __mini_stdio_flush_buffer(stream) == EOF) {
+        first_error = errno;
+    }
+
+    result = mini_sys_close(stream->fd);
+    if (result < 0 && first_error == 0) {
+        first_error = (int)-result;
+    }
+    if (first_error != 0) {
+        discard_failed_rebind(stream, ownership);
+        errno = first_error;
+        return (FILE *)0;
+    }
+
+    result = mini_sys_openat(MINI_AT_FDCWD, filename, flags, 0666U);
+    if (result < 0) {
+        int error = (int)-result;
+
+        discard_failed_rebind(stream, ownership);
+        errno = error;
+        return (FILE *)0;
+    }
+
+    stream->fd = (int)result;
+    stream->mode = (parsed_mode & ~MINI_FILE_OWNED) |
+                   ownership | buffer_policy;
+    reset_rebound_state(stream);
+    errno = saved_errno;
     return stream;
 }
 

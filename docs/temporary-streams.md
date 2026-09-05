@@ -52,8 +52,6 @@ The pinned tiny-c buffering integration separately compiles `tmpfile()` use, con
 
 ## Phase boundary and next frontier
 
-Anonymous temporary stream lifecycle is now part of the executable FILE baseline. This phase intentionally does not add `tmpnam`, expose a generated pathname, or create a separate temporary-file registry.
+Anonymous temporary stream lifecycle is part of the executable FILE baseline. Stream rebinding through `freopen()` now reuses the same ownership, buffering, registry, synchronization, and close machinery for pathname redirection; see [`stream-rebinding.md`](stream-rebinding.md) for that contract.
 
-The next higher architectural frontier is **stream rebinding lifecycle (`freopen`)**. A coherent slice should preserve FILE object identity while synchronizing the old stream, closing/replacing its descriptor, reparsing pathname modes, resetting EOF/error/update/positioning state, handling configured buffer ownership transactionally, and supporting inherited standard streams as well as owned FILE objects. Failure paths must not leak the old or new descriptor and must have deterministic post-failure stream state. Real pathname redirection, hosted syscall-order regressions, tiny-c execution, and mini-elf execution should all gate that phase.
-
-`tmpnam`, filesystem namespace helpers, C11 exclusive-create modes, wide-character I/O, locale-sensitive behavior, threading/TLS, and long-double I/O remain separate later phases.
+This phase intentionally does not add `tmpnam`, expose a generated pathname, or create a separate temporary-file registry. Named temporary-file generation, wide-character/locale behavior, threading/TLS, and long-double I/O remain separate later phases.
