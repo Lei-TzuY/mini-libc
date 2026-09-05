@@ -66,6 +66,14 @@ mini_sys_openat:
     ret
     .size mini_sys_openat, .-mini_sys_openat
 
+    .globl mini_sys_memfd_create
+    .type mini_sys_memfd_create, @function
+mini_sys_memfd_create:
+    movl $319, %eax
+    syscall
+    ret
+    .size mini_sys_memfd_create, .-mini_sys_memfd_create
+
     .globl mini_sys_exit
     .type mini_sys_exit, @function
 mini_sys_exit:
