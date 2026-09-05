@@ -1,9 +1,11 @@
 #include <errno.h>
 #include <mini/syscall.h>
 #include <signal.h>
+#include <stdlib.h>
 
 #define MINI_SA_RESTORER 0x04000000UL
 #define MINI_KERNEL_SIGSET_SIZE 8UL
+#define MINI_ABORT_FALLBACK_STATUS (128 + SIGABRT)
 
 struct mini_kernel_sigaction {
     void (*handler)(int);
@@ -54,4 +56,12 @@ int raise(int sig)
 
     errno = saved_errno;
     return 0;
+}
+
+_Noreturn void abort(void)
+{
+    (void)raise(SIGABRT);
+    (void)signal(SIGABRT, SIG_DFL);
+    (void)raise(SIGABRT);
+    _Exit(MINI_ABORT_FALLBACK_STATUS);
 }
