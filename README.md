@@ -5,7 +5,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: executable runtime lifecycle, owned block streams and positioning,
+## Current milestone: executable runtime lifecycle, buffered owned streams and positioning,
 core libc primitives, allocation, environment access, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
@@ -17,6 +17,7 @@ Linux process entry
   -> main(argc, argv, envp)
   -> exit(main_status)
   -> atexit handlers in reverse registration order
+  -> flush live buffered output streams
   -> _Exit(main_status)
   -> mini_sys_exit(main_status)
   -> SYS_exit
@@ -33,16 +34,18 @@ are negative errno values, while raw `brk` returns the resulting program break
 and reports refusal by returning the unchanged break. Raw syscall wrappers do
 not update libc `errno`.
 
-Normal process termination is now a libc lifecycle rather than a direct jump
-from `main` to the raw syscall. `atexit` supports 32 simultaneous callback
+Normal process termination is a libc lifecycle rather than a direct jump from
+`main` to the raw syscall. `atexit` supports 32 simultaneous callback
 registrations, including repeated registration of the same function; callbacks
 run in reverse registration order on both `exit(status)` and return from `main`.
-`_Exit(status)` bypasses callbacks and terminates immediately through the raw
-syscall boundary. The registry is process-global and single-threaded, matching
-the rest of the current runtime state model. Owned streams can be explicitly
-closed with `fclose`; there is still no buffered-stream or `tmpfile` cleanup
-phase, and no process-global open-stream registry for implicit user-space cleanup
-at `exit`. The kernel reclaims any descriptors still open when the process ends.
+After the callback registry is drained, normal `exit` flushes every live writable
+stream in the stdio registry before delegating to `_Exit`. `_Exit(status)`
+bypasses both callback execution and stdio flushing and terminates immediately
+through the raw syscall boundary. The registries are process-global and
+single-threaded, matching the rest of the current runtime state model. Owned
+streams are removed from the live-stream registry by `fclose`; there is still no
+`tmpfile` cleanup phase. The kernel reclaims any descriptors still open when the
+process ends.
 
 The standard `string.h` surface includes the memory primitives `memcpy`,
 `memmove`, `memset`, `memcmp`, and `memchr`, plus `strlen`, `strcmp`, `strncmp`,
@@ -176,10 +179,12 @@ the POSIX `environ` global or environment mutation APIs.
 
 The `stdio.h` surface has an opaque `FILE` type and predefined `stdin`, `stdout`,
 and `stderr` expressions backed by inherited descriptors 0, 1, and 2. The
-concrete stream layout stays private. `stdin` is readable; `stdout` and `stderr`
-are writable. `fgetc`/`getc`/`getchar` provide one-byte unbuffered input, while
-`fputc`/`putc`, `fputs`, `putchar`, and `puts` provide unbuffered output.
-`feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error state.
+concrete stream layout stays private. `stdin` input remains unbuffered. `stdout`
+and pathname-backed writable streams use a fixed 256-byte private output buffer;
+`stderr` remains unbuffered. `fgetc`/`getc`/`getchar` provide one-byte input,
+while `fputc`/`putc`, `fputs`, `putchar`, `puts`, and `fwrite` feed the shared
+output core. `feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error
+state.
 
 `fopen` extends that object boundary to pathname-backed owned streams without
 coupling the inherited-stream object file to allocator or pathname support. The
@@ -191,42 +196,57 @@ needed and truncates; append mode creates when needed and uses kernel `O_APPEND`
 and therefore remain subject to the process umask. Invalid modes or a null
 filename fail with `EINVAL` before allocating or issuing `openat`.
 
-An owned stream allocates its private `FILE` state with mini-libc `malloc`, then
-opens relative to `AT_FDCWD` through raw `mini_sys_openat`. An allocation failure
-returns null with allocator `ENOMEM`; an `openat` failure frees the temporary
-stream object and maps the negative kernel result to positive libc `errno`.
-`fclose` issues raw `mini_sys_close`; an owned stream releases its `FILE` object
-even when the close syscall fails, while reporting that close error through
-`errno` and `EOF`. The predefined inherited streams can also be explicitly
-closed and then become invalid. There is no implicit open-stream registry yet.
+Every live inherited or owned stream participates in one private process-global
+registry. `fopen` registers an owned stream only after allocation and `openat`
+succeed. `fclose` first attempts to flush pending output, then closes the raw
+descriptor, unregisters the stream, and releases owned `FILE` storage even when
+flush or close reports an error. If both fail, the first flush error is
+preserved. The predefined inherited streams can also be explicitly closed and
+then become invalid.
 
-`fread` and `fwrite` extend the same unbuffered object to block transfers. A zero
-`size` or zero `nmemb` returns zero without issuing a syscall. Otherwise the
-implementation checks that `size * nmemb` is representable, retries positive
-short raw transfers, and returns the number of complete elements transferred.
-EOF after a partial final element leaves those bytes in the caller buffer but
-does not count that incomplete element. A raw read error sets the error
-indicator and maps the kernel error into `errno`; true EOF sets only the EOF
-indicator. A raw write error or zero-progress write sets the error indicator,
-with zero progress reported as `EIO`. The checked multiplication overflow path
-is a deterministic mini-libc extension: it reports `EINVAL`, sets the stream
-error indicator, and performs no raw transfer.
+`fread` performs unbuffered block input. `fwrite` sends block output through the
+same buffering core as the byte/string output functions. A zero `size` or zero
+`nmemb` returns zero without transfer. Otherwise the implementation checks that
+`size * nmemb` is representable and returns the number of complete elements
+accepted or read. EOF after a partial final input element leaves those bytes in
+the caller buffer but does not count that incomplete element. Raw read failures
+set the error indicator and publish positive `errno`; true EOF sets only the EOF
+indicator. Buffered output retries positive short raw writes whenever a flush is
+required, retains unwritten buffered bytes after a partial flush failure, and
+maps zero progress to `EIO`. The checked multiplication overflow path is a
+deterministic mini-libc extension: it reports `EINVAL`, sets the stream error
+indicator, and performs no transfer.
+
+`fflush(stream)` publishes pending buffered output for one writable stream;
+`fflush(NULL)` walks the live-stream registry and attempts every writable stream,
+returning `EOF` with the first observed error if any flush fails. Successful
+flushes preserve an existing `errno`. A flush failure keeps the unwritten suffix
+in the stream buffer so a later retry can continue without duplicating the bytes
+already written. Calling `fflush` on a live read-only stream is a deterministic
+no-op extension in this milestone.
+
+Update streams enforce an explicit direction barrier. Output must be followed by
+`fflush` or successful positioning before a later input operation; input must be
+followed by successful positioning before output, except when the input operation
+encountered EOF. `clearerr` only clears the public EOF/error indicators and does
+not bypass these direction rules.
 
 `fseek`, `ftell`, and `rewind` use the existing raw `mini_sys_lseek` boundary.
-`SEEK_SET`, `SEEK_CUR`, and `SEEK_END` map directly to Linux origins. Successful
-`fseek` clears the EOF indicator but deliberately preserves any existing stream
-error indicator; a failed `fseek` reports the raw error through `errno` and does
-not change EOF/error state. `ftell` queries the current offset with a zero
-`SEEK_CUR` seek and returns `-1L` on failure without setting the stream error
-indicator. `rewind` clears both stream indicators and seeks to offset zero;
-because it returns `void`, a seek failure is observable through `errno` while
-the indicators remain cleared.
+`fseek` flushes pending output before moving the kernel offset; if that flush
+fails, no seek is issued. A successful `fseek` clears EOF and the update-stream
+direction barriers while deliberately preserving an existing stream error
+indicator. `ftell` reports the logical position as the current kernel offset plus
+pending output bytes. For append streams with pending output, it first flushes so
+the position comes from the actual `O_APPEND` result rather than a stale current
+offset. `rewind` reuses the same synchronization path, attempts a seek to zero,
+and clears the EOF/error indicators; a failure remains observable through
+`errno`.
 
-Successful byte, block, and positioning operations preserve an existing `errno`
-value unless their contract reports a failure. The stream layer remains
-single-threaded and deliberately unbuffered. It does not yet expose `fflush`,
-user-space buffering, formatted I/O, `fgetpos`/`fsetpos`, `tmpfile`, or C11
-exclusive-create `x` modes.
+The stream layer is single-threaded. It does not yet provide input buffering,
+`setvbuf`, formatted I/O, `fgetpos`/`fsetpos`, `tmpfile`, locking, or C11
+exclusive-create `x` modes. Those capabilities must extend the existing FILE
+state machine and live-stream lifecycle rather than reintroducing descriptor-
+specific I/O paths.
 
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
@@ -271,7 +291,8 @@ make inspect
 
 `make test` verifies process-stack decoding, propagation of `main`'s return
 status through the normal `exit` path, LIFO `atexit` execution for both return
-from `main` and explicit `exit`, immediate `_Exit` bypass, the guaranteed
+from `main` and explicit `exit`, immediate `_Exit` bypass, normal-exit buffered
+output after `atexit`, explicit-flush visibility before `_Exit`, the guaranteed
 32-registration capacity, direct syscall behavior, mmap/munmap, deterministic
 memory/string/integer conversion, bounded memory search, string-copy/bounded-
 concatenation, search, membership-scan, counting-scan, stateful tokenization,
@@ -282,10 +303,11 @@ printable/punctuation/uppercase/whitespace classification plus ASCII case
 conversion, allocator alignment/reuse/split/coalescing behavior, `calloc`
 zeroing/overflow semantics, `realloc` in-place/move/failure semantics, fixed-seed
 allocation/resize stress, startup-backed `getenv` exact-match/empty/missing
-semantics, inherited standard-stream input/output, short-write retry, sticky
-EOF/error indicators, direction errors, owned-file create/truncate/append/reopen/
-read/close behavior, mode translation, pathname errno mapping, block-transfer
-short progress and partial-element semantics, `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
+semantics, inherited input, buffered stdout, unbuffered stderr, partial-flush
+retry/recovery, `fflush(NULL)` registry behavior, update-stream direction
+barriers, owned-file create/truncate/append/reopen/read/close behavior, close
+error precedence, block-transfer partial-element semantics, buffer-full
+auto-flush, append-aware logical positions, `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
 positioning, EOF reset, and ownership/error cleanup. The `strtok` probe covers
 leading delimiter runs, delimiter changes between continuation calls, empty
 input and delimiter sets, end-of-stream, high-byte delimiters, sequence reset,
@@ -305,10 +327,8 @@ state-isolated `strtok` differential and 10,000 fixed-seed sorted-array `bsearch
 cases. The same hosted search test also runs 10,000 fixed-seed `qsort`
 ordering/multiset property cases against the production sorter. Test-only fake
 syscall/allocator harnesses deterministically verify allocator heap-growth
-refusal, inherited stdio EOF/error/short-write state, `fopen` mode flags,
-allocation/open/close failures, block short transfers, partial-element counts,
-size-product rejection, and seek/rewind state transitions. Hosted oracles are
-test-only; all library probes remain freestanding mini-libc executables.
+refusal and the buffered stream state machine described above. Hosted oracles
+are test-only; all library probes remain freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -316,9 +336,11 @@ probes. CI additionally executes a pinned `tiny-c-compiler -> mini-libc`
 bootstrap and a pinned `tiny-c-compiler -> mini-libc -> mini-elf-toolchain`
 compile/link/runtime path, so cross-repository integration is an executable gate
 rather than a future roadmap claim. The integration program creates `0123456789`
-with `fwrite`, seeks from the end, overwrites bytes with `XY`, rewinds and reads
-back `012345XY89` with `fread`, then seeks again after EOF. The harness
-independently verifies the final file contents in both linker paths.
+with buffered `fwrite`, seeks from the end, overwrites bytes with `XY`, rewinds
+and reads back `012345XY89` with `fread`, then seeks again after EOF. Its final
+status text is written through buffered `stdout`, so successful shell capture
+also proves normal-exit flushing in both linker paths. The harness independently
+verifies the final file contents.
 
 ## Layout
 
@@ -330,7 +352,7 @@ src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
 src/stdlib/          conversion, search, sorting, arithmetic, allocation, and environment utilities
-src/stdio/           inherited/owned unbuffered byte, block, and positioning streams
+src/stdio/           inherited/owned streams, buffered output, block I/O, positioning
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -347,25 +369,28 @@ declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
 `abs`, `labs`, `llabs`, `div`, `ldiv`, `lldiv`, `atexit`, `exit`, `_Exit`,
 `malloc`, `calloc`, `realloc`, and `free`, plus the `div_t`, `ldiv_t`, and
 `lldiv_t` result types; `stdio.h` provides opaque `FILE`, `stdin`, `stdout`,
-`stderr`, `fopen`, `fclose`, `fread`, `fwrite`, `fseek`, `ftell`, `rewind`,
-`fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`, `puts`, `feof`,
-`ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`, `SEEK_END`, and `EOF`; and
-`errno.h` currently provides the errno lvalue contract plus `ENOENT`, `EIO`,
-`ENOMEM`, `EINVAL`, and `ERANGE`.
+`stderr`, `fopen`, `fclose`, `fflush`, `fread`, `fwrite`, `fseek`, `ftell`,
+`rewind`, `fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`,
+`puts`, `feof`, `ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`, `SEEK_END`, and
+`EOF`; and `errno.h` currently provides the errno lvalue contract plus `ENOENT`,
+`EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
-contract, normal-termination ordering, inherited/owned stream state, block I/O
-and positioning model, allocator ownership rules, cross-toolchain bootstrap
+contract, normal-termination ordering, buffered stream state/lifecycle, block
+I/O and positioning model, allocator ownership rules, cross-toolchain bootstrap
 boundary, and current errno storage limitation.
 
 ## Next
 
-The unbuffered block-transfer and positioning phase is now the executable
-baseline rather than the roadmap target. The next architectural frontier should
-add **buffered stream state and flush lifecycle**: per-stream buffer ownership,
-`fflush`, deterministic partial-flush/error behavior, read/write transition
-rules, and integration of pending output with `fclose` and normal `exit`.
-That phase will require an explicit live-stream lifecycle instead of relying on
-the kernel to reclaim descriptors. Formatted I/O, `tmpfile`, C11 exclusive-create
-modes, threading/TLS, locale expansion, `strtoull`, and allocator tuning remain
-separate follow-on slices rather than being mixed into the buffering milestone.
+The buffered-output lifecycle is now the executable baseline rather than the
+roadmap target. The next architectural frontier should add a **formatted output
+engine** on top of the same FILE/output-buffer core: a shared `vfprintf`-style
+format parser and variadic argument path, then `fprintf`/`printf` wrappers,
+starting with deterministic character/string and integer formatting before
+floating-point formatting. The pinned `tiny-c-compiler` already has executable
+SysV AMD64 variadic caller/callee coverage, so this frontier can remain part of
+the same cross-toolchain gate rather than becoming a host-compiler-only feature.
+Input buffering/pushback, `setvbuf`, `tmpfile`, C11 exclusive-create modes,
+threading/TLS, locale expansion, `strtoull`, floating-point formatting, and
+allocator tuning remain separate follow-on slices rather than being mixed into
+the first formatting milestone.
