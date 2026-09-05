@@ -15,7 +15,8 @@ void setbuf(FILE *restrict stream, char *restrict buf);
 
 The default inherited streams retain the established behavior: `stdin` and
 `stdout` use the built-in 256-byte storage lazily, while `stderr` is unbuffered.
-Owned streams created by `fopen` begin with the same default lazy inline storage.
+Owned streams created by `fopen` or `tmpfile` begin with the same default lazy
+inline storage.
 
 ## Storage and ownership model
 
@@ -135,18 +136,17 @@ host-libc-independence inspection.
 ## Phase boundary and next frontier
 
 Configurable buffering and buffer ownership are now part of the executable FILE
-baseline. This phase does not add an alternate stream implementation: it extends
-the existing live-stream registry, read/write barriers, positioning layer,
-flush/close lifecycle, and normal-exit sweep.
+baseline. Anonymous `tmpfile()` streams now consume those same policies and the
+same live-stream/termination lifecycle; see [`temporary-streams.md`](temporary-streams.md)
+for their descriptor and ownership contract.
 
-The next higher architectural frontier is **anonymous temporary stream lifecycle**.
-A coherent next slice should add a real `tmpfile`-style owned stream backed by an
-anonymous Linux descriptor, integrate it with the same FILE registry and buffering
-policies, prove automatic descriptor/storage reclamation on `fclose` and normal
-process exit, and keep temporary-stream creation independent from host libc. That
-crosses the raw-syscall, descriptor, FILE-ownership, buffering, and termination
-layers in one executable capability.
+With anonymous temporary streams integrated, the next higher architectural
+frontier is **stream rebinding lifecycle (`freopen`)**. That phase should preserve
+FILE identity while replacing the underlying pathname descriptor, synchronize
+pending output/unread input correctly, reset logical stream state, handle
+configured buffer ownership without leaks, and work for inherited standard
+streams as well as owned streams.
 
-`%p`/`%n`, C11 exclusive-create modes, wide-character I/O, locale-sensitive
-behavior, threading/TLS, long-double I/O, and allocator tuning remain separate
-later phases.
+`tmpnam`, filesystem namespace helpers, C11 exclusive-create modes,
+wide-character I/O, locale-sensitive behavior, threading/TLS, long-double I/O,
+and allocator tuning remain separate later phases.
