@@ -36,7 +36,7 @@ int at_quick_exit(void (*func)(void))
 
 _Noreturn void _Exit(int status)
 {
-    mini_sys_exit(status);
+    mini_sys_exit_group(status);
 }
 
 _Noreturn void exit(int status)
