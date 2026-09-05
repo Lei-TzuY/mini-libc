@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <threads.h>
 
+#define CAPACITY_THREADS 24
+#define DETACHED_THREADS 24
+#define MINI_FUTEX_WAIT 0
+#define MINI_FUTEX_WAKE 1
+
 struct worker_arg {
     int loops;
     int errno_value;
@@ -14,8 +19,23 @@ struct allocator_worker_arg {
     int errno_value;
 };
 
+struct simple_worker_arg {
+    int result;
+};
+
+struct race_join_arg {
+    thrd_t target;
+    int target_result;
+};
+
 static mtx_t counter_mutex;
+static mtx_t capacity_gate;
+static mtx_t detach_gate;
+static mtx_t race_gate;
 static int shared_counter;
+static int detached_done;
+static int self_detach_done;
+static int self_detach_status;
 static thrd_t main_thread;
 
 static int counter_worker(void *opaque)
@@ -150,6 +170,100 @@ static int exit_worker(void *opaque)
     return 0;
 }
 
+static int gated_worker(void *opaque)
+{
+    struct simple_worker_arg *arg = (struct simple_worker_arg *)opaque;
+
+    if (mtx_lock(&capacity_gate) != thrd_success ||
+        mtx_unlock(&capacity_gate) != thrd_success) {
+        return -20;
+    }
+    return arg->result;
+}
+
+static int detached_worker(void *opaque)
+{
+    (void)opaque;
+
+    if (mtx_lock(&detach_gate) != thrd_success ||
+        mtx_unlock(&detach_gate) != thrd_success ||
+        mtx_lock(&counter_mutex) != thrd_success) {
+        return -30;
+    }
+    ++detached_done;
+    if (mtx_unlock(&counter_mutex) != thrd_success) {
+        return -31;
+    }
+    (void)mini_sys_futex((volatile int *)&detached_done, MINI_FUTEX_WAKE, 1,
+                         (const void *)0, (volatile int *)0, 0);
+    return 0;
+}
+
+static int race_target_worker(void *opaque)
+{
+    (void)opaque;
+
+    if (mtx_lock(&race_gate) != thrd_success ||
+        mtx_unlock(&race_gate) != thrd_success) {
+        return -40;
+    }
+    return 77;
+}
+
+static int race_join_worker(void *opaque)
+{
+    struct race_join_arg *arg = (struct race_join_arg *)opaque;
+
+    arg->target_result = -1;
+    return thrd_join(arg->target, &arg->target_result);
+}
+
+static int race_detach_worker(void *opaque)
+{
+    thrd_t target = *(thrd_t *)opaque;
+
+    return thrd_detach(target);
+}
+
+static int self_detach_worker(void *opaque)
+{
+    int status;
+
+    (void)opaque;
+    status = thrd_detach(thrd_current());
+    if (mtx_lock(&counter_mutex) != thrd_success) {
+        return -50;
+    }
+    self_detach_status = status;
+    self_detach_done = 1;
+    if (mtx_unlock(&counter_mutex) != thrd_success) {
+        return -51;
+    }
+    (void)mini_sys_futex((volatile int *)&self_detach_done, MINI_FUTEX_WAKE, 1,
+                         (const void *)0, (volatile int *)0, 0);
+    return status == thrd_success ? 88 : -52;
+}
+
+static int wait_for_count(int *value, int expected)
+{
+    for (;;) {
+        int observed;
+
+        if (mtx_lock(&counter_mutex) != thrd_success) {
+            return 0;
+        }
+        observed = *value;
+        if (mtx_unlock(&counter_mutex) != thrd_success) {
+            return 0;
+        }
+        if (observed == expected) {
+            return 1;
+        }
+        (void)mini_sys_futex((volatile int *)value, MINI_FUTEX_WAIT, observed,
+                             (const void *)0, (volatile int *)0, 0);
+    }
+}
+
 int main(void)
 {
     static struct worker_arg first = {4000, 41};
@@ -159,6 +273,9 @@ int main(void)
     static struct allocator_worker_arg alloc_third = {600, 3, 63};
     static struct allocator_worker_arg alloc_fourth = {600, 4, 64};
     static const char marker[] = "threads-ok";
+    struct simple_worker_arg capacity_args[CAPACITY_THREADS];
+    thrd_t capacity_threads[CAPACITY_THREADS];
+    thrd_t detached_threads[DETACHED_THREADS];
     thrd_t first_thread;
     thrd_t second_thread;
     thrd_t exit_thread;
@@ -166,6 +283,11 @@ int main(void)
     thrd_t alloc_thread_two;
     thrd_t alloc_thread_three;
     thrd_t alloc_thread_four;
+    thrd_t race_target;
+    thrd_t race_joiner;
+    thrd_t race_detacher;
+    thrd_t self_detached;
+    struct race_join_arg race_join_arg;
     int first_result;
     int second_result;
     int exit_result;
@@ -173,7 +295,10 @@ int main(void)
     int alloc_result_two;
     int alloc_result_three;
     int alloc_result_four;
+    int race_join_status;
+    int race_detach_status;
     unsigned char *heap_check;
+    int i;
 
     main_thread = thrd_current();
     if (main_thread == (thrd_t)0 || !thrd_equal(main_thread, thrd_current())) {
@@ -228,33 +353,114 @@ int main(void)
         return 7;
     }
 
+    if (mtx_init(&capacity_gate, mtx_plain) != thrd_success ||
+        mtx_lock(&capacity_gate) != thrd_success) {
+        return 8;
+    }
+    for (i = 0; i < CAPACITY_THREADS; ++i) {
+        capacity_args[i].result = 100 + i;
+        if (thrd_create(&capacity_threads[i], gated_worker, &capacity_args[i]) !=
+                thrd_success ||
+            errno != EIO) {
+            return 9;
+        }
+    }
+    if (mtx_unlock(&capacity_gate) != thrd_success) {
+        return 10;
+    }
+    for (i = 0; i < CAPACITY_THREADS; ++i) {
+        int result;
+
+        if (thrd_join(capacity_threads[i], &result) != thrd_success ||
+            result != capacity_args[i].result || errno != EIO) {
+            return 11;
+        }
+    }
+    mtx_destroy(&capacity_gate);
+
+    if (mtx_init(&detach_gate, mtx_plain) != thrd_success ||
+        mtx_lock(&detach_gate) != thrd_success) {
+        return 12;
+    }
+    detached_done = 0;
+    for (i = 0; i < DETACHED_THREADS; ++i) {
+        if (thrd_create(&detached_threads[i], detached_worker, (void *)0) !=
+                thrd_success ||
+            thrd_detach(detached_threads[i]) != thrd_success || errno != EIO) {
+            return 13;
+        }
+    }
+    if (thrd_join(detached_threads[0], (int *)0) != thrd_error ||
+        thrd_detach(detached_threads[0]) != thrd_error || errno != EIO) {
+        return 14;
+    }
+    if (mtx_unlock(&detach_gate) != thrd_success ||
+        !wait_for_count(&detached_done, DETACHED_THREADS)) {
+        return 15;
+    }
+    mtx_destroy(&detach_gate);
+
+    if (mtx_init(&race_gate, mtx_plain) != thrd_success ||
+        mtx_lock(&race_gate) != thrd_success ||
+        thrd_create(&race_target, race_target_worker, (void *)0) != thrd_success) {
+        return 16;
+    }
+    race_join_arg.target = race_target;
+    race_join_arg.target_result = -1;
+    if (thrd_create(&race_joiner, race_join_worker, &race_join_arg) != thrd_success ||
+        thrd_create(&race_detacher, race_detach_worker, &race_target) !=
+            thrd_success ||
+        mtx_unlock(&race_gate) != thrd_success) {
+        return 17;
+    }
+    if (thrd_join(race_joiner, &race_join_status) != thrd_success ||
+        thrd_join(race_detacher, &race_detach_status) != thrd_success ||
+        ((race_join_status == thrd_success) ==
+         (race_detach_status == thrd_success)) ||
+        (race_join_status == thrd_success && race_join_arg.target_result != 77) ||
+        (race_join_status != thrd_success && race_join_status != thrd_error) ||
+        (race_detach_status != thrd_success && race_detach_status != thrd_error) ||
+        errno != EIO) {
+        return 18;
+    }
+    mtx_destroy(&race_gate);
+
+    self_detach_done = 0;
+    self_detach_status = thrd_error;
+    if (thrd_create(&self_detached, self_detach_worker, (void *)0) != thrd_success ||
+        !wait_for_count(&self_detach_done, 1) ||
+        self_detach_status != thrd_success ||
+        thrd_join(self_detached, (int *)0) != thrd_error || errno != EIO) {
+        return 19;
+    }
+
     heap_check = (unsigned char *)malloc(4096U);
     if (heap_check == (unsigned char *)0 || errno != EIO) {
         free(heap_check);
-        return 8;
+        return 20;
     }
     fill_pattern(heap_check, 4096U, 0xa5U);
     if (!check_pattern(heap_check, 4096U, 0xa5U)) {
         free(heap_check);
-        return 9;
+        return 21;
     }
     free(heap_check);
 
     if (thrd_create(&exit_thread, exit_worker, (void *)0) != thrd_success ||
         thrd_join(exit_thread, &exit_result) != thrd_success ||
         exit_result != 73 || errno != EIO) {
-        return 10;
+        return 22;
     }
 
     if (thrd_join(first_thread, (int *)0) != thrd_error ||
         mtx_unlock(&counter_mutex) != thrd_error || errno != EIO) {
-        return 11;
+        return 23;
     }
 
     mtx_destroy(&counter_mutex);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
-        return 12;
+        return 24;
     }
     return 0;
 }
