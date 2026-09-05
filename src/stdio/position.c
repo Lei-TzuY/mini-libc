@@ -45,6 +45,11 @@ long ftell(FILE *stream)
         return -1L;
     }
 
+    if ((stream->mode & MINI_FILE_APPEND) != 0U && stream->write_length != 0U &&
+        __mini_stdio_flush_buffer(stream) == EOF) {
+        return -1L;
+    }
+
     result = mini_sys_lseek(stream->fd, 0L, SEEK_CUR);
     if (result < 0) {
         errno = (int)-result;
