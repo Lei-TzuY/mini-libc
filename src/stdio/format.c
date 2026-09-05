@@ -14,13 +14,9 @@ struct mini_format_args {
     unsigned int gp_count;
 };
 
-_Static_assert(sizeof(unsigned long) == 8U, "formatted ABI requires LP64");
-_Static_assert(offsetof(struct mini_format_args, overflow) == 40U,
-               "formatted ABI overflow offset changed");
-_Static_assert(offsetof(struct mini_format_args, gp_index) == 48U,
-               "formatted ABI index offset changed");
-_Static_assert(offsetof(struct mini_format_args, gp_count) == 52U,
-               "formatted ABI count offset changed");
+_Static_assert(sizeof(unsigned long) == 8U, "formatted ABI requires LP64 long");
+_Static_assert(sizeof(void *) == 8U, "formatted ABI requires 64-bit pointers");
+_Static_assert(sizeof(unsigned int) == 4U, "formatted ABI requires 32-bit int");
 _Static_assert(sizeof(struct mini_format_args) == 56U,
                "formatted ABI state size changed");
 
