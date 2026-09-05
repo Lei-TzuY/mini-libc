@@ -94,7 +94,8 @@ int main(int argc, char **argv, char **envp)
     static const char expected_output[] =
         "tiny-c-integration-ok:+00007:0x2a:-5000000000:11:22:33:1.5\n";
     static const char expected_memory_output[] = "mem:1:2:3:4:5";
-    static const char expected_float_output[] = "fp:1:2:3:4:5:6:7:8:9";
+    static const char expected_float_output[] =
+        "fp:1.000000e+00:2.000000E+00:3:4:0x1.8p+0:0X1.8P+0:7.0e+00:8:0x1p+0";
     char *end;
     char *value;
     char *io_path;
@@ -103,7 +104,7 @@ int main(int argc, char **argv, char **envp)
     char scan_digit[2];
     char scan_letters[3];
     char memory_letters[3];
-    char format_buffer[64];
+    char format_buffer[128];
     char trunc_buffer[6];
     FILE *stream;
     int scan_auto;
@@ -287,8 +288,8 @@ int main(int argc, char **argv, char **envp)
     }
 
     formatted = snprintf(format_buffer, sizeof(format_buffer),
-                         "fp:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f",
-                         1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+                         "fp:%e:%E:%g:%G:%a:%A:%.1e:%.2g:%a",
+                         1.0, 2.0, 3.0, 4.0, 1.5, 1.5, 7.0, 8.0, 1.0);
     if (formatted != (int)(sizeof(expected_float_output) - 1U) ||
         strcmp(format_buffer, expected_float_output) != 0 || errno != EIO) {
         free(buffer);
@@ -296,8 +297,8 @@ int main(int argc, char **argv, char **envp)
     }
 
     formatted = tiny_vsnprintf(format_buffer, sizeof(format_buffer),
-                               "fp:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f",
-                               1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+                               "fp:%e:%E:%g:%G:%a:%A:%.1e:%.2g:%a",
+                               1.0, 2.0, 3.0, 4.0, 1.5, 1.5, 7.0, 8.0, 1.0);
     if (formatted != (int)(sizeof(expected_float_output) - 1U) ||
         strcmp(format_buffer, expected_float_output) != 0 || errno != EIO) {
         free(buffer);
@@ -329,8 +330,9 @@ int main(int argc, char **argv, char **envp)
         free(buffer);
         return 19;
     }
-    formatted = tiny_vfprintf(stream, "%c%c%c%c%c%c%c%c%x",
-                              '0', '1', '2', '3', '4', '5', 'X', 'Y', 0x89U);
+    formatted = tiny_vfprintf(stream, "%g%g%g%g%g%g%c%c%x",
+                              0.0, 1.0, 2.0, 3.0, 4.0, 5.0,
+                              'X', 'Y', 0x89U);
     if (formatted != 10 || errno != EIO || ferror(stream)) {
         fclose(stream);
         free(buffer);
@@ -357,7 +359,7 @@ int main(int argc, char **argv, char **envp)
         return 36;
     }
 
-    formatted = tiny_vprintf("%s:%+06d:%#x:%lld:%u:%u:%u:%.1f\n",
+    formatted = tiny_vprintf("%s:%+06d:%#x:%lld:%u:%u:%u:%g\n",
                              buffer, 7, 0x2aU, -5000000000LL,
                              11U, 22U, 33U, 1.5);
     if (stdout == (FILE *)0 ||
