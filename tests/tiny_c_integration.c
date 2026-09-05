@@ -216,10 +216,12 @@ int main(int argc, char **argv, char **envp)
     }
     formatted = tiny_vfprintf(stream, "%c%c%c%c%c%c%c%c%x",
                               '0', '1', '2', '3', '4', '5', 'X', 'Y', 0x89U);
-    if (formatted != 10 || errno != EIO || ferror(stream) || fclose(stream) != 0) {
-        if (stream != (FILE *)0 && ferror(stream)) {
-            clearerr(stream);
-        }
+    if (formatted != 10 || errno != EIO || ferror(stream)) {
+        fclose(stream);
+        free(buffer);
+        return 20;
+    }
+    if (fclose(stream) != 0) {
         free(buffer);
         return 20;
     }
