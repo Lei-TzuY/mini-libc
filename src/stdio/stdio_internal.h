@@ -35,6 +35,8 @@ struct __mini_FILE {
     unsigned char inline_read_buffer[MINI_FILE_BUFFER_SIZE];
 };
 
+void __mini_stdio_lock(void);
+void __mini_stdio_unlock(void);
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length);
 size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
                           size_t length);
