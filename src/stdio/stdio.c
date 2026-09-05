@@ -6,13 +6,16 @@
 #include "stdio_internal.h"
 
 static FILE mini_stderr = {
-    2, MINI_FILE_WRITABLE | MINI_FILE_UNBUFFERED, 0, (FILE *)0, 0, {0}
+    2, MINI_FILE_WRITABLE | MINI_FILE_UNBUFFERED, 0, (FILE *)0, 0, {0},
+    0, 0, 0U, 0U, {0}
 };
 static FILE mini_stdout = {
-    1, MINI_FILE_WRITABLE, 0, &mini_stderr, 0, {0}
+    1, MINI_FILE_WRITABLE, 0, &mini_stderr, 0, {0},
+    0, 0, 0U, 0U, {0}
 };
 static FILE mini_stdin = {
-    0, MINI_FILE_READABLE, 0, &mini_stdout, 0, {0}
+    0, MINI_FILE_READABLE, 0, &mini_stdout, 0, {0},
+    0, 0, 0U, 0U, {0}
 };
 
 FILE *__mini_stdin = &mini_stdin;
