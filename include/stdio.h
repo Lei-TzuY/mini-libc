@@ -25,6 +25,7 @@ extern FILE *__mini_stderr;
 #define stderr (__mini_stderr)
 
 FILE *fopen(const char *restrict filename, const char *restrict mode);
+FILE *tmpfile(void);
 int fclose(FILE *stream);
 int fflush(FILE *stream);
 int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size);
