@@ -69,7 +69,7 @@ if [ "$buffering_output" != "tiny-buffering-ok" ]; then
     rm -f "$buffering_path"
     exit 1
 fi
-expected_buffering=$(printf 'abcdE\nFGH')
+expected_buffering=$(printf 'abcdeF\nGHI')
 if [ "$(cat "$buffering_path")" != "$expected_buffering" ]; then
     echo "unexpected tiny-c buffering file contents" >&2
     rm -f "$buffering_path"
