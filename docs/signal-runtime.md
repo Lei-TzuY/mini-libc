@@ -113,7 +113,10 @@ restorer pointer, empty mask, signal-set size, previous-disposition return value
 negative-error mapping, calling-thread IDs, and success-path `errno`
 preservation. The same harness now intercepts the emergency `_Exit` path and
 locks `abort()` sequencing as `raise(SIGABRT) -> signal(SIGABRT, SIG_DFL) ->
-raise(SIGABRT) -> emergency _Exit`, including the fallback status 134.
+raise(SIGABRT) -> emergency _Exit`, including the fallback status 134. Its
+non-returning escape now uses mini-libc's own `setjmp`/`longjmp` object, which
+also verifies that the signal harness and public non-local-control ABI compose
+without a host `jmp_buf` dependency.
 
 The real runtime termination probe installs a `SIGABRT` handler that emits one
 raw marker and returns. `abort()` must then terminate the process with signal
@@ -130,18 +133,16 @@ through both static linkers.
 
 ## Phase boundary and next frontier
 
-The C signal/abnormal-termination baseline is now executable, but it is not a
-POSIX signal subsystem. Public `sigaction`, signal sets, `sigprocmask`,
-pending/wait APIs, alternate signal stacks, realtime signals, timers, and
-async-signal-safe library claims remain outside the contract. No TLS-backed or
-thread-safe libc state is claimed.
+The C signal/abnormal-termination baseline is executable, and ordinary C
+non-local control flow is now a separate baseline in `docs/setjmp-runtime.md`.
+The signal layer is still deliberately not a POSIX signal subsystem. Public
+`sigaction`, signal sets, `sigprocmask`, pending/wait APIs, alternate signal
+stacks, realtime signals, timers, and async-signal-safe library claims remain
+outside the contract.
 
-With ordinary termination, quick termination, and signal-backed abnormal
-termination now separated, the next higher-value C runtime-control gap is
-non-local control flow. A coherent next frontier is `<setjmp.h>` with an
-x86-64 SysV `jmp_buf`, `setjmp`, and `longjmp`: preserve the required callee-saved
-registers, stack pointer, and resume program counter; normalize `longjmp(..., 0)`
-to a `setjmp` return value of 1; prove nested and cross-function recovery; and
-run the same executable through GCC, Clang, pinned tiny-c, and mini-elf. Signal
-mask preservation (`sigsetjmp`/`siglongjmp`) remains a later POSIX extension and
-must not be implied by that C baseline.
+Signal-mask preservation through `sigsetjmp`/`siglongjmp` remains a coherent
+future POSIX extension, but it is not the next general C-runtime promotion by
+itself. The broader architectural constraint is still the lack of thread-aware
+TLS and synchronization for process-global libc state. A later signal-mask
+phase should be built only after the runtime has an explicit model for
+per-thread state, rather than hiding that dependency behind signal API names.
