@@ -41,7 +41,7 @@ fi
 
 io_path="$OUT/owned-file.tmp"
 rm -f "$io_path"
-output=$(printf '1 2 3 4 5 6' | \
+output=$(printf '1 2 3 4 5 6 1.5 -2.5e2' | \
     MINI_TINY_C=yes MINI_IO_PATH="$io_path" "$OUT/integration" arg)
 if [ "$output" != "tiny-c-integration-ok:+00007:0x2a:-5000000000:11:22:33:1.5" ]; then
     echo "unexpected tiny-c-compiler integration output: $output" >&2
