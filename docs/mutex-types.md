@@ -154,10 +154,16 @@ pinned mini-elf-toolchain.
 
 Typed ownership, recursive depth, absolute timed acquisition, wrong-owner
 unlock detection, and their cross-toolchain evidence close the mutex-type phase.
-Additional mutex-result variants are not the next priority.
+Additional mutex-result variants remain out of scope.
 
-The next larger C11 thread-lifecycle frontier is `once_flag` / `call_once` plus
-thread-specific storage (`tss_t`, `tss_create`, `tss_get`, `tss_set`,
-`tss_delete`) and destructor execution at thread exit. Those features require an
-exactly-once process-wide state machine and per-thread destructor lifecycle rather
-than more mutex API surface.
+The next thread-lifecycle phase named here has now shipped: `once_flag` /
+`call_once`, thread-specific storage, generation-safe key reuse, and destructor
+execution on normal and explicit thread exit are documented in
+`docs/once-tss.md`.
+
+With both synchronization and TSS lifecycle in place, the next larger thread
+architecture frontier is compiler-native C11 TLS interoperability: reconciling
+compiler-emitted `_Thread_local` objects with mini-libc's `%fs`-based TCB on main
+and cloned threads, then exposing the standard `thread_local` surface. The small
+remaining `thrd_yield` scheduler primitive belongs in that conformance closure
+rather than as another mutex-focused phase.
