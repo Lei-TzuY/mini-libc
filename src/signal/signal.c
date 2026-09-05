@@ -12,7 +12,7 @@ struct mini_kernel_sigaction {
     unsigned long mask;
 };
 
-extern void __mini_rt_sigreturn_restorer(void);
+extern void (*__mini_signal_restorer(void))(void);
 
 _Static_assert(sizeof(struct mini_kernel_sigaction) == 32U,
                "x86-64 kernel sigaction layout must remain 32 bytes");
@@ -26,7 +26,7 @@ void (*signal(int sig, void (*func)(int)))(int)
 
     action.handler = func;
     action.flags = MINI_SA_RESTORER;
-    action.restorer = __mini_rt_sigreturn_restorer;
+    action.restorer = __mini_signal_restorer();
     action.mask = 0UL;
 
     result = mini_sys_rt_sigaction(sig, &action, &previous,
