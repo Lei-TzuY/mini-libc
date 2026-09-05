@@ -21,19 +21,51 @@ static void jump_inner(void)
     longjmp(inner_env, 7);
 }
 
+static int test_zero_normalization(void)
+{
+    switch (setjmp(zero_env)) {
+    case 0:
+        longjmp(zero_env, 0);
+        return -1;
+    case 1:
+        return 0;
+    default:
+        return -1;
+    }
+}
+
+static int test_explicit_value(void)
+{
+    switch (setjmp(value_env)) {
+    case 0:
+        jump_value();
+        return -1;
+    case 37:
+        return 0;
+    default:
+        return -1;
+    }
+}
+
 static void nested_middle(void)
 {
-    int value = setjmp(inner_env);
-
-    if (value == 0) {
+    switch (setjmp(inner_env)) {
+    case 0:
         trace_state = 1;
         jump_inner();
+        return;
+    case 7:
+        if (trace_state != 2) {
+            longjmp(outer_env, 91);
+            return;
+        }
+        trace_state = 3;
+        longjmp(outer_env, 11);
+        return;
+    default:
+        longjmp(outer_env, 92);
+        return;
     }
-    if (value != 7 || trace_state != 2) {
-        longjmp(outer_env, 91);
-    }
-    trace_state = 3;
-    longjmp(outer_env, 11);
 }
 
 static int write_all(const char *text, unsigned long length)
@@ -53,29 +85,24 @@ static int write_all(const char *text, unsigned long length)
 
 int main(void)
 {
-    int value = setjmp(zero_env);
-
-    if (value == 0) {
-        longjmp(zero_env, 0);
-    }
-    if (value != 1) {
+    if (test_zero_normalization() != 0) {
         return 1;
     }
-
-    value = setjmp(value_env);
-    if (value == 0) {
-        jump_value();
-    }
-    if (value != 37) {
+    if (test_explicit_value() != 0) {
         return 2;
     }
 
     trace_state = 0;
-    value = setjmp(outer_env);
-    if (value == 0) {
+    switch (setjmp(outer_env)) {
+    case 0:
         nested_middle();
-    }
-    if (value != 11 || trace_state != 3) {
+        return 3;
+    case 11:
+        if (trace_state != 3) {
+            return 3;
+        }
+        break;
+    default:
         return 3;
     }
 
