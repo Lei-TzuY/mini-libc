@@ -25,6 +25,7 @@ int main(void)
     char literal_set[3];
     char mismatch[2] = {'?', '\0'};
     char input_word[6];
+    char memory_letters[3];
     char character = '\0';
     char input_character = '\0';
     FILE *stream;
@@ -34,9 +35,14 @@ int main(void)
     int auto_oct = 0;
     int auto_dec = 0;
     int stdin_value = 0;
+    int memory_auto = 0;
+    int memory_oct = 0;
+    int memory_last = 0;
+    int memory_fail = 91;
     unsigned int octal = 0;
     unsigned int hex = 0;
     unsigned int hex_upper = 0;
+    unsigned int memory_hex = 0;
 
     stream = fopen(path, "w+");
     if (stream == (FILE *)0 ||
@@ -122,18 +128,36 @@ int main(void)
         return 11;
     }
 
+    errno = EIO;
+    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+               &memory_auto, &memory_oct, memory_letters, &memory_hex,
+               &memory_last) != 5 ||
+        memory_auto != 42 || memory_oct != 63 ||
+        memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
+        memory_letters[2] != '\0' || memory_hex != 0x89U ||
+        memory_last != 7 || errno != EIO) {
+        return 12;
+    }
+
+    if (sscanf("X", "%d", &memory_fail) != 0 || memory_fail != 91) {
+        return 13;
+    }
+    if (sscanf("", "%d", &memory_fail) != EOF || memory_fail != 91) {
+        return 14;
+    }
+
     errno = ERANGE;
     if (scanf("%d %5s %c", &stdin_value, input_word, &input_character) != 3 ||
         stdin_value != 41 || strcmp(input_word, "token") != 0 ||
         input_character != 'Q' || errno != ERANGE) {
-        return 12;
+        return 15;
     }
     if (scanf("%d", &stdin_value) != EOF) {
-        return 13;
+        return 16;
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
-        return 14;
+        return 17;
     }
     return 0;
 }
