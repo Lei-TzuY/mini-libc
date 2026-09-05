@@ -8,6 +8,7 @@
 #define DETACHED_THREADS 8
 #define STDIO_THREADS 4
 #define STDIO_RECORDS 24
+#define ONCE_TSS_THREADS 4
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
 #define WAIT_ATTEMPTS 1000
@@ -26,6 +27,11 @@ struct stdio_worker_arg {
     int id;
 };
 
+struct once_tss_arg {
+    int id;
+    int destructor_calls;
+};
+
 struct mini_timeout {
     long tv_sec;
     long tv_nsec;
@@ -33,8 +39,12 @@ struct mini_timeout {
 
 static mtx_t lock;
 static mtx_t gate;
+static once_flag tiny_once_flag = ONCE_FLAG_INIT;
+static tss_t tiny_tss_key;
 static int counter;
 static int detached_done;
+static int tiny_once_calls;
+static int tiny_once_value;
 static thrd_t main_thread;
 static const struct mini_timeout wait_slice = {0L, 10000000L};
 
@@ -72,6 +82,37 @@ static int same_text(const char *left, const char *right)
         ++i;
     }
     return left[i] == right[i];
+}
+
+static void tiny_once_initializer(void)
+{
+    ++tiny_once_calls;
+    tiny_once_value = 12345;
+}
+
+static void tiny_tss_destructor(void *opaque)
+{
+    struct once_tss_arg *arg = (struct once_tss_arg *)opaque;
+
+    ++arg->destructor_calls;
+    if (arg->destructor_calls < 2) {
+        (void)tss_set(tiny_tss_key, arg);
+    }
+}
+
+static int once_tss_worker(void *opaque)
+{
+    struct once_tss_arg *arg = (struct once_tss_arg *)opaque;
+
+    call_once(&tiny_once_flag, tiny_once_initializer);
+    if (tiny_once_value != 12345 || tss_get(tiny_tss_key) != (void *)0) {
+        return -50;
+    }
+    if (tss_set(tiny_tss_key, arg) != thrd_success ||
+        tss_get(tiny_tss_key) != arg) {
+        return -51;
+    }
+    return 0;
 }
 
 static int worker(void *opaque)
@@ -144,7 +185,10 @@ static int worker(void *opaque)
 
 static int explicit_exit(void *opaque)
 {
-    (void)opaque;
+    if (opaque != (void *)0 &&
+        tss_set(tiny_tss_key, opaque) != thrd_success) {
+        return -90;
+    }
     thrd_exit(91);
     return 0;
 }
@@ -298,8 +342,11 @@ int main(void)
     static struct worker_arg second = {1500, 52};
     static const char marker[] = "tiny-threads-ok";
     struct simple_worker_arg capacity_args[CAPACITY_THREADS];
+    struct once_tss_arg once_tss_args[ONCE_TSS_THREADS];
+    struct once_tss_arg exit_tss_arg = {99, 0};
     thrd_t capacity_threads[CAPACITY_THREADS];
     thrd_t detached_threads[DETACHED_THREADS];
+    thrd_t once_tss_threads[ONCE_TSS_THREADS];
     thrd_t first_thread;
     thrd_t second_thread;
     thrd_t exit_thread;
@@ -385,17 +432,48 @@ int main(void)
         return 13;
     }
 
-    if (thrd_create(&exit_thread, explicit_exit, (void *)0) != thrd_success ||
-        thrd_join(exit_thread, &exit_result) != thrd_success ||
-        exit_result != 91 || errno != EIO) {
+    if (tss_create(&tiny_tss_key, tiny_tss_destructor) != thrd_success ||
+        errno != EIO) {
         return 14;
+    }
+    for (i = 0; i < ONCE_TSS_THREADS; ++i) {
+        once_tss_args[i].id = i;
+        once_tss_args[i].destructor_calls = 0;
+        if (thrd_create(&once_tss_threads[i], once_tss_worker,
+                        &once_tss_args[i]) != thrd_success) {
+            return 15;
+        }
+    }
+    for (i = 0; i < ONCE_TSS_THREADS; ++i) {
+        int result;
+
+        if (thrd_join(once_tss_threads[i], &result) != thrd_success ||
+            result != 0 || once_tss_args[i].destructor_calls != 2) {
+            return 16;
+        }
+    }
+    if (tiny_once_calls != 1 || tiny_once_value != 12345 ||
+        tss_get(tiny_tss_key) != (void *)0) {
+        return 17;
+    }
+
+    if (thrd_create(&exit_thread, explicit_exit, &exit_tss_arg) != thrd_success ||
+        thrd_join(exit_thread, &exit_result) != thrd_success ||
+        exit_result != 91 || exit_tss_arg.destructor_calls != 2 ||
+        errno != EIO) {
+        return 18;
+    }
+
+    tss_delete(tiny_tss_key);
+    if (errno != EIO) {
+        return 19;
     }
 
     mtx_destroy(&gate);
     mtx_destroy(&lock);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
-        return 15;
+        return 20;
     }
     return 0;
 }
