@@ -71,25 +71,25 @@ fi
 
 strtok_output="$(./build/strtok_probe)"
 if [ "$strtok_output" != "strtok-ok" ]; then
-    echo "unexpected strtok probe output: $strtok_output" >&2
+    echo "unexpected strtok output: $strtok_output" >&2
     exit 1
 fi
 
 strerror_output="$(./build/strerror_probe)"
 if [ "$strerror_output" != "strerror-ok" ]; then
-    echo "unexpected strerror probe output: $strerror_output" >&2
+    echo "unexpected strerror output: $strerror_output" >&2
     exit 1
 fi
 
 ctype_output="$(./build/ctype_probe)"
 if [ "$ctype_output" != "ctype-ok" ]; then
-    echo "unexpected ctype probe output: $ctype_output" >&2
+    echo "unexpected ctype output: $ctype_output" >&2
     exit 1
 fi
 
 bsearch_output="$(./build/bsearch_probe)"
 if [ "$bsearch_output" != "bsearch-ok" ]; then
-    echo "unexpected bsearch probe output: $bsearch_output" >&2
+    echo "unexpected bsearch output: $bsearch_output" >&2
     exit 1
 fi
 
@@ -198,8 +198,8 @@ if [ "$file_stream_output" != "file-stream-ok" ]; then
     rm -f "$file_stream_path"
     exit 1
 fi
-if [ "$(cat "$file_stream_path")" != "ABC" ]; then
-    echo "unexpected owned file contents" >&2
+if [ "$(cat "$file_stream_path")" != "OLD" ]; then
+    echo "unexpected owned file contents after stream rebinding" >&2
     rm -f "$file_stream_path"
     exit 1
 fi
@@ -249,6 +249,13 @@ rm -f "$scan_path"
 
 sh ./tests/verify-buffering.sh
 
+host_cc=${CC:-cc}
+"$host_cc" -Iinclude -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+    -fno-builtin -fno-pie -c tests/freopen_test.c -o build/freopen_test.o
+"$host_cc" -no-pie -o build/freopen_test build/freopen_test.o \
+    build/stdio_test_impl.o build/file_stream_test_impl.o build/errno.o
+./build/freopen_test
+
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
@@ -262,4 +269,4 @@ sh ./tests/verify-buffering.sh
 ./build/stdio_block_test
 ./build/stdio_scan_test
 
-echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, configurable buffering, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/rebound/block/formatted stdio, configurable buffering, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
