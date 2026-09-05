@@ -3,6 +3,18 @@
 
 #include <stdio.h>
 
+#ifndef MINI_STDIO_SYNC_PUBLIC_WRAPPER
+#define setvbuf __mini_setvbuf_unlocked
+#define setbuf __mini_setbuf_unlocked
+#define freopen __mini_freopen_unlocked
+#define fclose __mini_fclose_unlocked
+#define fseek __mini_fseek_unlocked
+#define ftell __mini_ftell_unlocked
+#define rewind __mini_rewind_unlocked
+#define __mini_format_dispatch __mini_format_dispatch_unlocked
+#define __mini_scan_dispatch __mini_scan_dispatch_unlocked
+#endif
+
 #define MINI_FILE_READABLE 1U
 #define MINI_FILE_WRITABLE 2U
 #define MINI_FILE_OWNED 4U
