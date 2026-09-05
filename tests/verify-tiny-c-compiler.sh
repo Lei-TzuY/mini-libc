@@ -28,14 +28,20 @@ done
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_buffering_integration.c \
+    -o "$OUT/buffering.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
         "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/buffering" \
+        "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
         "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/buffering" \
+        "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -55,6 +61,23 @@ if [ "$(cat "$io_path")" != "012345XY89" ]; then
 fi
 rm -f "$io_path"
 
+buffering_path="$OUT/buffering-file.tmp"
+rm -f "$buffering_path"
+buffering_output=$("$OUT/buffering" "$buffering_path")
+if [ "$buffering_output" != "tiny-buffering-ok" ]; then
+    echo "unexpected tiny-c buffering output: $buffering_output" >&2
+    rm -f "$buffering_path"
+    exit 1
+fi
+expected_buffering=$(printf 'abcdE\nFGH')
+if [ "$(cat "$buffering_path")" != "$expected_buffering" ]; then
+    echo "unexpected tiny-c buffering file contents" >&2
+    rm -f "$buffering_path"
+    exit 1
+fi
+rm -f "$buffering_path"
+
 ./tests/verify-no-host-libc.sh "$OUT/integration"
+./tests/verify-no-host-libc.sh "$OUT/buffering"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
