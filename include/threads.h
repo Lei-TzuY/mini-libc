@@ -9,7 +9,7 @@ typedef int (*thrd_start_t)(void *);
 typedef struct {
     int __state;
     int __type;
-    int __owner;
+    unsigned long __owner;
     int __depth;
 } mtx_t;
 
