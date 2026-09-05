@@ -62,11 +62,12 @@ int main(int argc, char **argv)
         return 6;
     }
     if (fputc('A', stream) != 'A' || full_buffer[0] != 'A' ||
-        !file_equals(argv[1], "", 0)) {
+        fputc('B', stream) != 'B' || !file_equals(argv[1], "", 0)) {
         fclose(stream);
         return 7;
     }
-    if (fputc('B', stream) != 'B' || !file_equals(argv[1], "AB", 2) ||
+    if (fputc('C', stream) != 'C' || !file_equals(argv[1], "AB", 2) ||
+        fflush(stream) != 0 || !file_equals(argv[1], "ABC", 3) ||
         fclose(stream) != 0) {
         return 8;
     }
@@ -76,8 +77,8 @@ int main(int argc, char **argv)
         setvbuf(stream, line_buffer, _IOLBF, sizeof(line_buffer)) != 0) {
         return 9;
     }
-    if (fputc('C', stream) != 'C' || !file_equals(argv[1], "AB", 2) ||
-        fputc('\n', stream) != '\n' || !file_equals(argv[1], "ABC\n", 4) ||
+    if (fputc('D', stream) != 'D' || !file_equals(argv[1], "ABC", 3) ||
+        fputc('\n', stream) != '\n' || !file_equals(argv[1], "ABCD\n", 5) ||
         fclose(stream) != 0) {
         return 10;
     }
