@@ -30,18 +30,24 @@ done
     -o "$OUT/integration.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_buffering_integration.c \
     -o "$OUT/buffering.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_pathname_integration.c \
+    -o "$OUT/pathname.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
         "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/buffering" \
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/pathname" \
+        "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
         "$OUT/integration.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/buffering" \
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/pathname" \
+        "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -77,7 +83,28 @@ if [ "$(cat "$buffering_path")" != "$expected_buffering" ]; then
 fi
 rm -f "$buffering_path"
 
+pathname_source="$OUT/pathname-source.tmp"
+pathname_target="$OUT/pathname-target.tmp"
+pathname_dir="$OUT/pathname-dir.tmp"
+rm -f "$pathname_source" "$pathname_target"
+rmdir "$pathname_dir" 2>/dev/null || true
+mkdir "$pathname_dir"
+pathname_output=$("$OUT/pathname" "$pathname_source" "$pathname_target" "$pathname_dir")
+if [ "$pathname_output" != "tiny-pathname-ok" ]; then
+    echo "unexpected tiny-c pathname output: $pathname_output" >&2
+    rm -f "$pathname_source" "$pathname_target"
+    rmdir "$pathname_dir" 2>/dev/null || true
+    exit 1
+fi
+if [ -e "$pathname_source" ] || [ -e "$pathname_target" ] || [ -e "$pathname_dir" ]; then
+    echo "tiny-c pathname integration left filesystem state behind" >&2
+    rm -f "$pathname_source" "$pathname_target"
+    rmdir "$pathname_dir" 2>/dev/null || true
+    exit 1
+fi
+
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
+./tests/verify-no-host-libc.sh "$OUT/pathname"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
