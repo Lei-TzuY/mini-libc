@@ -91,6 +91,14 @@ mini_sys_getpid:
     ret
     .size mini_sys_getpid, .-mini_sys_getpid
 
+    .globl mini_sys_arch_prctl
+    .type mini_sys_arch_prctl, @function
+mini_sys_arch_prctl:
+    movl $158, %eax
+    syscall
+    ret
+    .size mini_sys_arch_prctl, .-mini_sys_arch_prctl
+
     .globl mini_sys_gettid
     .type mini_sys_gettid, @function
 mini_sys_gettid:
@@ -98,6 +106,15 @@ mini_sys_gettid:
     syscall
     ret
     .size mini_sys_gettid, .-mini_sys_gettid
+
+    .globl mini_sys_futex
+    .type mini_sys_futex, @function
+mini_sys_futex:
+    movq %rcx, %r10
+    movl $202, %eax
+    syscall
+    ret
+    .size mini_sys_futex, .-mini_sys_futex
 
     .globl mini_sys_clock_gettime
     .type mini_sys_clock_gettime, @function
