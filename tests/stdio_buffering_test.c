@@ -2,10 +2,17 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define TEST_AT_FDCWD (-100)
+#define TEST_O_RDWR 2
+#define TEST_O_TMPFILE 4259840
+
+int __mini_stdio_flush_all(void);
+
 static unsigned char output[128];
 static size_t output_length;
 static size_t write_calls;
 static unsigned long last_write_count;
+static int last_write_fd;
 
 static const char *read_data;
 static long read_result;
@@ -16,16 +23,37 @@ static long expected_seek_offset;
 static long seek_result;
 static size_t seek_calls;
 
-static unsigned char allocation_storage[128];
+static unsigned char allocation_storage[1024];
 static int allocation_in_use;
+static int allocation_fail;
 static size_t allocation_calls;
 static size_t free_calls;
+
+static long temp_open_result;
+static size_t temp_open_calls;
+static int temp_fd;
+static long temp_close_result;
+static size_t temp_close_calls;
+
+static int same_string(const char *left, const char *right)
+{
+    size_t i = 0;
+
+    while (left[i] != '\0' && right[i] != '\0') {
+        if (left[i] != right[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return left[i] == right[i];
+}
 
 static void reset_io(void)
 {
     output_length = 0;
     write_calls = 0;
     last_write_count = 0;
+    last_write_fd = -1;
     read_data = (const char *)0;
     read_result = -EINVAL;
     read_calls = 0;
@@ -33,6 +61,12 @@ static void reset_io(void)
     expected_seek_offset = 0;
     seek_result = 0;
     seek_calls = 0;
+    allocation_fail = 0;
+    temp_open_result = -EINVAL;
+    temp_open_calls = 0;
+    temp_fd = -1;
+    temp_close_result = -EINVAL;
+    temp_close_calls = 0;
     clearerr(stdin);
     clearerr(stdout);
 }
@@ -42,11 +76,13 @@ long mini_test_write(int fd, const void *buf, unsigned long count)
     const unsigned char *bytes = (const unsigned char *)buf;
     size_t i;
 
-    if (fd != 1 || output_length + (size_t)count > sizeof(output)) {
+    if ((fd != 1 && fd != temp_fd) ||
+        output_length + (size_t)count > sizeof(output)) {
         return -EINVAL;
     }
     ++write_calls;
     last_write_count = count;
+    last_write_fd = fd;
     for (i = 0; i < (size_t)count; ++i) {
         output[output_length++] = bytes[i];
     }
@@ -81,23 +117,30 @@ long mini_sys_lseek(int fd, long offset, int whence)
 
 long mini_test_openat(int dirfd, const char *path, int flags, unsigned int mode)
 {
-    (void)dirfd;
-    (void)path;
-    (void)flags;
-    (void)mode;
-    return -EINVAL;
+    ++temp_open_calls;
+    if (dirfd != TEST_AT_FDCWD || !same_string(path, "/tmp") ||
+        flags != (TEST_O_RDWR | TEST_O_TMPFILE) || mode != 0600U) {
+        return -EINVAL;
+    }
+    if (temp_open_result >= 0) {
+        temp_fd = (int)temp_open_result;
+    }
+    return temp_open_result;
 }
 
 long mini_test_close(int fd)
 {
-    (void)fd;
-    return -EINVAL;
+    ++temp_close_calls;
+    if (fd != temp_fd) {
+        return -EINVAL;
+    }
+    return temp_close_result;
 }
 
 void *mini_test_malloc(size_t size)
 {
     ++allocation_calls;
-    if (allocation_in_use || size > sizeof(allocation_storage)) {
+    if (allocation_fail || allocation_in_use || size > sizeof(allocation_storage)) {
         errno = ENOMEM;
         return (void *)0;
     }
@@ -135,6 +178,7 @@ int main(void)
     char readbuf[4];
     char smallread[2];
     char setbuf_storage[BUFSIZ];
+    FILE *stream;
 
     reset_io();
     errno = ERANGE;
@@ -229,6 +273,51 @@ int main(void)
     if (setvbuf(stdout, full, 99, sizeof(full)) != EOF || errno != EINVAL ||
         setvbuf(stdout, full, _IOFBF, 0U) != EOF || errno != EINVAL) {
         return 14;
+    }
+
+    reset_io();
+    allocation_in_use = 0;
+    allocation_calls = 0;
+    free_calls = 0;
+    allocation_fail = 1;
+    errno = ERANGE;
+    if (tmpfile() != (FILE *)0 || errno != ENOMEM || allocation_calls != 1 ||
+        temp_open_calls != 0 || allocation_in_use || free_calls != 0) {
+        return 15;
+    }
+
+    reset_io();
+    allocation_in_use = 0;
+    allocation_calls = 0;
+    free_calls = 0;
+    temp_open_result = -EIO;
+    errno = ERANGE;
+    if (tmpfile() != (FILE *)0 || errno != EIO || allocation_calls != 1 ||
+        temp_open_calls != 1 || free_calls != 1 || allocation_in_use ||
+        temp_close_calls != 0) {
+        return 16;
+    }
+
+    reset_io();
+    allocation_in_use = 0;
+    allocation_calls = 0;
+    free_calls = 0;
+    temp_open_result = 40;
+    temp_close_result = 0;
+    errno = ERANGE;
+    stream = tmpfile();
+    if (stream == (FILE *)0 || errno != ERANGE || allocation_calls != 1 ||
+        temp_open_calls != 1 || !allocation_in_use ||
+        fputs("tmp", stream) == EOF || write_calls != 0) {
+        return 17;
+    }
+    if (__mini_stdio_flush_all() != 0 || errno != ERANGE || write_calls != 1 ||
+        last_write_fd != 40 || last_write_count != 3 || !output_is("tmp", 3)) {
+        return 18;
+    }
+    if (fclose(stream) != 0 || errno != ERANGE || temp_close_calls != 1 ||
+        free_calls != 1 || allocation_in_use) {
+        return 19;
     }
 
     return 0;
