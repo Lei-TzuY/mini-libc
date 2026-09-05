@@ -24,10 +24,10 @@ $(BUILD)/signal_probe: $(BUILD)/signal_probe.o $(CRT0) $(LIBC)
 $(BUILD)/signal_test_impl.o: src/signal/signal.c include/signal.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SIGNAL_RENAMES) -c $< -o $@
 
-$(BUILD)/signal_test.o: tests/signal_test.c include/signal.h include/stdlib.h include/errno.h | $(BUILD)
+$(BUILD)/signal_test.o: tests/signal_test.c include/setjmp.h include/signal.h include/stdlib.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/signal_test: $(BUILD)/signal_test.o $(BUILD)/signal_test_impl.o $(BUILD)/errno.o
+$(BUILD)/signal_test: $(BUILD)/signal_test.o $(BUILD)/signal_test_impl.o $(BUILD)/setjmp.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 signal_test_run: $(BUILD)/signal_probe $(BUILD)/signal_test $(BUILD)/runtime_probe
