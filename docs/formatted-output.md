@@ -128,21 +128,26 @@ inspection.
 
 ## Phase boundary and next frontier
 
-The formatter now has an executable **GP + floating SysV variadic baseline**:
+The formatter has an executable **GP + floating SysV variadic baseline**:
 ordinary variadic calls and public `va_list` calls share one argument cursor,
 one parser/conversion engine, and the same FILE/memory sinks. Lowercase bounded
 `%f` proves that floating transport is consumed by real formatting behavior,
 not merely captured by an unused ABI shim.
 
-The next higher-value architectural frontier is **floating formatted input**.
-A coherent slice should add decimal floating lexical/conversion support to the
-shared scanner source model, define `%f`/`%lf` destination semantics without
-forking FILE and string scanners, and evaluate whether the conversion core can
-also back a public `strtod` surface. It must preserve matching-vs-input-failure,
-one-byte rollback, errno/range behavior, GCC/Clang/tiny-c coverage, and pinned
-mini-elf execution.
+Floating input and public string conversion have now moved ahead of the output
+surface: the scanner and `strtof`/`strtod` share a dedicated decimal/hex/special
+conversion engine, while output still exposes only bounded fixed `%f`. The next
+higher-value architectural frontier is therefore **floating formatted output
+breadth**.
 
-Further output breadth (`%e`/`%g`/`%a` families), `%n`, pointer formatting,
-wide-character I/O, locale-sensitive behavior, configurable buffering,
-`tmpfile`, threading/TLS, and C11 exclusive-create modes remain separate later
-phases.
+A coherent slice should add `%e`/`%E`, `%g`/`%G`, and `%a`/`%A` through reusable
+binary64 decomposition, rounding, exponent selection, and notation-selection
+logic inside the existing formatter. It must preserve ordinary/public-`va_list`
+XMM transport, FILE/memory sinks, width/precision/flag behavior, special values,
+and pinned GCC/Clang/tiny-c/mini-elf execution. As with the input converter, the
+implementation must state its rounding bounds explicitly rather than presenting
+a partial dtoa algorithm as general correctly-rounded conversion.
+
+`%n`, pointer formatting, wide-character I/O, locale-sensitive behavior,
+configurable buffering, `tmpfile`, threading/TLS, C11 exclusive-create modes,
+long-double formatting, and allocator tuning remain separate later phases.
