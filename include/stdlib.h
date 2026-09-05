@@ -19,6 +19,8 @@ typedef struct {
 } lldiv_t;
 
 int atoi(const char *nptr);
+float strtof(const char *restrict nptr, char **restrict endptr);
+double strtod(const char *restrict nptr, char **restrict endptr);
 long strtol(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
 long long strtoll(const char *restrict nptr, char **restrict endptr, int base);
