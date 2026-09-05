@@ -16,6 +16,10 @@ int main(void)
         "sign:[+7][ 7][00000042][0X2A]\n";
     static const char expected_zero_precision[] =
         "edge:[][0][     ]\n";
+    static const char expected_minima[] =
+        "min:-2147483648:-9223372036854775808\n";
+    static const char expected_fprintf_stack[] =
+        "fprintf-stack:1:2:3:4:5\n";
     int result;
 
     if (stdin == (FILE *)0 || stdout == (FILE *)0 || stderr == (FILE *)0 ||
@@ -115,23 +119,36 @@ int main(void)
         return 16;
     }
 
-    result = fprintf(stderr, "format-err:%#08x:%-4c\n", 0x2aU, 'Q');
-    if (result != 25 || errno != ERANGE || ferror(stderr)) {
+    result = printf("min:%d:%lld\n",
+                    (-2147483647 - 1), (-9223372036854775807LL - 1LL));
+    if (result != (int)(sizeof(expected_minima) - 1U) || errno != ERANGE ||
+        ferror(stdout)) {
         return 17;
     }
 
-    errno = ERANGE;
-    if (printf("%q") != EOF || errno != EINVAL || ferror(stdout)) {
+    result = fprintf(stderr, "format-err:%#08x:%-4c\n", 0x2aU, 'Q');
+    if (result != 25 || errno != ERANGE || ferror(stderr)) {
         return 18;
     }
-    errno = ERANGE;
-    if (printf("%") != EOF || errno != EINVAL || ferror(stdout)) {
+
+    result = fprintf(stderr, "fprintf-stack:%d:%d:%d:%d:%d\n", 1, 2, 3, 4, 5);
+    if (result != (int)(sizeof(expected_fprintf_stack) - 1U) ||
+        errno != ERANGE || ferror(stderr)) {
         return 19;
     }
 
     errno = ERANGE;
-    if (fflush(stdout) == EOF || errno != ERANGE || ferror(stdout)) {
+    if (printf("%q") != EOF || errno != EINVAL || ferror(stdout)) {
         return 20;
+    }
+    errno = ERANGE;
+    if (printf("%") != EOF || errno != EINVAL || ferror(stdout)) {
+        return 21;
+    }
+
+    errno = ERANGE;
+    if (fflush(stdout) == EOF || errno != ERANGE || ferror(stdout)) {
+        return 22;
     }
 
     {
@@ -139,17 +156,17 @@ int main(void)
         long written = mini_sys_write(1, marker, sizeof(marker) - 1);
 
         if (written != (long)(sizeof(marker) - 1)) {
-            return 21;
+            return 23;
         }
     }
 
     if (mini_sys_close(1) != 0) {
-        return 22;
+        return 24;
     }
     clearerr(stdout);
     errno = ERANGE;
     if (printf("%300s", "x") != EOF || !ferror(stdout)) {
-        return 23;
+        return 25;
     }
 
     return 0;
