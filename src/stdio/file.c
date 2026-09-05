@@ -251,6 +251,13 @@ FILE *tmpfile(void)
     return stream;
 }
 
+/*
+ * The hosted FILE-object harness compiles this translation unit with
+ * mini_sys_openat macro-renamed to a deterministic fake and intentionally
+ * isolates stream ownership/buffering from pathname mutation. Real-kernel and
+ * cross-toolchain probes exercise the public pathname operations below.
+ */
+#ifndef mini_sys_openat
 int remove(const char *filename)
 {
     long result;
@@ -287,6 +294,7 @@ int rename(const char *oldname, const char *newname)
     }
     return 0;
 }
+#endif
 
 int fclose(FILE *stream)
 {
