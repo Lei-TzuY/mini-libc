@@ -113,32 +113,32 @@ fi
 
 strtoul_output="$(./build/strtoul_probe)"
 if [ "$strtoul_output" != "strtoul-ok" ]; then
-    echo "unexpected strtoul probe output: $strtoul_output" >&2
+    echo "unexpected strtoul output: $strtoul_output" >&2
     exit 1
 fi
 
 allocator_output="$(./build/allocator_probe)"
 if [ "$allocator_output" != "allocator-ok" ]; then
-    echo "unexpected allocator probe output: $allocator_output" >&2
+    echo "unexpected allocator output: $allocator_output" >&2
     exit 1
 fi
 
 calloc_output="$(./build/calloc_probe)"
 if [ "$calloc_output" != "calloc-ok" ]; then
-    echo "unexpected calloc probe output: $calloc_output" >&2
+    echo "unexpected calloc output: $calloc_output" >&2
     exit 1
 fi
 
 realloc_output="$(./build/realloc_probe)"
 if [ "$realloc_output" != "realloc-ok" ]; then
-    echo "unexpected realloc probe output: $realloc_output" >&2
+    echo "unexpected realloc output: $realloc_output" >&2
     exit 1
 fi
 
 getenv_output="$(env -i MINI_GETENV_ALPHA=value MINI_GETENV_EMPTY= \
     MINI_GETENV_ALPHA_SUFFIX=suffix ./build/getenv_probe)"
 if [ "$getenv_output" != "getenv-ok" ]; then
-    echo "unexpected getenv probe output: $getenv_output" >&2
+    echo "unexpected getenv output: $getenv_output" >&2
     exit 1
 fi
 
@@ -223,6 +223,24 @@ if [ "$(cat "$block_io_path")" != "ABCDE" ]; then
 fi
 rm -f "$block_io_path" "$input_buffer_path"
 
+scan_path=build/scan_probe.tmp
+rm -f "$scan_path"
+set +e
+scan_output="$(printf '41 token Q' | ./build/scan_probe)"
+scan_status=$?
+set -e
+if [ "$scan_status" -ne 0 ]; then
+    echo "formatted input probe returned $scan_status" >&2
+    rm -f "$scan_path"
+    exit 1
+fi
+if [ "$scan_output" != "scan-ok" ]; then
+    echo "unexpected formatted input output: $scan_output" >&2
+    rm -f "$scan_path"
+    exit 1
+fi
+rm -f "$scan_path"
+
 ./build/memory_differential
 ./build/string_differential
 ./build/strtok_differential
@@ -233,5 +251,6 @@ rm -f "$block_io_path" "$input_buffer_path"
 ./build/allocator_failure_test
 ./build/stdio_write_test
 ./build/stdio_block_test
+./build/stdio_scan_test
 
-echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, buffered input/pushback, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
