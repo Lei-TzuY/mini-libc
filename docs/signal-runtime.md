@@ -1,7 +1,7 @@
 # Signal runtime ABI and phase status
 
-mini-libc now exposes a first executable C signal/runtime-control baseline on
-Linux x86-64. The public surface is intentionally small:
+mini-libc exposes an executable C signal/runtime-control baseline on Linux
+x86-64. The public signal surface remains intentionally small:
 
 ```c
 typedef int sig_atomic_t;
@@ -21,6 +21,10 @@ void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
 ```
 
+`abort()` is declared by `<stdlib.h>` but deliberately builds on this same
+signal boundary, so abnormal termination and signal delivery share one kernel
+contract rather than maintaining a private second path.
+
 ## Linux x86-64 kernel boundary
 
 `signal()` is implemented through the raw `rt_sigaction` syscall rather than a
@@ -35,7 +39,7 @@ address from the same syscall object, keeping the static link surface on the
 relocation types already supported by both GNU `ld` and the pinned
 mini-elf-toolchain.
 
-The raw syscall layer adds:
+The raw syscall layer provides:
 
 ```c
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,
@@ -76,6 +80,24 @@ This thread-directed implementation remains useful even though the rest of the
 runtime is currently single-threaded and has no public thread API: it states the
 correct delivery contract without pretending unavailable TLS support.
 
+## `abort()` integration
+
+`abort()` first raises `SIGABRT` through the public signal layer. This permits an
+already-installed C handler to run once. If that handler returns, or if the first
+delivery otherwise returns to libc, `abort()` installs `SIG_DFL` for `SIGABRT`
+and raises the signal a second time. The second delivery therefore follows the
+default abnormal-termination path instead of returning to the caller.
+
+If both signal operations unexpectedly return, an emergency `_Exit(128 +
+SIGABRT)` remains as a last-resort non-returning path. This fallback is not the
+normal observable termination mechanism on Linux; the real executable
+regression requires termination by the second `SIGABRT` delivery.
+
+`abort()` does not run normal `atexit` handlers, C11 quick-exit handlers, or
+stdio flushing. The current signal baseline does not expose signal masks, so it
+does not claim the broader POSIX `abort()` guarantee for a caller that has
+explicitly blocked `SIGABRT` through APIs outside mini-libc's public contract.
+
 ## Executable evidence
 
 The freestanding `signal_probe` installs a real `SIGTERM` handler through the
@@ -85,30 +107,41 @@ reinstalls the handler, and finally restores `SIG_DFL`. Successful operations
 also verify `errno` preservation. The probe is subject to host-libc-independence
 inspection.
 
-A hosted deterministic harness replaces only `rt_sigaction`, `getpid`, `gettid`,
-and `tgkill`. It locks the exact kernel-action field ordering, `SA_RESTORER`, the
+A hosted deterministic harness replaces `rt_sigaction`, `getpid`, `gettid`, and
+`tgkill`. It locks the exact kernel-action field ordering, `SA_RESTORER`, the
 restorer pointer, empty mask, signal-set size, previous-disposition return value,
 negative-error mapping, calling-thread IDs, and success-path `errno`
-preservation.
+preservation. The same harness now intercepts the emergency `_Exit` path and
+locks `abort()` sequencing as `raise(SIGABRT) -> signal(SIGABRT, SIG_DFL) ->
+raise(SIGABRT) -> emergency _Exit`, including the fallback status 134.
+
+The real runtime termination probe installs a `SIGABRT` handler that emits one
+raw marker and returns. `abort()` must then terminate the process with signal
+status 134; registered normal and quick-exit callbacks and pending buffered
+stdout must remain invisible. This verifies the observable abnormal-termination
+boundary rather than only the fake-syscall sequence.
 
 Pinned tiny-c compiles every production C file plus the shared syscall assembly.
-Its existing runtime integration executable installs and executes a real signal
-handler, verifies ignored delivery, and restores the default disposition. The
-same executable is linked and run once with GNU `ld` and once with the pinned
-mini-elf-toolchain, so handler entry and `rt_sigreturn` are exercised through
-both static linkers.
+A dedicated tiny termination executable runs both quick termination and a real
+returning `SIGABRT` handler. The same executable is linked and run once with GNU
+`ld` and once with the pinned mini-elf-toolchain, so signal handler entry,
+`rt_sigreturn`, disposition reset, and the final abnormal delivery are exercised
+through both static linkers.
 
 ## Phase boundary and next frontier
 
-This is a C signal/runtime-control baseline, not a POSIX signal subsystem.
-Public `sigaction`, signal sets, `sigprocmask`, pending/wait APIs, alternate
-signal stacks, realtime signals, timers, and async-signal-safe library claims
-remain outside the contract. No TLS-backed or thread-safe libc state is claimed.
+The C signal/abnormal-termination baseline is now executable, but it is not a
+POSIX signal subsystem. Public `sigaction`, signal sets, `sigprocmask`,
+pending/wait APIs, alternate signal stacks, realtime signals, timers, and
+async-signal-safe library claims remain outside the contract. No TLS-backed or
+thread-safe libc state is claimed.
 
-The signal baseline now unlocks a higher-level C runtime lifecycle that was not
-previously implementable correctly: abnormal and quick termination. A strong
-next coherent frontier is `abort()` plus the C11 `at_quick_exit`/`quick_exit`
-lifecycle, with explicit separation from normal `atexit` handlers and stdio
-flushing. In particular, `abort()` must reach the default `SIGABRT` termination
-path even when an installed handler returns, while quick termination must run
-only its own callback registry and must not perform normal stdio cleanup.
+With ordinary termination, quick termination, and signal-backed abnormal
+termination now separated, the next higher-value C runtime-control gap is
+non-local control flow. A coherent next frontier is `<setjmp.h>` with an
+x86-64 SysV `jmp_buf`, `setjmp`, and `longjmp`: preserve the required callee-saved
+registers, stack pointer, and resume program counter; normalize `longjmp(..., 0)`
+to a `setjmp` return value of 1; prove nested and cross-function recovery; and
+run the same executable through GCC, Clang, pinned tiny-c, and mini-elf. Signal
+mask preservation (`sigsetjmp`/`siglongjmp`) remains a later POSIX extension and
+must not be implied by that C baseline.
