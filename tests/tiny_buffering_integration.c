@@ -34,8 +34,9 @@ int main(int argc, char **argv)
 
     stream = fopen(argv[1], "w+");
     if (stream == (FILE *)0 || setvbuf(stream, full, _IOFBF, sizeof(full)) != 0 ||
-        fputs("abc", stream) == EOF || !file_equals(argv[1], "", 0) ||
-        fputc('d', stream) != 'd' || !file_equals(argv[1], "abcd", 4)) {
+        fputs("abcd", stream) == EOF || !file_equals(argv[1], "", 0) ||
+        fputc('e', stream) != 'e' || !file_equals(argv[1], "abcd", 4) ||
+        fflush(stream) != 0 || !file_equals(argv[1], "abcde", 5)) {
         if (stream != (FILE *)0) {
             fclose(stream);
         }
@@ -43,28 +44,28 @@ int main(int argc, char **argv)
     }
 
     if (setvbuf(stream, line, _IOLBF, sizeof(line)) != 0 ||
-        fputc('E', stream) != 'E' || !file_equals(argv[1], "abcd", 4) ||
-        fputc('\n', stream) != '\n' || !file_equals(argv[1], "abcdE\n", 6)) {
+        fputc('F', stream) != 'F' || !file_equals(argv[1], "abcde", 5) ||
+        fputc('\n', stream) != '\n' || !file_equals(argv[1], "abcdeF\n", 7)) {
         fclose(stream);
         return 3;
     }
 
     if (setvbuf(stream, (char *)0, _IONBF, 0U) != 0 ||
-        fputc('F', stream) != 'F' || !file_equals(argv[1], "abcdE\nF", 7)) {
+        fputc('G', stream) != 'G' || !file_equals(argv[1], "abcdeF\nG", 8)) {
         fclose(stream);
         return 4;
     }
 
     setbuf(stream, standard);
-    if (fputc('G', stream) != 'G' || !file_equals(argv[1], "abcdE\nF", 7) ||
-        fflush(stream) != 0 || !file_equals(argv[1], "abcdE\nFG", 8)) {
+    if (fputc('H', stream) != 'H' || !file_equals(argv[1], "abcdeF\nG", 8) ||
+        fflush(stream) != 0 || !file_equals(argv[1], "abcdeF\nGH", 9)) {
         fclose(stream);
         return 5;
     }
 
     if (setvbuf(stream, (char *)0, _IOFBF, 16U) != 0 ||
-        fputc('H', stream) != 'H' || fclose(stream) != 0 ||
-        !file_equals(argv[1], "abcdE\nFGH", 9)) {
+        fputc('I', stream) != 'I' || fclose(stream) != 0 ||
+        !file_equals(argv[1], "abcdeF\nGHI", 10)) {
         return 6;
     }
 
