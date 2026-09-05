@@ -32,6 +32,14 @@ mini_sys_lseek:
     ret
     .size mini_sys_lseek, .-mini_sys_lseek
 
+    .globl mini_sys_nanosleep
+    .type mini_sys_nanosleep, @function
+mini_sys_nanosleep:
+    movl $35, %eax
+    syscall
+    ret
+    .size mini_sys_nanosleep, .-mini_sys_nanosleep
+
     .globl mini_sys_mmap
     .type mini_sys_mmap, @function
 mini_sys_mmap:
