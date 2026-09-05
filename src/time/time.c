@@ -6,6 +6,11 @@
 #define MINI_CLOCK_PROCESS_CPUTIME_ID 2
 #define MINI_LONG_MAX ((long)((~0UL) >> 1))
 
+_Static_assert(sizeof(long) == 8U, "time ABI requires LP64 long");
+_Static_assert(sizeof(time_t) == 8U, "time ABI requires 64-bit time_t");
+_Static_assert(sizeof(struct timespec) == 16U,
+               "time ABI requires Linux x86-64 timespec layout");
+
 static int sample_clock(int clock_id, struct timespec *ts)
 {
     long result = mini_sys_clock_gettime(clock_id, ts);
