@@ -7,6 +7,7 @@
 #define DETACHED_THREADS 24
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
+#define WAIT_ATTEMPTS 1000
 
 struct worker_arg {
     int loops;
@@ -28,15 +29,22 @@ struct race_join_arg {
     int target_result;
 };
 
+struct mini_timeout {
+    long tv_sec;
+    long tv_nsec;
+};
+
 static mtx_t counter_mutex;
 static mtx_t capacity_gate;
 static mtx_t detach_gate;
 static mtx_t race_gate;
 static int shared_counter;
 static int detached_done;
+static int race_target_done;
 static int self_detach_done;
 static int self_detach_status;
 static thrd_t main_thread;
+static const struct mini_timeout wait_slice = {0L, 10000000L};
 
 static int counter_worker(void *opaque)
 {
@@ -204,9 +212,16 @@ static int race_target_worker(void *opaque)
     (void)opaque;
 
     if (mtx_lock(&race_gate) != thrd_success ||
-        mtx_unlock(&race_gate) != thrd_success) {
+        mtx_unlock(&race_gate) != thrd_success ||
+        mtx_lock(&counter_mutex) != thrd_success) {
         return -40;
     }
+    race_target_done = 1;
+    if (mtx_unlock(&counter_mutex) != thrd_success) {
+        return -41;
+    }
+    (void)mini_sys_futex((volatile int *)&race_target_done, MINI_FUTEX_WAKE, 1,
+                         (const void *)0, (volatile int *)0, 0);
     return 77;
 }
 
@@ -246,7 +261,9 @@ static int self_detach_worker(void *opaque)
 
 static int wait_for_count(int *value, int expected)
 {
-    for (;;) {
+    int attempt;
+
+    for (attempt = 0; attempt < WAIT_ATTEMPTS; ++attempt) {
         int observed;
 
         if (mtx_lock(&counter_mutex) != thrd_success) {
@@ -260,8 +277,9 @@ static int wait_for_count(int *value, int expected)
             return 1;
         }
         (void)mini_sys_futex((volatile int *)value, MINI_FUTEX_WAIT, observed,
-                             (const void *)0, (volatile int *)0, 0);
+                             &wait_slice, (volatile int *)0, 0);
     }
+    return 0;
 }
 
 int main(void)
@@ -400,6 +418,7 @@ int main(void)
     }
     mtx_destroy(&detach_gate);
 
+    race_target_done = 0;
     if (mtx_init(&race_gate, mtx_plain) != thrd_success ||
         mtx_lock(&race_gate) != thrd_success ||
         thrd_create(&race_target, race_target_worker, (void *)0) != thrd_success) {
@@ -415,6 +434,7 @@ int main(void)
     }
     if (thrd_join(race_joiner, &race_join_status) != thrd_success ||
         thrd_join(race_detacher, &race_detach_status) != thrd_success ||
+        !wait_for_count(&race_target_done, 1) ||
         ((race_join_status == thrd_success) ==
          (race_detach_status == thrd_success)) ||
         (race_join_status == thrd_success && race_join_arg.target_result != 77) ||
