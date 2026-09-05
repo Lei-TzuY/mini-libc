@@ -40,9 +40,7 @@ int main(void)
     if (after == (clock_t)-1 || after < before || errno != EIO) {
         return 5;
     }
-    if (work == 0UL && after == (clock_t)-1) {
-        return 6;
-    }
+    (void)work;
 
     if (puts("tiny-time-ok") < 0) {
         return 7;
