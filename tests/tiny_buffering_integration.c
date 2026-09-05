@@ -26,6 +26,7 @@ int main(int argc, char **argv)
     char full[4];
     char line[8];
     char standard[BUFSIZ];
+    char temporary[4];
     FILE *stream;
 
     if (argc != 2) {
@@ -69,8 +70,25 @@ int main(int argc, char **argv)
         return 6;
     }
 
-    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+    stream = tmpfile();
+    if (stream == (FILE *)0 ||
+        setvbuf(stream, temporary, _IOFBF, sizeof(temporary)) != 0 ||
+        fprintf(stream, "tmp:%d", 7) != 5 || ftell(stream) != 5L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         return 7;
+    }
+    rewind(stream);
+    if (fgetc(stream) != 't' || fgetc(stream) != 'm' ||
+        fgetc(stream) != 'p' || fgetc(stream) != ':' ||
+        fgetc(stream) != '7' || fgetc(stream) != EOF || !feof(stream) ||
+        fclose(stream) != 0) {
+        return 8;
+    }
+
+    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+        return 9;
     }
     return 0;
 }
