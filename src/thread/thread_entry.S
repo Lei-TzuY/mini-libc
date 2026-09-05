@@ -8,15 +8,6 @@ __mini_thread_current_tcb:
     ret
     .size __mini_thread_current_tcb, .-__mini_thread_current_tcb
 
-    .globl __mini_atomic_exchange_int
-    .hidden __mini_atomic_exchange_int
-    .type __mini_atomic_exchange_int, @function
-__mini_atomic_exchange_int:
-    movl %esi, %eax
-    xchgl %eax, (%rdi)
-    ret
-    .size __mini_atomic_exchange_int, .-__mini_atomic_exchange_int
-
     .globl __mini_clone_thread
     .hidden __mini_clone_thread
     .type __mini_clone_thread, @function
