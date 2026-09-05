@@ -1,7 +1,60 @@
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int tiny_vsnprintf(char *buffer, size_t size, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vsnprintf(buffer, size, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_vfprintf(FILE *stream, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfprintf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_vprintf(const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vprintf(format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_va_sum(int count, ...)
+{
+    va_list ap;
+    va_list copy;
+    int first_copy;
+    int total = 0;
+    int i;
+
+    va_start(ap, count);
+    va_copy(copy, ap);
+    first_copy = va_arg(copy, int);
+    va_end(copy);
+    for (i = 0; i < count; ++i) {
+        total += va_arg(ap, int);
+    }
+    va_end(ap);
+    return first_copy == 1 ? total : -1;
+}
 
 int main(int argc, char **argv, char **envp)
 {
@@ -137,26 +190,49 @@ int main(int argc, char **argv, char **envp)
         return 15;
     }
 
-    formatted = snprintf(format_buffer, sizeof(format_buffer),
-                         "mem:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
+    if (tiny_va_sum(7, 1, 2, 3, 4, 5, 6, 7) != 28 || errno != EIO) {
+        free(buffer);
+        return 16;
+    }
+
+    formatted = tiny_vsnprintf(format_buffer, sizeof(format_buffer),
+                               "mem:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
     if (formatted != (int)(sizeof(expected_memory_output) - 1U) ||
         strcmp(format_buffer, expected_memory_output) != 0 || errno != EIO) {
         free(buffer);
-        return 16;
+        return 17;
     }
 
     formatted = snprintf(trunc_buffer, sizeof(trunc_buffer), "value:%u", 123U);
     if (formatted != 9 || strcmp(trunc_buffer, "value") != 0 || errno != EIO) {
         free(buffer);
-        return 17;
+        return 18;
     }
 
-    formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
-                       buffer, 7, 0x2aU, -5000000000LL, 11U, 22U, 33U);
+    stream = fopen(io_path, "w");
+    if (stream == (FILE *)0) {
+        free(buffer);
+        return 19;
+    }
+    formatted = tiny_vfprintf(stream, "%c%c%c%c%c%c%c%c%x",
+                              '0', '1', '2', '3', '4', '5', 'X', 'Y', 0x89U);
+    if (formatted != 10 || errno != EIO || ferror(stream)) {
+        fclose(stream);
+        free(buffer);
+        return 20;
+    }
+    if (fclose(stream) != 0) {
+        free(buffer);
+        return 20;
+    }
+
+    formatted = tiny_vprintf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
+                             buffer, 7, 0x2aU, -5000000000LL,
+                             11U, 22U, 33U);
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 18;
+        return 21;
     }
 
     free(buffer);

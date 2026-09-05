@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <mini/syscall.h>
+#include <stdarg.h>
 #include <stdio.h>
 
 static int same_string(const char *left, const char *right)
@@ -13,6 +14,81 @@ static int same_string(const char *left, const char *right)
         ++i;
     }
     return left[i] == right[i];
+}
+
+static int probe_vsnprintf(char *buffer, size_t size, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vsnprintf(buffer, size, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int probe_vfprintf(FILE *stream, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfprintf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int probe_vprintf(const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vprintf(format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int probe_va_copy(char *left, size_t left_size, char *right,
+                         size_t right_size, const char *format, ...)
+{
+    va_list ap;
+    va_list copy;
+    int left_result;
+    int right_result;
+
+    va_start(ap, format);
+    va_copy(copy, ap);
+    left_result = vsnprintf(left, left_size, format, ap);
+    right_result = vsnprintf(right, right_size, format, copy);
+    va_end(copy);
+    va_end(ap);
+
+    if (left_result < 0 || right_result != left_result) {
+        return EOF;
+    }
+    return left_result;
+}
+
+static int probe_va_sum(int count, ...)
+{
+    va_list ap;
+    va_list copy;
+    int first_copy;
+    int total = 0;
+    int i;
+
+    va_start(ap, count);
+    va_copy(copy, ap);
+    first_copy = va_arg(copy, int);
+    va_end(copy);
+
+    for (i = 0; i < count; ++i) {
+        total += va_arg(ap, int);
+    }
+    va_end(ap);
+
+    return first_copy == 1 ? total : -1;
 }
 
 int main(void)
@@ -35,10 +111,18 @@ int main(void)
         "fprintf-stack:1:2:3:4:5\n";
     static const char expected_snprintf_stack[] =
         "snprintf-stack:1:2:3:4:5";
+    static const char expected_vstack[] = "vstack:1:2:3:4:5";
+    static const char expected_copy[] = "copy:11:22:33:44:55";
+    static const char expected_vfile[] =
+        "vf:1:2:3:4:5|vp:1:2:3:4:5:6";
     char memory[64];
     char truncated[8];
     char one[1];
     char untouched;
+    char copy_left[64];
+    char copy_right[64];
+    FILE *stream;
+    FILE *saved_stdout;
     size_t i;
     int result;
 
@@ -198,6 +282,61 @@ int main(void)
     if (snprintf((char *)0, 1U, "x") != EOF || errno != EINVAL ||
         ferror(stdout)) {
         return 65;
+    }
+
+    errno = ERANGE;
+    if (probe_va_sum(7, 1, 2, 3, 4, 5, 6, 7) != 28 || errno != ERANGE) {
+        return 67;
+    }
+
+    result = probe_vsnprintf(memory, sizeof(memory),
+                             "vstack:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
+    if (result != (int)(sizeof(expected_vstack) - 1U) ||
+        !same_string(memory, expected_vstack) || errno != ERANGE ||
+        ferror(stdout)) {
+        return 68;
+    }
+
+    result = probe_va_copy(copy_left, sizeof(copy_left),
+                           copy_right, sizeof(copy_right),
+                           "copy:%u:%u:%u:%u:%u",
+                           11U, 22U, 33U, 44U, 55U);
+    if (result != (int)(sizeof(expected_copy) - 1U) ||
+        !same_string(copy_left, expected_copy) ||
+        !same_string(copy_right, expected_copy) || errno != ERANGE) {
+        return 69;
+    }
+
+    stream = fopen("build/vformat-probe.tmp", "w+");
+    if (stream == (FILE *)0) {
+        return 70;
+    }
+    result = probe_vfprintf(stream, "vf:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
+    if (result != 12 || errno != ERANGE || ferror(stream)) {
+        fclose(stream);
+        return 71;
+    }
+    saved_stdout = __mini_stdout;
+    __mini_stdout = stream;
+    result = probe_vprintf("|vp:%d:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5, 6);
+    __mini_stdout = saved_stdout;
+    if (result != 15 || errno != ERANGE || ferror(stream)) {
+        fclose(stream);
+        return 72;
+    }
+    if (fflush(stream) == EOF) {
+        fclose(stream);
+        return 73;
+    }
+    rewind(stream);
+    if (fread(memory, 1U, sizeof(expected_vfile) - 1U, stream) !=
+            sizeof(expected_vfile) - 1U) {
+        fclose(stream);
+        return 74;
+    }
+    memory[sizeof(expected_vfile) - 1U] = '\0';
+    if (!same_string(memory, expected_vfile) || fclose(stream) != 0) {
+        return 75;
     }
 
     errno = ERANGE;

@@ -1,6 +1,7 @@
 #ifndef MINI_LIBC_STDIO_H
 #define MINI_LIBC_STDIO_H
 
+#include <stdarg.h>
 #include <stddef.h>
 
 #define EOF (-1)
@@ -44,6 +45,9 @@ int sscanf(const char *restrict s, const char *restrict format, ...);
 int fprintf(FILE *restrict stream, const char *restrict format, ...);
 int printf(const char *restrict format, ...);
 int snprintf(char *restrict s, size_t n, const char *restrict format, ...);
+int vfprintf(FILE *restrict stream, const char *restrict format, va_list ap);
+int vprintf(const char *restrict format, va_list ap);
+int vsnprintf(char *restrict s, size_t n, const char *restrict format, va_list ap);
 int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);
