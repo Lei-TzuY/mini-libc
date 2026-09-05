@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static const unsigned char input[] =
-    "1 2 3 4 5 6 word Q % skip 12X";
+    "1 2 3 4 5 6 word Q % skip 12X 0x2a 077 ff abcXYZ42_tail! @ ]-";
 static size_t input_offset;
 static size_t read_calls;
 
@@ -48,7 +48,14 @@ int main(void)
     int values[6] = {0, 0, 0, 0, 0, 0};
     int first = 0;
     int second = 1234;
+    int auto_hex = 0;
+    int auto_oct = 0;
+    unsigned int hex = 0;
     char word[5];
+    char lower[4];
+    char tail[6];
+    char literal_set[2];
+    char mismatch[2] = {'?', '\0'};
     char character = '\0';
 
     errno = ERANGE;
@@ -76,13 +83,32 @@ int main(void)
         return 4;
     }
 
+    if (scanf(" %i %i %x %3[a-z]%*[A-Z0-9]%5[^!]%*1[!]",
+              &auto_hex, &auto_oct, &hex, lower, tail) != 5 ||
+        auto_hex != 42 || auto_oct != 63 || hex != 255U ||
+        lower[0] != 'a' || lower[1] != 'b' || lower[2] != 'c' ||
+        lower[3] != '\0' || tail[0] != '_' || tail[1] != 't' ||
+        tail[2] != 'a' || tail[3] != 'i' || tail[4] != 'l' ||
+        tail[5] != '\0' || read_calls != 1) {
+        return 5;
+    }
+
+    if (scanf(" %1[a-z]", mismatch) != 0 || mismatch[0] != '?' ||
+        getchar() != '@' || read_calls != 1) {
+        return 6;
+    }
+    if (scanf(" %2[]-]", literal_set) != 1 || literal_set[0] != ']' ||
+        literal_set[1] != '-' || read_calls != 1) {
+        return 7;
+    }
+
     first = 99;
     if (scanf("%d", &first) != EOF || first != 99 || !feof(stdin) ||
         ferror(stdin) || read_calls != 2) {
-        return 5;
+        return 8;
     }
     if (scanf("%d", &first) != EOF || read_calls != 2) {
-        return 6;
+        return 9;
     }
 
     return 0;
