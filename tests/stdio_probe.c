@@ -16,6 +16,19 @@ static int same_string(const char *left, const char *right)
     return left[i] == right[i];
 }
 
+static double double_from_bits(unsigned long long bits)
+{
+    double value;
+    unsigned char *out = (unsigned char *)&value;
+    const unsigned char *in = (const unsigned char *)&bits;
+    size_t i;
+
+    for (i = 0; i < sizeof(value); ++i) {
+        out[i] = in[i];
+    }
+    return value;
+}
+
 static int probe_vsnprintf(char *buffer, size_t size, const char *format, ...)
 {
     va_list ap;
@@ -113,9 +126,16 @@ int main(void)
         "snprintf-stack:1:2:3:4:5";
     static const char expected_vstack[] = "vstack:1:2:3:4:5";
     static const char expected_copy[] = "copy:11:22:33:44:55";
+    static const char expected_float_stack[] =
+        "fp:1:2:3:4:5:6:7:8:9";
+    static const char expected_float_flags[] =
+        "[    1.50][-2.5   ][+4.][-000.0]";
+    static const char expected_float_special[] =
+        "[    +inf][nan   ][-inf]";
     static const char expected_vfile[] =
-        "vf:1:2:3:4:5|vp:1:2:3:4:5:6";
+        "vf:1:2:3:4:5|vp:1:2:3:4:5:6|pf:1.5|vpf:2.5|vff:1:2:3:4:5:6:7:8:9";
     char memory[64];
+    char float_memory[128];
     char truncated[8];
     char one[1];
     char untouched;
@@ -307,6 +327,63 @@ int main(void)
         return 69;
     }
 
+    errno = ERANGE;
+    result = snprintf(float_memory, sizeof(float_memory),
+                      "fp:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f",
+                      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+    if (result != (int)(sizeof(expected_float_stack) - 1U) ||
+        !same_string(float_memory, expected_float_stack) || errno != ERANGE) {
+        return 76;
+    }
+
+    result = probe_vsnprintf(float_memory, sizeof(float_memory),
+                             "fp:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f",
+                             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+    if (result != (int)(sizeof(expected_float_stack) - 1U) ||
+        !same_string(float_memory, expected_float_stack) || errno != ERANGE) {
+        return 77;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory),
+                      "[%8.2f][%-7.1lf][%+#.0f][%06.1f]",
+                      1.5, -2.5, 3.5, -0.0);
+    if (result != (int)(sizeof(expected_float_flags) - 1U) ||
+        !same_string(float_memory, expected_float_flags) || errno != ERANGE) {
+        return 78;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory), "%.0f:%.0f", 2.5, 3.5);
+    if (result != 3 || !same_string(float_memory, "2:4") || errno != ERANGE) {
+        return 79;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory), "[%*.*f]", 8, 2, 1.5);
+    if (result != 10 || !same_string(float_memory, "[    1.50]") ||
+        errno != ERANGE) {
+        return 80;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory), "[%+8f][%-6f][% f]",
+                      double_from_bits(0x7ff0000000000000ULL),
+                      double_from_bits(0x7ff8000000000000ULL),
+                      double_from_bits(0xfff0000000000000ULL));
+    if (result != (int)(sizeof(expected_float_special) - 1U) ||
+        !same_string(float_memory, expected_float_special) || errno != ERANGE) {
+        return 81;
+    }
+
+    errno = ERANGE;
+    if (snprintf(float_memory, sizeof(float_memory), "%.10f", 1.0) != EOF ||
+        errno != EINVAL) {
+        return 82;
+    }
+    errno = ERANGE;
+    if (snprintf(float_memory, sizeof(float_memory), "%f",
+                 18446744073709551616.0) != EOF || errno != EINVAL) {
+        return 83;
+    }
+    errno = ERANGE;
+
     stream = fopen("build/vformat-probe.tmp", "w+");
     if (stream == (FILE *)0) {
         return 70;
@@ -319,10 +396,29 @@ int main(void)
     saved_stdout = __mini_stdout;
     __mini_stdout = stream;
     result = probe_vprintf("|vp:%d:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5, 6);
-    __mini_stdout = saved_stdout;
     if (result != 15 || errno != ERANGE || ferror(stream)) {
+        __mini_stdout = saved_stdout;
         fclose(stream);
         return 72;
+    }
+    result = printf("|pf:%.1f", 1.5);
+    if (result != 7 || errno != ERANGE || ferror(stream)) {
+        __mini_stdout = saved_stdout;
+        fclose(stream);
+        return 84;
+    }
+    result = probe_vprintf("|vpf:%.1f", 2.5);
+    __mini_stdout = saved_stdout;
+    if (result != 8 || errno != ERANGE || ferror(stream)) {
+        fclose(stream);
+        return 85;
+    }
+    result = probe_vfprintf(stream,
+                            "|vff:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f:%.0f",
+                            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+    if (result != 22 || errno != ERANGE || ferror(stream)) {
+        fclose(stream);
+        return 86;
     }
     if (fflush(stream) == EOF) {
         fclose(stream);
