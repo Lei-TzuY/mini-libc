@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#define MINI_STDIO_SYNC_PUBLIC_WRAPPER 1
 #include "stdio_internal.h"
 
 int __mini_fseek_unlocked(FILE *stream, long offset, int whence);
