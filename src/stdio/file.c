@@ -101,6 +101,10 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
     stream->state = 0;
     stream->next = (FILE *)0;
     stream->write_length = 0;
+    stream->read_offset = 0;
+    stream->read_length = 0;
+    stream->pushback_valid = 0U;
+    stream->pushback_byte = 0U;
     __mini_stdio_register(stream);
     return stream;
 }
@@ -140,6 +144,10 @@ int fclose(FILE *stream)
         stream->state = 0;
         stream->next = (FILE *)0;
         stream->write_length = 0;
+        stream->read_offset = 0;
+        stream->read_length = 0;
+        stream->pushback_valid = 0U;
+        stream->pushback_byte = 0U;
     }
 
     if (first_error != 0) {
