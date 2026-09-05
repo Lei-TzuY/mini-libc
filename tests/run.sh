@@ -117,6 +117,12 @@ if [ "$strtoul_output" != "strtoul-ok" ]; then
     exit 1
 fi
 
+strtod_output="$(./build/strtod_probe)"
+if [ "$strtod_output" != "strtod-ok" ]; then
+    echo "unexpected strtod output: $strtod_output" >&2
+    exit 1
+fi
+
 allocator_output="$(./build/allocator_probe)"
 if [ "$allocator_output" != "allocator-ok" ]; then
     echo "unexpected allocator output: $allocator_output" >&2
@@ -248,9 +254,10 @@ rm -f "$scan_path"
 ./build/atoi_differential
 ./build/strtol_differential
 ./build/strtoul_differential
+./build/strtod_differential
 ./build/allocator_failure_test
 ./build/stdio_write_test
 ./build/stdio_block_test
 ./build/stdio_scan_test
 
-echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/block/formatted stdio, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"

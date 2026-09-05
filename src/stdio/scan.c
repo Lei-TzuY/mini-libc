@@ -1,13 +1,10 @@
 #include <errno.h>
 #include <stdio.h>
 
+#include "../internal/float_parse.h"
 #include "stdio_internal.h"
 
 #define MINI_SCAN_WIDTH_MAX (~0U)
-#define MINI_SCAN_FLOAT_SIGNIFICAND_DIGITS 18U
-#define MINI_SCAN_FLOAT_EXPONENT_CAP 10000000000UL
-#define MINI_SCAN_DOUBLE_MAX 1.7976931348623157e308
-#define MINI_SCAN_FLOAT_MAX 3.4028234663852886e38
 
 struct mini_scan_args {
     unsigned long gp[5];
@@ -104,7 +101,7 @@ static int is_digit(int c)
 static int is_float_conversion(int c)
 {
     return c == 'f' || c == 'F' || c == 'e' || c == 'E' ||
-           c == 'g' || c == 'G';
+           c == 'g' || c == 'G' || c == 'a' || c == 'A';
 }
 
 static int digit_value(int c)
@@ -153,6 +150,16 @@ static int source_unget(int c, struct mini_scan_source *source)
 
     --source->string_cursor;
     return (int)(unsigned char)c;
+}
+
+static int float_source_get(void *context)
+{
+    return source_get((struct mini_scan_source *)context);
+}
+
+static int float_source_unget(int c, void *context)
+{
+    return source_unget(c, (struct mini_scan_source *)context);
 }
 
 static int skip_input_space(struct mini_scan_source *source)
@@ -428,19 +435,12 @@ static int assign_floating(struct mini_scan_args *args,
     unsigned long word;
 
     if (length == MINI_SCAN_LEN_NONE) {
-        double magnitude = value < 0.0 ? -value : value;
         float narrowed;
 
-        if (magnitude > MINI_SCAN_FLOAT_MAX) {
-            errno = ERANGE;
+        if (__mini_float_narrow(value, &narrowed) ==
+            MINI_FLOAT_PARSE_RANGE_FAIL) {
             return 0;
         }
-        narrowed = (float)value;
-        if (value != 0.0 && narrowed == 0.0f) {
-            errno = ERANGE;
-            return 0;
-        }
-
         word = next_word(args);
         *(float *)word = narrowed;
         return 1;
@@ -461,115 +461,6 @@ static void accumulate_digit(unsigned long long *magnitude, int *overflow,
             *magnitude = *magnitude * (unsigned long long)base + digit;
         }
     }
-}
-
-static void accumulate_float_digit(unsigned long long *significand,
-                                   unsigned int *stored_digits,
-                                   unsigned long *fractional_digits,
-                                   unsigned long *discarded_digits,
-                                   int *significant_started,
-                                   int *first_discarded,
-                                   int *discarded_nonzero,
-                                   unsigned int digit, int after_decimal)
-{
-    if (after_decimal) {
-        ++*fractional_digits;
-    }
-
-    if (!*significant_started && digit == 0U) {
-        return;
-    }
-    *significant_started = 1;
-
-    if (*stored_digits < MINI_SCAN_FLOAT_SIGNIFICAND_DIGITS) {
-        *significand = *significand * 10ULL + (unsigned long long)digit;
-        ++*stored_digits;
-        return;
-    }
-
-    ++*discarded_digits;
-    if (*first_discarded < 0) {
-        *first_discarded = (int)digit;
-    } else if (digit != 0U) {
-        *discarded_nonzero = 1;
-    }
-}
-
-static void round_float_significand(unsigned long long *significand,
-                                    int first_discarded,
-                                    int discarded_nonzero)
-{
-    if (first_discarded > 5 ||
-        (first_discarded == 5 &&
-         (discarded_nonzero || (*significand & 1ULL) != 0ULL))) {
-        ++*significand;
-    }
-}
-
-static void accumulate_float_exponent(unsigned long *exponent, int *overflow,
-                                      unsigned int digit)
-{
-    if (!*overflow) {
-        if (*exponent > (MINI_SCAN_FLOAT_EXPONENT_CAP - digit) / 10UL) {
-            *overflow = 1;
-        } else {
-            *exponent = *exponent * 10UL + (unsigned long)digit;
-        }
-    }
-}
-
-static int scale_decimal_double(unsigned long long significand, long exponent10,
-                                int negative, double *result)
-{
-    static const double powers[] = {
-        1.0e1, 1.0e2, 1.0e4, 1.0e8, 1.0e16,
-        1.0e32, 1.0e64, 1.0e128, 1.0e256
-    };
-    unsigned long magnitude;
-    unsigned int index = 0U;
-    double value;
-
-    if (significand == 0ULL) {
-        value = 0.0;
-        *result = negative ? -value : value;
-        return 1;
-    }
-
-    if (exponent10 > 511L || exponent10 < -511L) {
-        errno = ERANGE;
-        return 0;
-    }
-
-    value = (double)(long long)significand;
-    if (exponent10 < 0) {
-        magnitude = (unsigned long)(-exponent10);
-    } else {
-        magnitude = (unsigned long)exponent10;
-    }
-
-    while (magnitude != 0UL) {
-        if ((magnitude & 1UL) != 0UL) {
-            if (exponent10 > 0) {
-                if (value > MINI_SCAN_DOUBLE_MAX / powers[index]) {
-                    errno = ERANGE;
-                    return 0;
-                }
-                value *= powers[index];
-            } else {
-                value /= powers[index];
-            }
-        }
-        magnitude >>= 1;
-        ++index;
-    }
-
-    if (value == 0.0) {
-        errno = ERANGE;
-        return 0;
-    }
-
-    *result = negative ? -value : value;
-    return 1;
 }
 
 static int scan_integer(struct mini_scan_source *source,
@@ -688,156 +579,33 @@ static int scan_floating(struct mini_scan_source *source,
                          const struct mini_scan_spec *spec,
                          struct mini_scan_args *args)
 {
-    unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
-    unsigned long long significand = 0ULL;
-    unsigned int stored_digits = 0U;
-    unsigned int digits = 0U;
-    unsigned long fractional_digits = 0UL;
-    unsigned long discarded_digits = 0UL;
-    unsigned long explicit_exponent = 0UL;
-    unsigned int exponent_digits = 0U;
-    int significant_started = 0;
-    int first_discarded = -1;
-    int discarded_nonzero = 0;
-    int after_decimal = 0;
-    int negative = 0;
-    int exponent_negative = 0;
-    int exponent_overflow = 0;
-    int c;
-    long exponent10;
-    double value;
+    struct mini_float_source float_source;
+    unsigned long width = spec->width_set ? (unsigned long)spec->width :
+                                           (unsigned long)MINI_SCAN_WIDTH_MAX;
+    double value = 0.0;
+    int status;
 
-    if (skip_input_space(source) < 0) {
-        return MINI_SCAN_INPUT_FAIL;
-    }
+    float_source.context = source;
+    float_source.get = float_source_get;
+    float_source.unget = float_source_unget;
+    float_source.mark = 0;
+    float_source.restore = 0;
 
-    c = source_get(source);
-    if (c == EOF) {
-        return MINI_SCAN_INPUT_FAIL;
-    }
-
-    if (c == '+' || c == '-') {
-        negative = c == '-';
-        --remaining;
-        if (remaining == 0U) {
-            return MINI_SCAN_MATCH_FAIL;
-        }
-        c = source_get(source);
-        if (c == EOF) {
-            return MINI_SCAN_MATCH_FAIL;
-        }
-    }
-
-    for (;;) {
-        if (is_digit(c)) {
-            accumulate_float_digit(&significand, &stored_digits,
-                                   &fractional_digits, &discarded_digits,
-                                   &significant_started, &first_discarded,
-                                   &discarded_nonzero,
-                                   (unsigned int)(c - '0'), after_decimal);
-            ++digits;
-        } else if (c == '.' && !after_decimal) {
-            after_decimal = 1;
-        } else {
-            break;
-        }
-
-        --remaining;
-        if (remaining == 0U) {
-            c = EOF;
-            break;
-        }
-
-        c = source_get(source);
-        if (c == EOF) {
-            break;
-        }
-    }
-
-    if (digits == 0U) {
-        if (c != EOF && source_unget(c, source) == EOF) {
-            return MINI_SCAN_INPUT_FAIL;
-        }
+    status = __mini_float_parse(&float_source, width, 1,
+                                MINI_FLOAT_PARSE_SCAN, !spec->suppress,
+                                &value);
+    if (status == MINI_FLOAT_PARSE_MATCH_FAIL) {
         return MINI_SCAN_MATCH_FAIL;
     }
-
-    if (c == 'e' || c == 'E') {
-        --remaining;
-        if (remaining == 0U) {
-            return MINI_SCAN_MATCH_FAIL;
-        }
-
-        c = source_get(source);
-        if (c == EOF) {
-            return MINI_SCAN_MATCH_FAIL;
-        }
-        if (c == '+' || c == '-') {
-            exponent_negative = c == '-';
-            --remaining;
-            if (remaining == 0U) {
-                return MINI_SCAN_MATCH_FAIL;
-            }
-            c = source_get(source);
-            if (c == EOF) {
-                return MINI_SCAN_MATCH_FAIL;
-            }
-        }
-
-        while (is_digit(c)) {
-            accumulate_float_exponent(&explicit_exponent, &exponent_overflow,
-                                      (unsigned int)(c - '0'));
-            ++exponent_digits;
-            --remaining;
-            if (remaining == 0U) {
-                c = EOF;
-                break;
-            }
-            c = source_get(source);
-            if (c == EOF) {
-                break;
-            }
-        }
-
-        if (exponent_digits == 0U) {
-            if (c != EOF && source_unget(c, source) == EOF) {
-                return MINI_SCAN_INPUT_FAIL;
-            }
-            return MINI_SCAN_MATCH_FAIL;
-        }
-    }
-
-    if (c != EOF && source_unget(c, source) == EOF) {
+    if (status == MINI_FLOAT_PARSE_INPUT_FAIL) {
         return MINI_SCAN_INPUT_FAIL;
     }
-
+    if (status == MINI_FLOAT_PARSE_RANGE_FAIL) {
+        return MINI_SCAN_RANGE_FAIL;
+    }
     if (spec->suppress) {
         return MINI_SCAN_SUCCESS;
     }
-
-    round_float_significand(&significand, first_discarded,
-                            discarded_nonzero);
-
-    if (significand == 0ULL) {
-        value = 0.0;
-        value = negative ? -value : value;
-    } else {
-        if (exponent_overflow) {
-            errno = ERANGE;
-            return MINI_SCAN_RANGE_FAIL;
-        }
-
-        exponent10 = (long)discarded_digits - (long)fractional_digits;
-        if (exponent_negative) {
-            exponent10 -= (long)explicit_exponent;
-        } else {
-            exponent10 += (long)explicit_exponent;
-        }
-
-        if (!scale_decimal_double(significand, exponent10, negative, &value)) {
-            return MINI_SCAN_RANGE_FAIL;
-        }
-    }
-
     if (!assign_floating(args, spec->length, value)) {
         return MINI_SCAN_RANGE_FAIL;
     }
