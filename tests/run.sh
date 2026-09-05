@@ -160,6 +160,7 @@ len:-5:250:-30000:60000:-1234567890:4000000000:-5000000000:9000000000
 star:[12   ][wide][    002a]
 sign:[+7][ 7][00000042][0X2A]
 edge:[][0][     ]
+min:-2147483648:-9223372036854775808
 stdio-ok'
 if [ "$stdio_output" != "$expected_stdio_output" ]; then
     echo "unexpected stdio stdout:" >&2
@@ -167,7 +168,8 @@ if [ "$stdio_output" != "$expected_stdio_output" ]; then
     exit 1
 fi
 expected_stdio_stderr='stderr-ok
-format-err:0x00002a:Q   '
+format-err:0x00002a:Q   
+fprintf-stack:1:2:3:4:5'
 if [ "$stdio_stderr_output" != "$expected_stdio_stderr" ]; then
     echo "unexpected stdio stderr:" >&2
     printf '%s\n' "$stdio_stderr_output" >&2
