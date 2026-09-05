@@ -5,7 +5,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: executable runtime lifecycle, buffered owned streams and positioning,
+## Current milestone: executable runtime lifecycle, buffered owned streams, formatted output and positioning,
 core libc primitives, allocation, environment access, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
@@ -186,6 +186,28 @@ while `fputc`/`putc`, `fputs`, `putchar`, `puts`, and `fwrite` feed the shared
 output core. `feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error
 state.
 
+`printf` and `fprintf` now layer formatted character/string and integer output on
+that same FILE core. The current formatter supports `%d`, `%i`, `%u`, `%o`, `%x`,
+`%X`, `%c`, `%s`, and `%%`; `hh`, `h`, `l`, and `ll` integer length modifiers;
+the `-`, `+`, space, `#`, and `0` flags; and literal or `*` width/precision.
+Negative dynamic width implies left alignment, while a negative dynamic
+precision is treated as omitted. Integer zero with zero precision, alternate
+octal/hexadecimal prefixes, zero/sign padding, and the signed minimum values are
+handled without relying on signed-overflow undefined behavior. Unsupported
+conversions, incomplete trailing `%`, and field sizes outside the public `int`
+return domain fail deterministically with `EOF` and `EINVAL`.
+
+The public variadic entry points deliberately do not expose a mini-libc
+`va_list` ABI yet. Small x86-64 SysV assembly shims capture the INTEGER-class
+variadic register slots plus the overflow-stack cursor and hand a fixed private
+argument state to compiler-neutral C formatting code. `printf` has five such GP
+slots after its named format argument; `fprintf` has four after its named stream
+and format arguments. The supported conversions consume only INTEGER-class
+scalars or pointers, so this milestone needs no XMM variadic save area. This
+keeps all production C and public headers free of compiler-specific `__builtin_*`
+dependencies while still allowing GCC, Clang, and `tiny-c-compiler` callers to
+use the same SysV ABI.
+
 `fopen` extends that object boundary to pathname-backed owned streams without
 coupling the inherited-stream object file to allocator or pathname support. The
 current mode parser accepts `r`, `w`, and `a`, with one optional `+` and one
@@ -242,11 +264,13 @@ offset. `rewind` reuses the same synchronization path, attempts a seek to zero,
 and clears the EOF/error indicators; a failure remains observable through
 `errno`.
 
-The stream layer is single-threaded. It does not yet provide input buffering,
-`setvbuf`, formatted I/O, `fgetpos`/`fsetpos`, `tmpfile`, locking, or C11
-exclusive-create `x` modes. Those capabilities must extend the existing FILE
-state machine and live-stream lifecycle rather than reintroducing descriptor-
-specific I/O paths.
+The stream layer is single-threaded. Input is still unbuffered and there is no
+pushback/read-line layer yet. mini-libc also does not yet provide `setvbuf`,
+`vfprintf`, memory-formatting functions such as `sprintf`/`snprintf`, floating-
+point formatting, `%p`, `%n`, positional arguments, `fgetpos`/`fsetpos`,
+`tmpfile`, locking, or C11 exclusive-create `x` modes. Those capabilities must
+extend the existing FILE state machine and formatter boundaries rather than
+reintroducing descriptor-specific paths or compiler-specific variadic builtins.
 
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
@@ -308,27 +332,31 @@ retry/recovery, `fflush(NULL)` registry behavior, update-stream direction
 barriers, owned-file create/truncate/append/reopen/read/close behavior, close
 error precedence, block-transfer partial-element semantics, buffer-full
 auto-flush, append-aware logical positions, `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
-positioning, EOF reset, and ownership/error cleanup. The `strtok` probe covers
-leading delimiter runs, delimiter changes between continuation calls, empty
-input and delimiter sets, end-of-stream, high-byte delimiters, sequence reset,
-errno preservation, and fixed-seed model comparison. The `strerror` probe locks
-the five exposed errno messages, deterministic unknown-code behavior, stable
-static storage across later calls, and errno preservation. The `ctype` probe
-checks `EOF` plus every value in the complete `unsigned char` domain and verifies
-that all implemented classification and conversion routines preserve an existing
-`errno` value. The `bsearch` probe also covers `qsort` zero/one-element
-no-comparator-call behavior, sorted/reverse/duplicate inputs, generic three-byte
-records, boundary sentinels, signed absolute-value boundary-adjacent
-representable values across `int`, `long`, and `long long`, `div`/`ldiv`/`lldiv`
-sign quadrants, quotient/remainder invariants, and errno preservation. Hosted
-differential executables compare production memory/string/conversion/search
-routines against host libc where the target contract is comparable, including a
-state-isolated `strtok` differential and 10,000 fixed-seed sorted-array `bsearch`
-cases. The same hosted search test also runs 10,000 fixed-seed `qsort`
-ordering/multiset property cases against the production sorter. Test-only fake
-syscall/allocator harnesses deterministically verify allocator heap-growth
-refusal and the buffered stream state machine described above. Hosted oracles
-are test-only; all library probes remain freestanding mini-libc executables.
+positioning, EOF reset, and ownership/error cleanup. Formatted-output coverage
+locks the supported conversion/length/flag/width/precision matrix, signed minima,
+zero-precision integer edge cases, malformed-format rejection, formatter write
+failure propagation, and both `printf` and `fprintf` variadic register-to-stack
+transitions. The `strtok` probe covers leading delimiter runs, delimiter changes
+between continuation calls, empty input and delimiter sets, end-of-stream,
+high-byte delimiters, sequence reset, errno preservation, and fixed-seed model
+comparison. The `strerror` probe locks the five exposed errno messages,
+deterministic unknown-code behavior, stable static storage across later calls,
+and errno preservation. The `ctype` probe checks `EOF` plus every value in the
+complete `unsigned char` domain and verifies that all implemented classification
+and conversion routines preserve an existing `errno` value. The `bsearch` probe
+also covers `qsort` zero/one-element no-comparator-call behavior, sorted/reverse/
+duplicate inputs, generic three-byte records, boundary sentinels, signed
+absolute-value boundary-adjacent representable values across `int`, `long`, and
+`long long`, `div`/`ldiv`/`lldiv` sign quadrants, quotient/remainder invariants,
+and errno preservation. Hosted differential executables compare production
+memory/string/conversion/search routines against host libc where the target
+contract is comparable, including a state-isolated `strtok` differential and
+10,000 fixed-seed sorted-array `bsearch` cases. The same hosted search test also
+runs 10,000 fixed-seed `qsort` ordering/multiset property cases against the
+production sorter. Test-only fake syscall/allocator harnesses deterministically
+verify allocator heap-growth refusal and the buffered stream state machine
+described above. Hosted oracles are test-only; all library probes remain
+freestanding mini-libc executables.
 
 `make inspect` rejects a `PT_INTERP`, dynamic `NEEDED` entries, or unresolved
 symbols in every freestanding milestone executable, including all library
@@ -338,9 +366,13 @@ compile/link/runtime path, so cross-repository integration is an executable gate
 rather than a future roadmap claim. The integration program creates `0123456789`
 with buffered `fwrite`, seeks from the end, overwrites bytes with `XY`, rewinds
 and reads back `012345XY89` with `fread`, then seeks again after EOF. Its final
-status text is written through buffered `stdout`, so successful shell capture
-also proves normal-exit flushing in both linker paths. The harness independently
-verifies the final file contents.
+status line is produced by `printf` with signed/unsigned/hexadecimal and
+`long long` arguments plus enough trailing integer arguments to cross the SysV
+variadic GP-register boundary into overflow-stack arguments. Successful shell
+capture therefore proves the `tiny-c-compiler` variadic caller, the mini-libc
+assembly entry shim, the compiler-neutral formatter, buffered normal-exit flush,
+and both GNU `ld` and `mini-elf-toolchain` link/runtime paths in one executable
+gate. The harness independently verifies the final file contents.
 
 ## Layout
 
@@ -352,7 +384,7 @@ src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
 src/stdlib/          conversion, search, sorting, arithmetic, allocation, and environment utilities
-src/stdio/           inherited/owned streams, buffered output, block I/O, positioning
+src/stdio/           inherited/owned streams, buffered/formatted output, block I/O, positioning
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -371,26 +403,30 @@ declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
 `lldiv_t` result types; `stdio.h` provides opaque `FILE`, `stdin`, `stdout`,
 `stderr`, `fopen`, `fclose`, `fflush`, `fread`, `fwrite`, `fseek`, `ftell`,
 `rewind`, `fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`,
-`puts`, `feof`, `ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`, `SEEK_END`, and
-`EOF`; and `errno.h` currently provides the errno lvalue contract plus `ENOENT`,
-`EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+`puts`, `printf`, `fprintf`, `feof`, `ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`,
+`SEEK_END`, and `EOF`; and `errno.h` currently provides the errno lvalue contract
+plus `ENOENT`, `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
-contract, normal-termination ordering, buffered stream state/lifecycle, block
-I/O and positioning model, allocator ownership rules, cross-toolchain bootstrap
-boundary, and current errno storage limitation.
+contract, normal-termination ordering, buffered stream state/lifecycle,
+formatted-output call boundary, block I/O and positioning model, allocator
+ownership rules, cross-toolchain bootstrap boundary, and current errno storage
+limitation.
 
 ## Next
 
-The buffered-output lifecycle is now the executable baseline rather than the
-roadmap target. The next architectural frontier should add a **formatted output
-engine** on top of the same FILE/output-buffer core: a shared `vfprintf`-style
-format parser and variadic argument path, then `fprintf`/`printf` wrappers,
-starting with deterministic character/string and integer formatting before
-floating-point formatting. The pinned `tiny-c-compiler` already has executable
-SysV AMD64 variadic caller/callee coverage, so this frontier can remain part of
-the same cross-toolchain gate rather than becoming a host-compiler-only feature.
-Input buffering/pushback, `setvbuf`, `tmpfile`, C11 exclusive-create modes,
-threading/TLS, locale expansion, `strtoull`, floating-point formatting, and
-allocator tuning remain separate follow-on slices rather than being mixed into
-the first formatting milestone.
+The formatted-output phase is now the executable baseline rather than the
+roadmap target: byte and block output, buffering/flush lifecycle, positioning,
+normal-exit integration, integer/string formatting, and cross-toolchain SysV
+variadic calling have one shared executable path. The next architectural frontier
+is **buffered input plus pushback/read-line state**. A coherent first slice should
+add private read-buffer state to `FILE`, make `fgetc`/`getc`/`getchar` and `fread`
+consume the same read core, guarantee at least one byte of `ungetc` pushback, add
+`fgets`, and define logical-position/update-stream behavior when unread buffered
+bytes or pushed-back input exist. EOF/error/`clearerr` and `fseek`/`rewind`
+transitions must stay deterministic under that state machine.
+
+`setvbuf`, formatted input, `tmpfile`, C11 exclusive-create modes, threading/TLS,
+locale expansion, `strtoull`, floating-point formatting, `%p`/`%n`, public
+`stdarg.h`/`vfprintf`, memory formatting, and allocator tuning remain separate
+follow-on slices rather than being mixed into the input-buffering milestone.
