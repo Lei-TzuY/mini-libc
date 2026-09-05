@@ -12,6 +12,7 @@
 #define MINI_O_CREAT 64
 #define MINI_O_TRUNC 512
 #define MINI_O_APPEND 1024
+#define MINI_O_TMPFILE 4259840
 
 static int parse_open_mode(const char *mode, int *flags,
                            unsigned int *stream_mode)
@@ -210,7 +211,6 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
 
 FILE *tmpfile(void)
 {
-    static const char name[] = "mini-libc-tmpfile";
     FILE *stream;
     long result;
 
@@ -219,7 +219,8 @@ FILE *tmpfile(void)
         return (FILE *)0;
     }
 
-    result = mini_sys_memfd_create(name, 0U);
+    result = mini_sys_openat(MINI_AT_FDCWD, "/tmp",
+                             MINI_O_RDWR | MINI_O_TMPFILE, 0600U);
     if (result < 0) {
         int error = (int)-result;
 
