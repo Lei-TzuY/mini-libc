@@ -104,8 +104,11 @@ surface, and the pinned mini-elf linker exposes no x86-64 TLS relocations or
 `PT_TLS` handling. mini-libc therefore does not fake TLS-backed `errno` or other
 thread-safety claims.
 
-The next independent architectural frontier should be selected from runtime
-subsystems that remain executable with the current toolchains. A signal/runtime
-control baseline is a stronger candidate than adding small time wrappers; calendar
-conversion should only be promoted when its object-lifetime, timezone, and locale
-contracts can be stated and tested without pretending unavailable TLS support.
+The previously identified signal/runtime-control frontier is now implemented by
+the independent signal baseline documented in `docs/signal-runtime.md`. That
+milestone also establishes the kernel mechanism needed for a higher-level C
+runtime lifecycle frontier: `abort()` plus C11 `at_quick_exit`/`quick_exit`, with
+explicit separation between abnormal termination, quick-exit callbacks, normal
+`atexit` callbacks, and stdio flushing. Calendar conversion remains independent
+future work and should still state its static-storage, timezone, and locale
+contracts without pretending unavailable TLS support.
