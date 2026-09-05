@@ -219,6 +219,9 @@ static int parse_spec(const char **cursor, struct mini_format_spec *spec,
         if (width < 0) {
             spec->left = 1;
             spec->width = negative_int_width(width);
+            if (spec->width > MINI_PRINTF_INT_MAX) {
+                return 0;
+            }
         } else {
             spec->width = (unsigned int)width;
         }
