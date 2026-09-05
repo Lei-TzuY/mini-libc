@@ -1,6 +1,8 @@
 #ifndef MINI_LIBC_THREADS_H
 #define MINI_LIBC_THREADS_H
 
+#include <time.h>
+
 typedef unsigned long thrd_t;
 typedef int (*thrd_start_t)(void *);
 
@@ -29,6 +31,7 @@ int thrd_detach(thrd_t thr);
 int thrd_join(thrd_t thr, int *res);
 thrd_t thrd_current(void);
 int thrd_equal(thrd_t lhs, thrd_t rhs);
+int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 _Noreturn void thrd_exit(int res);
 
 int mtx_init(mtx_t *mtx, int type);
@@ -41,6 +44,8 @@ int cnd_init(cnd_t *cond);
 int cnd_signal(cnd_t *cond);
 int cnd_broadcast(cnd_t *cond);
 int cnd_wait(cnd_t *cond, mtx_t *mtx);
+int cnd_timedwait(cnd_t *restrict cond, mtx_t *restrict mtx,
+                  const struct timespec *restrict time_point);
 void cnd_destroy(cnd_t *cond);
 
 #endif

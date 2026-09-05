@@ -15,6 +15,7 @@ long mini_sys_read(int fd, void *buf, unsigned long count);
 long mini_sys_write(int fd, const void *buf, unsigned long count);
 long mini_sys_close(int fd);
 long mini_sys_lseek(int fd, long offset, int whence);
+long mini_sys_nanosleep(const void *request, void *remaining);
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,
                            unsigned long sigsetsize);
 long mini_sys_getpid(void);

@@ -4,9 +4,14 @@
 
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
+#define MINI_FUTEX_WAIT_BITSET 9
+#define MINI_FUTEX_CLOCK_REALTIME 256
+#define MINI_FUTEX_BITSET_MATCH_ANY (-1)
 #define MINI_RAW_EINTR (-4L)
 #define MINI_RAW_EAGAIN (-11L)
+#define MINI_RAW_ETIMEDOUT (-110L)
 #define MINI_WAKE_ALL 0x7fffffff
+#define MINI_NSEC_PER_SEC 1000000000L
 
 extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
 extern int __mini_atomic_fetch_add_int(volatile int *value, int increment);
@@ -14,6 +19,13 @@ extern int __mini_atomic_fetch_add_int(volatile int *value, int increment);
 static int raw_failed(long value)
 {
     return value < 0L && value >= -4095L;
+}
+
+static int valid_time_point(const struct timespec *time_point)
+{
+    return time_point != (const struct timespec *)0 &&
+           time_point->tv_nsec >= 0L &&
+           time_point->tv_nsec < MINI_NSEC_PER_SEC;
 }
 
 int cnd_init(cnd_t *cond)
@@ -56,14 +68,16 @@ int cnd_broadcast(cnd_t *cond)
     return wake_waiters(cond, MINI_WAKE_ALL);
 }
 
-int cnd_wait(cnd_t *cond, mtx_t *mtx)
+static int wait_common(cnd_t *cond, mtx_t *mtx,
+                       const struct timespec *time_point, int timed)
 {
     int saved_errno = errno;
     int expected;
     int wait_status = thrd_success;
     int lock_status;
 
-    if (cond == (cnd_t *)0 || mtx == (mtx_t *)0) {
+    if (cond == (cnd_t *)0 || mtx == (mtx_t *)0 ||
+        (timed && !valid_time_point(time_point))) {
         errno = saved_errno;
         return thrd_error;
     }
@@ -75,27 +89,52 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx)
         return thrd_error;
     }
 
-    for (;;) {
-        long result = mini_sys_futex((volatile int *)&cond->__sequence,
-                                     MINI_FUTEX_WAIT, expected,
-                                     (const void *)0, (volatile int *)0, 0);
+    if (timed && time_point->tv_sec < 0) {
+        wait_status = thrd_timedout;
+    } else {
+        for (;;) {
+            int op = timed ? MINI_FUTEX_WAIT_BITSET |
+                                 MINI_FUTEX_CLOCK_REALTIME
+                           : MINI_FUTEX_WAIT;
+            const void *timeout = timed ? (const void *)time_point
+                                        : (const void *)0;
+            int bitset = timed ? MINI_FUTEX_BITSET_MATCH_ANY : 0;
+            long result = mini_sys_futex(
+                (volatile int *)&cond->__sequence, op, expected, timeout,
+                (volatile int *)0, bitset);
 
-        if (!raw_failed(result) || result == MINI_RAW_EAGAIN) {
+            if (!raw_failed(result) || result == MINI_RAW_EAGAIN) {
+                break;
+            }
+            if (result == MINI_RAW_EINTR) {
+                continue;
+            }
+            if (timed && result == MINI_RAW_ETIMEDOUT) {
+                wait_status = thrd_timedout;
+            } else {
+                wait_status = thrd_error;
+            }
             break;
         }
-        if (result == MINI_RAW_EINTR) {
-            continue;
-        }
-        wait_status = thrd_error;
-        break;
     }
 
     lock_status = mtx_lock(mtx);
     errno = saved_errno;
-    if (wait_status != thrd_success || lock_status != thrd_success) {
+    if (lock_status != thrd_success) {
         return thrd_error;
     }
-    return thrd_success;
+    return wait_status;
+}
+
+int cnd_wait(cnd_t *cond, mtx_t *mtx)
+{
+    return wait_common(cond, mtx, (const struct timespec *)0, 0);
+}
+
+int cnd_timedwait(cnd_t *restrict cond, mtx_t *restrict mtx,
+                  const struct timespec *restrict time_point)
+{
+    return wait_common(cond, mtx, time_point, 1);
 }
 
 void cnd_destroy(cnd_t *cond)
