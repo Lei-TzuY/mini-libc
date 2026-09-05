@@ -6,7 +6,7 @@
 int main(int argc, char **argv, char **envp)
 {
     static const char expected_output[] =
-        "tiny-c-integration-ok:+00007:0x2a:-5000000000\n";
+        "tiny-c-integration-ok:+00007:0x2a:-5000000000:11:22:33\n";
     char *end;
     char *value;
     char *io_path;
@@ -90,8 +90,8 @@ int main(int argc, char **argv, char **envp)
         return 12;
     }
 
-    formatted = printf("%s:%+06d:%#x:%lld\n",
-                       buffer, 7, 0x2aU, -5000000000LL);
+    formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
+                       buffer, 7, 0x2aU, -5000000000LL, 11U, 22U, 33U);
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
