@@ -21,11 +21,34 @@ int vsnprintf(char *restrict s, size_t n,
               const char *restrict format, va_list ap);
 ```
 
-All six entry points share the same executable conversion surface: `%d`, `%i`,
-`%u`, `%o`, `%x`, `%X`, `%c`, `%s`, and `%%`; `-`, `+`, space, `#`, and `0`
-flags; fixed or `*` width; fixed or `*` precision; and `hh`, `h`, `l`, and `ll`
-integer length modifiers. Existing deterministic invalid-format and return-count
-overflow behavior remains unchanged.
+All six entry points share the same executable conversion engine. Integer/string
+formatting supports `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, and `%%`;
+`-`, `+`, space, `#`, and `0` flags; fixed or `*` width; fixed or `*` precision;
+and `hh`, `h`, `l`, and `ll` integer length modifiers.
+
+The first floating-output slice adds lowercase `%f` to that same engine. It is a
+deliberately bounded fixed-point implementation rather than a claim of complete
+C floating formatting:
+
+- the argument is binary64 `double`; an `l` modifier is accepted with the same
+  meaning as `%f`, while `L`/`long double` is not implemented;
+- omitted precision means six digits after the decimal point;
+- explicit precision from 0 through 9 is supported, including `*` precision;
+- `-`, `+`, space, `#`, `0`, fixed width, and `*` width use the shared formatter
+  padding/sign rules;
+- `#` keeps the decimal point when precision is zero;
+- the binary64 sign bit is preserved for negative zero;
+- infinities and NaNs are recognized from their IEEE-754 representation and
+  emitted as lowercase `inf` and `nan` tokens;
+- finite values must satisfy `abs(value) < 2^64`; larger finite magnitudes are
+  rejected with the existing deterministic `EOF`/`EINVAL` policy;
+- precision above 9 is likewise rejected instead of silently pretending that a
+  general-purpose dtoa implementation exists.
+
+The fixed conversion rounds the retained decimal fraction to nearest with ties
+to even. The executable contract includes both `2.5 -> 2` and `3.5 -> 4` at zero
+precision. `%e`, `%E`, `%g`, `%G`, `%a`, `%A`, locale-dependent formatting, and
+long-double formatting remain outside this phase.
 
 ## Sink model
 
@@ -55,56 +78,71 @@ silently wrapping the return count.
 
 ## Variadic call boundary
 
-The ordinary variadic entries remain small SysV AMD64 assembly shims that capture
-INTEGER-class variadic values into the private formatter cursor:
+The private formatter cursor now carries two independent register lanes plus one
+shared overflow-stack cursor:
 
-- `printf(format, ...)` captures `rsi`, `rdx`, `rcx`, `r8`, and `r9`, then the
-  overflow-stack cursor;
-- `fprintf(stream, format, ...)` captures `rdx`, `rcx`, `r8`, and `r9`, then the
-  overflow-stack cursor;
-- `snprintf(s, n, format, ...)` captures `rcx`, `r8`, and `r9`, then the
-  overflow-stack cursor.
+- up to five remaining INTEGER-class 8-byte GP words;
+- up to eight floating 8-byte `double` payloads corresponding to XMM0-XMM7;
+- one overflow pointer consumed in source argument order once a class exhausts
+  its register allocation.
 
-The public `v*` entries consume the SysV `va_list` state instead. They copy the
-remaining GP words from `reg_save_area + gp_offset` into the same private cursor
-and forward `overflow_arg_area` unchanged before entering the existing formatter.
-The parser and sink layers therefore do not know whether their arguments came
-from an ordinary `...` entry or a caller-created `va_list`.
+Ordinary `printf`, `fprintf`, and `snprintf` entry shims retain the GP captures
+used by the integer formatter and additionally save the low binary64 payload from
+XMM0-XMM7. Under the SysV AMD64 variadic calling convention, `%al` tells the
+callee how many vector argument registers were used; the shim clamps that count
+to eight and records it in the private cursor. The first stack argument remains
+available through the same overflow cursor.
 
-The exact `<stdarg.h>` layout, scoped compiler-primitive policy, `va_copy`
-contract, and GP-register/overflow-stack evidence are specified in
+The public `v*` entries normalize the caller's SysV `va_list`. GP values still
+come from `reg_save_area + gp_offset`. Floating values come from
+`reg_save_area + fp_offset` while `fp_offset < 176`, advancing by the SysV
+16-byte save slot for each XMM argument. The adapter compacts each slot's low
+binary64 payload into the private floating lane and forwards
+`overflow_arg_area` unchanged. The parser and sink therefore do not know whether
+an argument originated in ordinary `...`, a public `va_list`, a GP register, an
+XMM register, or the overflow stack.
+
+The exact public `va_list` layout and compiler-primitive policy are documented in
 `docs/variadic-abi.md`.
 
 ## Executable evidence
 
-The freestanding stdio probe covers full-buffer memory formatting, five-argument
-register/stack traversal, truncation with guard bytes beyond the declared bound,
-`n == 1`, `n == 0`, `snprintf(NULL, 0, ...)`, null-with-positive-size rejection,
-errno preservation, and successful memory formatting after stdout's underlying
-file descriptor has been closed. It additionally compiles caller-defined
-variadic wrappers and exercises `vprintf`, `vfprintf`, `vsnprintf`, `va_arg`, and
-`va_copy` across GP-register and overflow-stack boundaries.
+The freestanding stdio probe retains all integer/string formatting regressions
+and adds floating evidence across memory and FILE sinks. It verifies default and
+explicit fixed precision, `l`, sign/space/alternate/zero/left flags, dynamic
+width and precision, negative zero, infinities, NaN, nearest-even half cases,
+precision rejection, and the bounded finite-magnitude contract.
 
-The pinned tiny-c integration executes complete and truncated memory formatting,
-caller-created `va_list` state, all three output-side `v*` APIs, and the same
-binary through GNU `ld` and the pinned `mini-elf-toolchain`. Repository CI also
-compiles production C with GCC and Clang, runs the normal runtime/probe suite,
-and verifies host-libc independence.
+Ordinary `snprintf` receives nine `double` values in one call, forcing the ninth
+floating argument past XMM0-XMM7 onto the overflow stack. A caller-defined
+variadic wrapper repeats the same nine-value path through `vsnprintf` and public
+`va_list` state. Redirected FILE tests execute floating `printf`, `vprintf`, and
+a nine-double `vfprintf` path and read the exact bytes back through mini-libc.
+
+The pinned tiny-c integration independently compiles both an ordinary nine-double
+`snprintf` call and a caller-created `va_list` nine-double `vsnprintf` call, then
+produces the final status line through floating `vprintf`. The same executable is
+linked and run through GNU `ld` and the pinned `mini-elf-toolchain`. GCC and
+Clang run the complete freestanding/runtime suite and host-libc-independence
+inspection.
 
 ## Phase boundary and next frontier
 
-Memory-backed formatted output and the **output side of the public variadic
-core** are now executable baseline capabilities. FILE and bounded-memory output
-share one parser/conversion engine, while ordinary variadic calls and public
-`va_list` calls converge on the same private argument cursor.
+The formatter now has an executable **GP + floating SysV variadic baseline**:
+ordinary variadic calls and public `va_list` calls share one argument cursor,
+one parser/conversion engine, and the same FILE/memory sinks. Lowercase bounded
+`%f` proves that floating transport is consumed by real formatting behavior,
+not merely captured by an unused ABI shim.
 
-The next higher-value architectural frontier is the **input-side public variadic
-core**: expose `vscanf`, `vfscanf`, and `vsscanf`, normalize the public SysV
-`va_list` representation into the existing scanner destination cursor, and keep
-FILE/memory source handling and matching/input-failure semantics unchanged. It
-must retain GCC/Clang/tiny-c compiler coverage and pinned mini-elf execution
-without forking the scanner parser.
+The next higher-value architectural frontier is **floating formatted input**.
+A coherent slice should add decimal floating lexical/conversion support to the
+shared scanner source model, define `%f`/`%lf` destination semantics without
+forking FILE and string scanners, and evaluate whether the conversion core can
+also back a public `strtod` surface. It must preserve matching-vs-input-failure,
+one-byte rollback, errno/range behavior, GCC/Clang/tiny-c coverage, and pinned
+mini-elf execution.
 
-Floating-point formatting/scanning, `%n`, wide-character I/O, locale-sensitive
-behavior, configurable buffering, `tmpfile`, threading/TLS, and C11
-exclusive-create modes remain separate later phases.
+Further output breadth (`%e`/`%g`/`%a` families), `%n`, pointer formatting,
+wide-character I/O, locale-sensitive behavior, configurable buffering,
+`tmpfile`, threading/TLS, and C11 exclusive-create modes remain separate later
+phases.
