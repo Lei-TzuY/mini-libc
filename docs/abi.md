@@ -33,18 +33,18 @@ Normal termination happens either when `main` returns or when code calls
 `exit(status)`. Registered callbacks are removed from the registry immediately
 before they are invoked, so callbacks run in reverse registration order and a
 callback registered by a callback during termination remains eligible for the
-same termination sequence. After the registry is drained, `exit` delegates to
-`_Exit(status)`.
+same termination sequence. After the callback registry is drained, `exit`
+flushes every live writable stream through the private stdio registry and then
+delegates to `_Exit(status)`. A stream write performed by an `atexit` callback is
+therefore eligible for that final flush.
 
-`_Exit(status)` bypasses the callback registry and calls raw `mini_sys_exit`
-directly. It therefore provides the immediate-termination path required when no
-normal-exit callbacks should run. mini-libc has inherited and dynamically owned
-unbuffered `FILE` streams, including block transfer and positioning. Owned
-streams can be explicitly disassociated with `fclose`, but there is no
-process-global open-stream registry, buffered stream state, or `tmpfile` object
-yet, so `exit` does not perform a user-space stream sweep. The kernel still
-closes descriptors remaining open when the process terminates. Future buffering
-must extend normal termination rather than bypassing this callback boundary.
+`_Exit(status)` bypasses both the callback registry and stdio flushing and calls
+raw `mini_sys_exit` directly. mini-libc now has inherited and dynamically owned
+`FILE` streams with fixed-size buffered output, block transfer, and positioning.
+`fclose` unregisters streams before owned storage is released, so normal exit
+only visits still-live streams. There is no `tmpfile` object or pathname cleanup
+phase yet. The kernel still closes descriptors remaining open when the process
+terminates.
 
 ## Function ABI
 
@@ -108,35 +108,45 @@ replacement allocation cannot be obtained. Successful allocation/resizing calls
 do not clear an existing errno value. Raw `mini_sys_*` calls remain separate
 from this libc error contract.
 
-The stdio stream layer maps a negative raw `read` or `write` result to the
-corresponding positive libc `errno` value and sets that stream's error indicator.
-A zero-progress write while bytes remain is treated as `EIO` to prevent an
-unbounded retry loop. Calling an input operation on a write-only stream or an
-output operation on a read-only stream is rejected with `EINVAL` and sets the
-stream error indicator. A true end-of-file read is not an error: it sets only
-the EOF indicator and leaves an existing `errno` unchanged. Successful stream
-operations also leave an existing `errno` value unchanged.
+The stdio stream layer maps negative raw I/O results to positive libc `errno`
+values and sets the affected stream's error indicator. A zero-progress write
+while bytes remain is treated as `EIO` so a flush cannot spin forever. Calling an
+input operation on a write-only stream or an output operation on a read-only
+stream is rejected with `EINVAL` and sets the stream error indicator. A true
+end-of-file read is not an error: it sets only the EOF indicator and leaves an
+existing `errno` unchanged. Successful stream operations and successful flushes
+preserve an existing `errno` value.
 
 `fread` and `fwrite` reject an unrepresentable `size * nmemb` request with
-`EINVAL`, set the stream error indicator, and perform no raw transfer. This is a
+`EINVAL`, set the stream error indicator, and perform no transfer. This is a
 deterministic defensive mini-libc extension rather than a portability claim
-about arbitrary oversized caller objects. Positive short raw transfers are
-retried. Transfer failures return only the number of complete elements; bytes
-from a partially transferred final element remain observable but do not
+about arbitrary oversized caller objects. `fread` retries positive short raw
+reads; buffered output retries positive short raw writes when a flush occurs.
+Input transfer failures return only the number of complete elements; bytes from
+a partially transferred final input element remain observable but do not
 increment the return count.
 
+A flush failure retains the unwritten suffix in the stream's private buffer. If
+part of the buffer was written before the failure, those bytes are removed from
+the pending prefix so a later retry does not duplicate them. `fflush(NULL)`
+attempts all live writable streams and reports the first observed flush error
+after continuing the registry walk.
+
 `fseek` maps invalid stream/origin arguments to `EINVAL`; a raw seek failure maps
-its negative kernel result to positive `errno`. `ftell` reports the same way and
-returns `-1L` on failure. `rewind` returns `void`, clears the stream EOF/error
-indicators, and reports an underlying seek failure through `errno`.
+its negative kernel result to positive `errno`. Pending output must flush
+successfully before a seek is issued. `ftell` reports raw seek errors the same way
+and returns `-1L` on failure. `rewind` returns `void`, uses the synchronized seek
+path, clears the stream EOF/error indicators, and leaves an underlying flush or
+seek failure observable through `errno`.
 
 `fopen` rejects a null filename or unsupported mode with `EINVAL` before issuing
 `openat`. A pathname failure maps the negative raw `openat` result to positive
 libc `errno`; for example, a missing read target reports `ENOENT`. If allocating
 the private `FILE` object fails, allocator `ENOMEM` is preserved and no open
-syscall is issued. `fclose` maps a raw close failure to positive `errno` and
-returns `EOF`; an owned stream object is released even when close reports an
-error.
+syscall is issued. `fclose` attempts pending-output flush before raw close, but it
+still closes, unregisters, and releases owned stream state if flushing fails. If
+both flush and close fail, the earlier flush error is retained as the reported
+`errno`.
 
 The current errno storage is suitable for the single-threaded runtime milestone
 only. Future threading/TLS work must preserve the `errno` lvalue contract while
@@ -167,6 +177,10 @@ and `stderr` expressions. Their public names resolve to implementation-reserved
 `FILE *` objects, keeping the concrete stream layout out of the source-level ABI.
 The three inherited objects are process-global and bind directly to Linux
 descriptors 0, 1, and 2. `stdin` is readable; `stdout` and `stderr` are writable.
+The private representation includes mode/state flags, a live-stream link, and a
+fixed 256-byte output buffer. `stdout` and pathname-backed writable streams use
+that buffer. `stderr` remains unbuffered. Input remains unbuffered in this
+milestone.
 
 `fgetc`, `getc`, and `getchar` read one byte through raw `mini_sys_read`. A
 successful byte is returned as `unsigned char` converted to `int`. A raw zero
@@ -175,34 +189,45 @@ is sticky and later reads return `EOF` without issuing another syscall until
 `clearerr` or a successful positioning operation clears it. A negative raw
 result sets the error indicator, updates `errno`, and returns `EOF`.
 
-`fputc` and `putc` write the `unsigned char` conversion of their argument to the
-selected stream. `putchar` is the `stdout` specialization. `fputs` writes all
-bytes before the source terminator without appending anything; `puts` writes the
-string to `stdout` and then appends one newline. Output retries positive short
-writes until the requested bytes are consumed. A negative raw return sets the
-stream error indicator and `errno`; a zero-progress write sets `EIO` so output
-cannot spin forever. Successful output returns a nonnegative result and does not
-clear an already-set error indicator.
+`fputc`, `putc`, `putchar`, `fputs`, `puts`, and `fwrite` share the same output
+path. Buffered streams first copy output into their private buffer and flush when
+additional data requires space or an explicit lifecycle boundary requests it.
+Unbuffered `stderr` writes through the raw syscall loop immediately. Raw flushes
+retry positive short writes. A negative raw return sets the stream error
+indicator and `errno`; a zero-progress write sets `EIO`. A partial failing flush
+retains only the bytes that have not yet reached the kernel.
 
-`fread(ptr, size, nmemb, stream)` and `fwrite` perform unbuffered block transfer
-on the same stream descriptor. If either `size` or `nmemb` is zero, they return
-zero without issuing a syscall. For a nonzero request, checked multiplication
-forms the requested byte count. Positive short raw reads and writes are retried
-until the request completes or a terminal condition occurs. Both functions
-return the number of complete `size`-byte elements transferred. If EOF or an
-error arrives after some bytes of the next element were transferred, those bytes
-remain in the caller's object but that incomplete element is not counted.
+`fread(ptr, size, nmemb, stream)` performs unbuffered block input. If either
+`size` or `nmemb` is zero, it returns zero without issuing a syscall. For a
+nonzero request, checked multiplication forms the requested byte count. Positive
+short reads are retried until the request completes or a terminal condition
+occurs. The function returns the number of complete `size`-byte elements read.
+If EOF or an error arrives after some bytes of the next element were transferred,
+those bytes remain in the caller's object but that incomplete element is not
+counted.
 
-A zero raw read marks EOF and is not itself an error. A negative raw read marks
-the stream error indicator and publishes the corresponding `errno`. A negative
-raw write does the same; a zero-progress write while bytes remain is converted
-to `EIO` so the loop cannot stall indefinitely. Wrong-direction block operations
-are rejected with `EINVAL` and set the stream error indicator. The implementation
-is deliberately unbuffered, so these routines do not maintain a hidden data
-cache or pending output queue.
+`fwrite` checks the same size product but hands the resulting bytes to the shared
+output core. Its return count is based on complete elements accepted before any
+buffer-full flush failure prevents further acceptance. A zero raw write while a
+flush still has pending bytes is converted to `EIO`.
+
+`fflush(stream)` publishes pending output for one writable stream. A successful
+flush clears the update-stream write-to-read synchronization barrier and leaves
+`errno` unchanged. `fflush(NULL)` traverses the private process-global live-stream
+registry and attempts every writable stream; it continues after failures and
+returns `EOF` with the first error if any flush fails. Calling `fflush` on a live
+read-only stream is a deterministic no-op extension in the current milestone.
+
+Update streams track direction transitions explicitly. A write must be followed
+by `fflush` or a successful positioning operation before input is accepted. A
+non-EOF read must be followed by successful positioning before output is
+accepted. Encountering EOF clears the read-to-write positioning requirement, so
+output may follow that EOF directly. `clearerr` clears only the public EOF/error
+indicators; it does not bypass a still-active direction barrier.
 
 `feof` and `ferror` expose the sticky EOF/error indicators. `clearerr` clears both
-without changing descriptor binding or stream mode.
+without changing descriptor binding, stream mode, pending output, or update-
+stream synchronization state.
 
 `fopen` creates pathname-backed owned streams while reusing the same private
 `FILE` representation. Mode strings currently support `r`, `w`, and `a`, with
@@ -217,33 +242,38 @@ does not implement C11 exclusive-create `x` modes.
 Before opening, `fopen` allocates private stream state through mini-libc `malloc`.
 The pathname is then opened with `mini_sys_openat(AT_FDCWD, ...)`. If the open
 fails, the temporary object is freed before the raw error is published through
-`errno`. A successful owned stream stores the returned descriptor and explicit
-read/write capability bits. `fclose` calls raw `mini_sys_close`; owned streams
-free their private object whether close succeeds or fails. The predefined
-inherited streams are not heap-owned; if explicitly closed they are invalidated
-in place rather than freed.
+`errno`. A successful owned stream stores its descriptor/capability flags and is
+inserted into the live-stream registry only after both allocation and open
+succeed. `fclose` attempts buffered output flush, then raw close, removes the
+stream from the registry, and frees owned state. The predefined inherited streams
+are not heap-owned; if explicitly closed they are invalidated in place and also
+removed from the registry.
 
 `SEEK_SET`, `SEEK_CUR`, and `SEEK_END` are the public origin values 0, 1, and 2
 and map directly to raw Linux `lseek`. `fseek` accepts any live readable or
-writable stream and delegates the requested offset/origin to `mini_sys_lseek`.
-On success it clears EOF but preserves an existing stream error indicator. On
-failure it leaves both indicators unchanged and reports the raw error through
-`errno`. Because this runtime is fixed to x86-64 Linux LP64, the public `long`
-offset used by `fseek`/`ftell` matches the raw 64-bit seek boundary for this
-target; this is not a cross-platform large-file portability claim.
+writable stream, first flushes pending output if the stream is writable, and only
+then delegates the requested offset/origin to `mini_sys_lseek`. If the flush
+fails, no seek occurs. On successful seek it clears EOF and both update-stream
+direction barriers while preserving an existing stream error indicator. Because
+this runtime is fixed to x86-64 Linux LP64, the public `long` offset used by
+`fseek`/`ftell` matches the raw 64-bit seek boundary for this target; this is not
+a cross-platform large-file portability claim.
 
-`ftell` queries the current offset through `mini_sys_lseek(fd, 0, SEEK_CUR)`.
-A seek failure returns `-1L` and updates `errno` without setting the stream error
-indicator. `rewind` clears EOF and error indicators and attempts
-`mini_sys_lseek(fd, 0, SEEK_SET)`. Since `rewind` has no return value, a raw seek
-failure is surfaced through `errno`; the indicators remain cleared. There is no
-buffer synchronization step because this milestone has no user-space buffering.
+`ftell` queries the current kernel offset through
+`mini_sys_lseek(fd, 0, SEEK_CUR)` and adds pending buffered output bytes so a
+caller observes the logical stream position before an ordinary flush occurs.
+Append mode is a special case: with pending output, `ftell` first flushes and then
+queries the kernel offset because `O_APPEND` determines the actual write location
+at write time. A raw seek failure returns `-1L` and updates `errno` without
+setting the stream error indicator. `rewind` reuses `fseek(stream, 0, SEEK_SET)`
+for synchronization, then clears EOF and error indicators; because it returns
+`void`, a flush or seek failure remains observable through `errno`.
 
-The stream layer remains single-threaded. There is no `fflush`, user-space
-buffering, formatted I/O, `fgetpos`/`fsetpos`, `tmpfile`, locking, or automatic
-registry of owned streams yet. Future buffering must extend this object and
-positioning boundary, including explicit buffer ownership and flush behavior,
-rather than reintroducing descriptor-specific paths.
+The stream layer is single-threaded and the output buffer size is intentionally
+fixed for this milestone. There is no input buffering, `setvbuf`, formatted I/O,
+`fgetpos`/`fsetpos`, `tmpfile`, locking, or C11 exclusive-create `x` mode yet.
+Future stdio work must extend this FILE state machine and live-stream lifecycle
+rather than creating descriptor-specific side paths.
 
 ## Allocator ABI and ownership
 
@@ -294,7 +324,9 @@ static linker as bootstrap tools. CI additionally pins `tiny-c-compiler` and
 proves that it can compile every production C source, then pins
 `mini-elf-toolchain` and proves that the resulting mini-libc objects can be
 linked and executed without the host libc. The pinned integration executable
-creates data through `fwrite`, uses `fseek`/`ftell` to overwrite a positioned
-range, rewinds and reads it through `fread`, then seeks again after EOF. The
-harness independently verifies the final file bytes `012345XY89`. There is no
-dynamic loader or shared-library support yet.
+creates data through buffered `fwrite`, uses `fseek`/`ftell` to overwrite a
+positioned range, rewinds and reads it through `fread`, then seeks again after
+EOF. Its final status line is written through buffered `stdout`, so successful
+capture proves that normal `exit` flushed the live stream in both linker paths.
+The harness independently verifies the final file bytes `012345XY89`. There is
+no dynamic loader or shared-library support yet.
