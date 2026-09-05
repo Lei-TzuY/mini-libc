@@ -85,16 +85,21 @@ rm -f "$buffering_path"
 
 pathname_source="$OUT/pathname-source.tmp"
 pathname_target="$OUT/pathname-target.tmp"
+pathname_dir="$OUT/pathname-dir.tmp"
 rm -f "$pathname_source" "$pathname_target"
-pathname_output=$("$OUT/pathname" "$pathname_source" "$pathname_target")
+rmdir "$pathname_dir" 2>/dev/null || true
+mkdir "$pathname_dir"
+pathname_output=$("$OUT/pathname" "$pathname_source" "$pathname_target" "$pathname_dir")
 if [ "$pathname_output" != "tiny-pathname-ok" ]; then
     echo "unexpected tiny-c pathname output: $pathname_output" >&2
     rm -f "$pathname_source" "$pathname_target"
+    rmdir "$pathname_dir" 2>/dev/null || true
     exit 1
 fi
-if [ -e "$pathname_source" ] || [ -e "$pathname_target" ]; then
+if [ -e "$pathname_source" ] || [ -e "$pathname_target" ] || [ -e "$pathname_dir" ]; then
     echo "tiny-c pathname integration left filesystem state behind" >&2
     rm -f "$pathname_source" "$pathname_target"
+    rmdir "$pathname_dir" 2>/dev/null || true
     exit 1
 fi
 
