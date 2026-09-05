@@ -39,20 +39,22 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/ctype.o $(BUILD)/atoi.o $(BUILD)/strtol.o \
             $(BUILD)/strtoul.o $(BUILD)/bsearch.o $(BUILD)/allocator.o \
             $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o \
-            $(BUILD)/format.o $(BUILD)/format_entry.o $(BUILD)/file_stream.o \
-            $(BUILD)/block_io.o $(BUILD)/position.o $(BUILD)/errno.o
+            $(BUILD)/format.o $(BUILD)/format_entry.o $(BUILD)/scan.o \
+            $(BUILD)/scan_entry.o $(BUILD)/file_stream.o $(BUILD)/block_io.o \
+            $(BUILD)/position.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
             $(BUILD)/atoi_probe $(BUILD)/errno_probe $(BUILD)/strtol_probe \
             $(BUILD)/strtoul_probe $(BUILD)/allocator_probe $(BUILD)/calloc_probe \
             $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
-            $(BUILD)/file_stream_probe $(BUILD)/block_io_probe
+            $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
               $(BUILD)/strtoul_differential $(BUILD)/allocator_failure_test \
-              $(BUILD)/stdio_write_test $(BUILD)/stdio_block_test
+              $(BUILD)/stdio_write_test $(BUILD)/stdio_block_test \
+              $(BUILD)/stdio_scan_test
 
 .PHONY: all clean test inspect
 
@@ -113,6 +115,12 @@ $(BUILD)/format.o: src/stdio/format.c src/stdio/stdio_internal.h include/stdio.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/format_entry.o: src/stdio/format_entry.S | $(BUILD)
+	$(CC) $(ASFLAGS) -c $< -o $@
+
+$(BUILD)/scan.o: src/stdio/scan.c src/stdio/stdio_internal.h include/stdio.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/scan_entry.o: src/stdio/scan_entry.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
 $(BUILD)/file_stream.o: src/stdio/file.c src/stdio/stdio_internal.h include/stdio.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
@@ -229,6 +237,9 @@ $(BUILD)/file_stream_probe.o: tests/file_stream_probe.c include/mini/syscall.h i
 $(BUILD)/block_io_probe.o: tests/block_io_probe.c include/mini/syscall.h include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/scan_probe.o: tests/scan_probe.c include/mini/syscall.h include/stdio.h include/string.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/stdio_test_impl.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(STDIO_RENAMES) -c $< -o $@
 
@@ -241,10 +252,16 @@ $(BUILD)/block_io_test_impl.o: src/stdio/block.c src/stdio/stdio_internal.h incl
 $(BUILD)/position_test_impl.o: src/stdio/position.c src/stdio/stdio_internal.h include/stdio.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(POSITION_RENAMES) -c $< -o $@
 
+$(BUILD)/scan_test_impl.o: src/stdio/scan.c src/stdio/stdio_internal.h include/stdio.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/stdio_write_test.o: tests/stdio_write_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/stdio_block_test.o: tests/stdio_block_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/stdio_scan_test.o: tests/stdio_scan_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/allocator_test_impl.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h include/string.h | $(BUILD)
@@ -313,6 +330,9 @@ $(BUILD)/file_stream_probe: $(BUILD)/file_stream_probe.o $(CRT0) $(LIBC)
 $(BUILD)/block_io_probe: $(BUILD)/block_io_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/block_io_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/scan_probe: $(BUILD)/scan_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/scan_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
@@ -341,6 +361,9 @@ $(BUILD)/stdio_write_test: $(BUILD)/stdio_write_test.o $(BUILD)/stdio_test_impl.
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/stdio_block_test: $(BUILD)/stdio_block_test.o $(BUILD)/stdio_test_impl.o $(BUILD)/block_io_test_impl.o $(BUILD)/position_test_impl.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+$(BUILD)/stdio_scan_test: $(BUILD)/stdio_scan_test.o $(BUILD)/stdio_test_impl.o $(BUILD)/scan_test_impl.o $(BUILD)/scan_entry.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 test: all
