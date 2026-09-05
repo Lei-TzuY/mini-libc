@@ -156,6 +156,7 @@ int main(void)
 {
     unsigned char buffer[8];
     unsigned char large[260];
+    char line[8];
     size_t result;
     size_t i;
     long position;
@@ -177,8 +178,8 @@ int main(void)
     result = fread(buffer, 2, 3, stdin);
     if (result != 2 || !bytes_equal(buffer, "ABCDE", 5) ||
         buffer[5] != 0x7fU || !feof(stdin) || ferror(stdin) ||
-        errno != ERANGE || read_calls != 3 || read_requested[0] != 6 ||
-        read_requested[1] != 3 || read_requested[2] != 1) {
+        errno != ERANGE || read_calls != 3 || read_requested[0] != 256 ||
+        read_requested[1] != 256 || read_requested[2] != 256) {
         return 2;
     }
 
@@ -189,7 +190,7 @@ int main(void)
     result = fread(buffer, 2, 2, stdin);
     if (result != 1 || !bytes_equal(buffer, "AB", 2) ||
         !ferror(stdin) || feof(stdin) || errno != EIO || read_calls != 2 ||
-        read_requested[0] != 4 || read_requested[1] != 2) {
+        read_requested[0] != 256 || read_requested[1] != 256) {
         return 3;
     }
     clearerr(stdin);
@@ -404,6 +405,85 @@ int main(void)
     if (fseek((FILE *)0, 0L, SEEK_SET) == 0 || errno != EINVAL ||
         seek_calls != 0) {
         return 39;
+    }
+
+    reset_scripts();
+    push_read(0, 6, "ABCD\nE");
+    errno = ERANGE;
+    if (fgetc(stdin) != 'A' || read_calls != 1 || read_requested[0] != 256 ||
+        fread(buffer, 1, 2, stdin) != 2 || buffer[0] != 'B' || buffer[1] != 'C' ||
+        read_calls != 1 || ungetc('Z', stdin) != 'Z' || fgetc(stdin) != 'Z' ||
+        read_calls != 1) {
+        return 40;
+    }
+    if (fgets(line, (int)sizeof(line), stdin) != line || line[0] != 'D' ||
+        line[1] != '\n' || line[2] != '\0' || read_calls != 1 ||
+        fgetc(stdin) != 'E' || read_calls != 1) {
+        return 41;
+    }
+    push_read(0, 0, "");
+    if (fgetc(stdin) != EOF || !feof(stdin) || read_calls != 2 ||
+        fgetc(stdin) != EOF || read_calls != 2) {
+        return 42;
+    }
+    clearerr(stdin);
+
+    reset_scripts();
+    push_read(0, 4, "WXYZ");
+    if (fgetc(stdin) != 'W' || read_calls != 1) {
+        return 43;
+    }
+    push_seek(0, 0L, SEEK_CUR, 4L);
+    if (ftell(stdin) != 1L || seek_calls != 1) {
+        return 44;
+    }
+    if (ungetc('!', stdin) != '!' || feof(stdin)) {
+        return 45;
+    }
+    push_seek(0, 0L, SEEK_CUR, 4L);
+    if (ftell(stdin) != 0L || fgetc(stdin) != '!' || read_calls != 1) {
+        return 46;
+    }
+    push_seek(0, -1L, SEEK_CUR, 3L);
+    if (fseek(stdin, 2L, SEEK_CUR) != 0 || seek_calls != 3) {
+        return 47;
+    }
+    push_seek(0, 0L, SEEK_CUR, 3L);
+    if (ftell(stdin) != 3L || seek_calls != 4) {
+        return 48;
+    }
+
+    reset_scripts();
+    errno = ERANGE;
+    if (ungetc(EOF, stdin) != EOF || errno != ERANGE || ferror(stdin)) {
+        return 49;
+    }
+    if (ungetc('M', stdin) != 'M' || ungetc('N', stdin) != EOF ||
+        errno != EINVAL || !ferror(stdin)) {
+        return 50;
+    }
+    clearerr(stdin);
+    if (fgetc(stdin) != 'M' || read_calls != 0) {
+        return 51;
+    }
+
+    reset_scripts();
+    line[0] = 'X';
+    errno = ERANGE;
+    if (fgets(line, 1, stdin) != line || line[0] != '\0' ||
+        errno != ERANGE || read_calls != 0) {
+        return 52;
+    }
+    if (fgets(line, 0, stdin) != (char *)0 || errno != EINVAL ||
+        !ferror(stdin) || read_calls != 0) {
+        return 53;
+    }
+    clearerr(stdin);
+    push_read(0, -EIO, "");
+    errno = ERANGE;
+    if (fgets(line, (int)sizeof(line), stdin) != (char *)0 || errno != EIO ||
+        !ferror(stdin) || read_calls != 1) {
+        return 54;
     }
 
     return 0;
