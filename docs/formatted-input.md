@@ -4,9 +4,10 @@ The formatted-input engine uses one private parser over a tagged scanner-source
 abstraction. FILE-backed scanning serves that source through the same buffered
 `fgetc`/`ungetc` cursor used by `fread` and `fgets`; memory-backed scanning serves
 it directly from a NUL-terminated byte string. The parser, conversion rules,
-matching behavior, rollback policy, and variadic destination cursor are shared.
-`sscanf` therefore does not fabricate a `FILE`, open a descriptor, issue a raw
-read, or fork a second parser.
+matching behavior, rollback policy, and destination cursor are shared across
+ordinary variadic and public `va_list` entry points. `sscanf`/`vsscanf` therefore
+do not fabricate a `FILE`, open a descriptor, issue a raw read, or fork a second
+parser.
 
 ## Public surface
 
@@ -16,6 +17,9 @@ read, or fork a second parser.
 int scanf(const char *restrict format, ...);
 int fscanf(FILE *restrict stream, const char *restrict format, ...);
 int sscanf(const char *restrict s, const char *restrict format, ...);
+int vscanf(const char *restrict format, va_list ap);
+int vfscanf(FILE *restrict stream, const char *restrict format, va_list ap);
+int vsscanf(const char *restrict s, const char *restrict format, va_list ap);
 ```
 
 The executable scanner supports `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`,
@@ -47,20 +51,20 @@ The parser consumes at most one byte beyond a completed input item. FILE sources
 restore that byte through the guaranteed one-byte `ungetc` path. String sources
 restore only the immediately preceding byte by moving the private memory cursor
 back one position. This keeps the same one-byte logical rollback invariant across
-all three public entry points without expanding FILE pushback state.
+all six public entry points without expanding FILE pushback state.
 
 A string source treats its terminating NUL as input exhaustion and never exposes
 that terminator to a conversion. It performs no allocation and no syscall. The
-hosted scanner regression locks this isolation by asserting that `sscanf` leaves
-the fake raw-read call counter unchanged even when FILE-backed scanner data is
-already buffered in `stdin`.
+hosted scanner regression locks this isolation by asserting that memory-backed
+scanning leaves the fake raw-read call counter unchanged even when FILE-backed
+scanner data is already buffered in `stdin`.
 
 The return value is the number of successful non-suppressed assignments. A
 matching failure returns the number already assigned, including zero. An input
 failure or EOF before the first receiving conversion is assigned returns `EOF`;
 a later input failure returns the assignment count already completed. FILE EOF
 and error indicators continue to come from the shared FILE read machinery;
-`sscanf` has no FILE indicator state to modify.
+`sscanf`/`vsscanf` have no FILE indicator state to modify.
 
 The scanner preserves an existing `errno` on successful representable input.
 For this correctness-focused implementation, an integer magnitude that the
@@ -72,62 +76,75 @@ policy.
 
 ## Variadic call boundary
 
-Production C remains free of compiler-specific variadic builtins. Small SysV
-AMD64 assembly entries capture INTEGER-class variadic arguments into one fixed
-private cursor shared by the scanner core:
+The scanner core consumes one private `mini_scan_args` cursor containing up to
+five remaining 8-byte GP-register words, an overflow-stack pointer, a register
+index, and a register count. Every supported receiving argument is a pointer and
+therefore INTEGER-class under the current x86-64 SysV contract.
+
+Ordinary variadic assembly entries populate that cursor directly:
 
 - `scanf(format, ...)` captures `rsi`, `rdx`, `rcx`, `r8`, and `r9`, then the
-  overflow-stack cursor.
+  overflow-stack cursor;
 - `fscanf(stream, format, ...)` captures `rdx`, `rcx`, `r8`, and `r9`, then the
-  overflow-stack cursor.
-- `sscanf(string, format, ...)` has the same named-argument shape as `fscanf` and
-  therefore captures `rdx`, `rcx`, `r8`, and `r9`, then the overflow stack.
+  overflow-stack cursor;
+- `sscanf(string, format, ...)` has the same named-argument shape as `fscanf`.
 
-All supported receiving arguments are pointers, so this phase needs no XMM
-variadic save area. The freestanding and pinned tiny-c integrations deliberately
-pass five receiving arguments to `sscanf`, placing the fifth destination pointer
-on the overflow stack. The same executable is linked and run through both GNU
-`ld` and `mini-elf-toolchain`.
+Public `vscanf`/`vfscanf`/`vsscanf` reuse the public SysV `va_list` contract from
+`<stdarg.h>`. Their assembly adapters read `gp_offset`, `overflow_arg_area`, and
+`reg_save_area`, copy the still-available GP slots into `mini_scan_args`, carry
+the overflow pointer forward unchanged, and then enter the exact same scanner
+dispatch used by the ordinary entry points. `vscanf` supplies the inherited
+`stdin` object and tail-enters `vfscanf`; `vsscanf` enters the existing string
+source dispatch. No scanner C path calls compiler-specific `va_arg` builtins.
+
+`fp_offset` remains part of the public `va_list` state but is not consumed by the
+current scanner because no supported conversion receives floating-point values.
+This phase makes no floating-point, vector, long-double, or aggregate variadic
+claim.
 
 ## Executable evidence
 
-The freestanding scanner probe covers owned-file `fscanf`, stdin `scanf`, and
-memory-backed `sscanf`; all four integer destination lengths; decimal/octal/
+The deterministic fake-read harness routes its six-destination stdin scan through
+a caller-defined `vscanf` wrapper. With one named GP argument in the wrapper, the
+sixth destination pointer is stack-resident. A following cached-input case uses
+`vfscanf(stdin, ...)`, proving the public FILE variadic path does not disturb the
+single-refill buffered cursor. The memory case uses `vsscanf` and still proves
+that no fake raw read occurs.
+
+The freestanding scanner probe covers owned-file `vfscanf`, stdin `vscanf`, and
+memory-backed `vsscanf`; all four integer destination lengths; decimal/octal/
 hexadecimal/auto-base input; optional hexadecimal prefixes; string/character
 input; literal `%`; field width; suppression; positive/negated/ranged scansets;
 literal `]` and `-` scanset members; matching failure; width-truncated `0x`;
-EOF return semantics; and errno preservation.
+EOF return semantics; and errno preservation. Its first `vfscanf` call receives
+eight destination pointers, forcing several assignments through
+`overflow_arg_area`.
 
-The deterministic fake-read harness proves that FILE-backed scanner paths reuse
-one 256-byte FILE refill, that a sixth `scanf` destination crosses from GP
-registers to the overflow stack, that scanset matching and mismatch operate on
-cached input, that sticky EOF suppresses redundant raw reads, and that multiple
-`sscanf` calls consume only their memory strings without incrementing the raw
-read counter.
-
-The pinned tiny-c integration executes both the existing FILE scanner and a
-five-destination `sscanf` call containing auto-base integers, scansets, and
-hexadecimal input. Repository CI compiles production C with GCC, Clang, and the
-pinned `tiny-c-compiler`, links the common scanner assembly entry into mini-libc,
-and runs the integration executable through GNU `ld` and the pinned
-`mini-elf-toolchain` with host-libc-independence checks.
+The pinned tiny-c integration compiles caller-defined wrappers for all three
+public variadic scanner APIs. `vfscanf` reuses the existing positioned file scan;
+`vsscanf` reuses the existing memory-source scan; `vscanf` receives six integers
+from actual process stdin, again forcing the sixth destination across the SysV GP
+register boundary. The same integration executable is linked and run through
+GNU `ld` and the pinned `mini-elf-toolchain`. Repository CI also compiles and runs
+the freestanding/runtime suite under GCC and Clang and verifies host-libc
+independence.
 
 ## Phase boundary and next frontier
 
-FILE-backed and memory-backed formatted input are now part of the executable
-baseline. `scanf`, `fscanf`, and `sscanf` share one parser and one conversion
-model; adding a second string-only scanner is explicitly outside the architecture.
+FILE-backed and memory-backed formatted input now have both ordinary variadic and
+public `va_list` entry points over one parser and one conversion model. The input
+side of the public variadic core is therefore closed: new formatted-input
+features must extend the shared parser/source architecture rather than create a
+parallel `v*` implementation.
 
-The next higher-value symmetric frontier is **memory-backed formatted output**,
-starting with bounded `snprintf`. The coherent architectural slice should extract
-a private formatter sink abstraction so `printf`/`fprintf` keep using buffered
-FILE output while `snprintf` writes into a caller buffer, counts the full would-
-have-been-written length, handles size-zero and truncation semantics without
-writing out of bounds, and reuses the existing compiler-neutral formatter rather
-than cloning it. The executable gate should again include GCC, Clang, pinned
-tiny-c, and mini-elf end-to-end execution.
+The next higher architectural frontier is **floating-point variadic transport
+and formatted floating output**. The current private argument cursor is
+INTEGER-class-only even though public SysV `va_list` already carries `fp_offset`.
+A coherent next slice should extend the variadic transport with deterministic XMM
+register-save handling and then admit a first real floating conversion into the
+shared formatter, with GCC/Clang/pinned tiny-c/mini-elf executable evidence. It
+must not claim floating-point support from ABI plumbing alone.
 
-Floating-point input/output, `%n`, wide-character scanning, locale-sensitive
-behavior, public `stdarg.h`/`vfscanf`/`vfprintf`, configurable buffering,
-`tmpfile`, threading/TLS, and C11 exclusive-create modes remain separate later
-phases.
+Floating-point input, `%n`, pointer formatting, wide-character scanning,
+locale-sensitive behavior, configurable buffering, `tmpfile`, threading/TLS,
+C11 exclusive-create modes, and allocator tuning remain separate later phases.
