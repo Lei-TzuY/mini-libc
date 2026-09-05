@@ -81,6 +81,10 @@ static int wait_common(cnd_t *cond, mtx_t *mtx,
         errno = saved_errno;
         return thrd_error;
     }
+    if ((mtx->__type & mtx_recursive) != 0 && mtx->__depth != 1) {
+        errno = saved_errno;
+        return thrd_error;
+    }
 
     expected = __mini_atomic_fetch_add_int(
         (volatile int *)&cond->__sequence, 0);
