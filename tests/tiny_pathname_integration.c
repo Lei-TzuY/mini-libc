@@ -26,13 +26,18 @@ int main(int argc, char **argv)
 
     errno = ERANGE;
     stream = fopen(argv[1], "w+bx");
-    if (stream == (FILE *)0 || errno != ERANGE ||
-        fputs("publish", stream) == EOF || fclose(stream) != 0) {
-        if (stream != (FILE *)0 && ferror(stream)) {
-            fclose(stream);
-        }
+    if (stream == (FILE *)0 || errno != ERANGE) {
         remove_if_present(argv[1]);
         return 3;
+    }
+    if (fputs("publish", stream) == EOF || ferror(stream) || errno != ERANGE) {
+        fclose(stream);
+        remove_if_present(argv[1]);
+        return 4;
+    }
+    if (fclose(stream) != 0 || errno != ERANGE) {
+        remove_if_present(argv[1]);
+        return 5;
     }
 
     errno = ERANGE;
@@ -42,43 +47,48 @@ int main(int argc, char **argv)
             fclose(stream);
         }
         remove_if_present(argv[1]);
-        return 4;
+        return 6;
     }
 
     errno = ERANGE;
     if (rename(argv[1], argv[2]) != 0 || errno != ERANGE) {
         remove_if_present(argv[1]);
         remove_if_present(argv[2]);
-        return 5;
+        return 7;
     }
 
     stream = fopen(argv[2], "r");
-    if (stream == (FILE *)0 || fread(buffer, 1, 7, stream) != 7 ||
-        fclose(stream) != 0) {
-        if (stream != (FILE *)0 && ferror(stream)) {
-            fclose(stream);
-        }
+    if (stream == (FILE *)0) {
         remove_if_present(argv[2]);
-        return 6;
+        return 8;
+    }
+    if (fread(buffer, 1, 7, stream) != 7 || ferror(stream)) {
+        fclose(stream);
+        remove_if_present(argv[2]);
+        return 9;
+    }
+    if (fclose(stream) != 0) {
+        remove_if_present(argv[2]);
+        return 10;
     }
     buffer[7] = '\0';
     if (strcmp(buffer, "publish") != 0) {
         remove_if_present(argv[2]);
-        return 7;
+        return 11;
     }
 
     errno = ERANGE;
     if (remove(argv[2]) != 0 || errno != ERANGE) {
         remove_if_present(argv[2]);
-        return 8;
+        return 12;
     }
     errno = ERANGE;
     if (remove(argv[2]) != -1 || errno != ENOENT) {
-        return 9;
+        return 13;
     }
 
     if (puts(ok) == EOF) {
-        return 10;
+        return 14;
     }
     return 0;
 }
