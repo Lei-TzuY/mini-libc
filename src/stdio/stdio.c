@@ -314,10 +314,8 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
         stream->write_length += chunk;
         accepted += chunk;
 
-        if (stream->write_length == stream->buffer_size || flush_line) {
-            if (__mini_stdio_flush_buffer(stream) == EOF) {
-                return accepted;
-            }
+        if (flush_line && __mini_stdio_flush_buffer(stream) == EOF) {
+            return accepted;
         }
     }
 
