@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -7,6 +6,23 @@
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
 #define MINI_FORMAT_PAD_CHUNK 16U
+
+struct mini_format_args {
+    unsigned long gp[5];
+    unsigned long *overflow;
+    unsigned int gp_index;
+    unsigned int gp_count;
+};
+
+_Static_assert(sizeof(unsigned long) == 8U, "formatted ABI requires LP64");
+_Static_assert(offsetof(struct mini_format_args, overflow) == 40U,
+               "formatted ABI overflow offset changed");
+_Static_assert(offsetof(struct mini_format_args, gp_index) == 48U,
+               "formatted ABI index offset changed");
+_Static_assert(offsetof(struct mini_format_args, gp_count) == 52U,
+               "formatted ABI count offset changed");
+_Static_assert(sizeof(struct mini_format_args) == 56U,
+               "formatted ABI state size changed");
 
 enum mini_format_length {
     MINI_LEN_NONE,
@@ -42,6 +58,43 @@ static int invalid_format(void)
 {
     errno = EINVAL;
     return EOF;
+}
+
+static unsigned long next_word(struct mini_format_args *args)
+{
+    unsigned long value;
+
+    if (args->gp_index < args->gp_count) {
+        value = args->gp[args->gp_index];
+        ++args->gp_index;
+        return value;
+    }
+
+    value = *args->overflow;
+    ++args->overflow;
+    return value;
+}
+
+static int word_to_int(unsigned long word)
+{
+    unsigned int value = (unsigned int)word;
+    unsigned int max_value = (~0U) >> 1;
+
+    if (value <= max_value) {
+        return (int)value;
+    }
+    return -1 - (int)(~value);
+}
+
+static long long word_to_long_long(unsigned long word)
+{
+    unsigned long long value = (unsigned long long)word;
+    unsigned long long max_value = (~0ULL) >> 1;
+
+    if (value <= max_value) {
+        return (long long)value;
+    }
+    return -1LL - (long long)(~value);
 }
 
 static int reserve_count(unsigned int *count, size_t amount)
@@ -125,7 +178,7 @@ static unsigned int negative_int_width(int value)
 }
 
 static int parse_spec(const char **cursor, struct mini_format_spec *spec,
-                      va_list *args)
+                      struct mini_format_args *args)
 {
     const char *p = *cursor;
     int parsed;
@@ -159,7 +212,7 @@ static int parse_spec(const char **cursor, struct mini_format_spec *spec,
     }
 
     if (*p == '*') {
-        int width = va_arg(*args, int);
+        int width = word_to_int(next_word(args));
 
         ++p;
         if (width < 0) {
@@ -179,7 +232,7 @@ static int parse_spec(const char **cursor, struct mini_format_spec *spec,
         ++p;
         spec->precision_set = 1;
         if (*p == '*') {
-            int precision = va_arg(*args, int);
+            int precision = word_to_int(next_word(args));
 
             ++p;
             if (precision < 0) {
@@ -378,55 +431,57 @@ static int emit_number(FILE *stream, const struct mini_format_spec *spec,
     return 0;
 }
 
-static long long next_signed(va_list *args, enum mini_format_length length)
+static long long next_signed(struct mini_format_args *args,
+                             enum mini_format_length length)
 {
+    unsigned long word = next_word(args);
+
     if (length == MINI_LEN_HH) {
-        return (signed char)va_arg(*args, int);
+        return (signed char)word_to_int(word);
     }
     if (length == MINI_LEN_H) {
-        return (short)va_arg(*args, int);
+        return (short)word_to_int(word);
     }
-    if (length == MINI_LEN_L) {
-        return va_arg(*args, long);
+    if (length == MINI_LEN_L || length == MINI_LEN_LL) {
+        return word_to_long_long(word);
     }
-    if (length == MINI_LEN_LL) {
-        return va_arg(*args, long long);
-    }
-    return va_arg(*args, int);
+    return word_to_int(word);
 }
 
-static unsigned long long next_unsigned(va_list *args,
+static unsigned long long next_unsigned(struct mini_format_args *args,
                                         enum mini_format_length length)
 {
+    unsigned long word = next_word(args);
+
     if (length == MINI_LEN_HH) {
-        return (unsigned char)va_arg(*args, int);
+        return (unsigned char)(unsigned int)word;
     }
     if (length == MINI_LEN_H) {
-        return (unsigned short)va_arg(*args, int);
+        return (unsigned short)(unsigned int)word;
     }
-    if (length == MINI_LEN_L) {
-        return va_arg(*args, unsigned long);
+    if (length == MINI_LEN_L || length == MINI_LEN_LL) {
+        return (unsigned long long)word;
     }
-    if (length == MINI_LEN_LL) {
-        return va_arg(*args, unsigned long long);
-    }
-    return va_arg(*args, unsigned int);
+    return (unsigned int)word;
 }
 
 static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
-                           va_list *args, unsigned int *count)
+                           struct mini_format_args *args, unsigned int *count)
 {
     if (spec->conversion == 's') {
+        const char *value;
+
         if (spec->length != MINI_LEN_NONE) {
             return invalid_format();
         }
-        return emit_string(stream, spec, va_arg(*args, char *), count);
+        value = (const char *)next_word(args);
+        return emit_string(stream, spec, value, count);
     }
     if (spec->conversion == 'c') {
         if (spec->length != MINI_LEN_NONE || spec->precision_set) {
             return invalid_format();
         }
-        return emit_character(stream, spec, va_arg(*args, int), count);
+        return emit_character(stream, spec, word_to_int(next_word(args)), count);
     }
     if (spec->conversion == 'd' || spec->conversion == 'i') {
         long long value = next_signed(args, spec->length);
@@ -464,7 +519,8 @@ static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
     return invalid_format();
 }
 
-static int format_stream(FILE *stream, const char *format, va_list *args)
+int __mini_format_dispatch(FILE *stream, const char *format,
+                           struct mini_format_args *args)
 {
     const char *cursor = format;
     unsigned int count = 0;
@@ -472,7 +528,7 @@ static int format_stream(FILE *stream, const char *format, va_list *args)
     if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
         return invalid_stream(stream);
     }
-    if (format == (const char *)0) {
+    if (format == (const char *)0 || args == (struct mini_format_args *)0) {
         return invalid_format();
     }
 
@@ -501,26 +557,4 @@ static int format_stream(FILE *stream, const char *format, va_list *args)
     }
 
     return (int)count;
-}
-
-int fprintf(FILE *restrict stream, const char *restrict format, ...)
-{
-    va_list args;
-    int result;
-
-    va_start(args, format);
-    result = format_stream(stream, format, &args);
-    va_end(args);
-    return result;
-}
-
-int printf(const char *restrict format, ...)
-{
-    va_list args;
-    int result;
-
-    va_start(args, format);
-    result = format_stream(stdout, format, &args);
-    va_end(args);
-    return result;
 }
