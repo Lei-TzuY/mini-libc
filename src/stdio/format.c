@@ -121,6 +121,11 @@ static int emit_repeat(FILE *stream, char byte, unsigned int amount,
     char pad[MINI_FORMAT_PAD_CHUNK];
     unsigned int i;
 
+    if (amount > MINI_PRINTF_INT_MAX - *count) {
+        errno = EINVAL;
+        return EOF;
+    }
+
     for (i = 0; i < MINI_FORMAT_PAD_CHUNK; ++i) {
         pad[i] = byte;
     }
