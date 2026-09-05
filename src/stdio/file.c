@@ -98,12 +98,16 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
     stream->fd = (int)result;
     stream->mode = stream_mode;
     stream->state = 0;
+    stream->next = (FILE *)0;
+    stream->write_length = 0;
+    __mini_stdio_register(stream);
     return stream;
 }
 
 int fclose(FILE *stream)
 {
     unsigned int owned;
+    int first_error = 0;
     long result;
 
     if (stream == (FILE *)0 ||
@@ -116,24 +120,29 @@ int fclose(FILE *stream)
     }
 
     owned = stream->mode & MINI_FILE_OWNED;
-    result = mini_sys_close(stream->fd);
-
-    if (owned) {
-        int error = result < 0 ? (int)-result : 0;
-
-        free(stream);
-        if (result < 0) {
-            errno = error;
-            return EOF;
-        }
-        return 0;
+    if ((stream->mode & MINI_FILE_WRITABLE) != 0U &&
+        __mini_stdio_flush_buffer(stream) == EOF) {
+        first_error = errno;
     }
 
-    stream->fd = -1;
-    stream->mode = 0;
-    stream->state = 0;
-    if (result < 0) {
-        errno = (int)-result;
+    result = mini_sys_close(stream->fd);
+    if (result < 0 && first_error == 0) {
+        first_error = (int)-result;
+    }
+
+    __mini_stdio_unregister(stream);
+    if (owned) {
+        free(stream);
+    } else {
+        stream->fd = -1;
+        stream->mode = 0;
+        stream->state = 0;
+        stream->next = (FILE *)0;
+        stream->write_length = 0;
+    }
+
+    if (first_error != 0) {
+        errno = first_error;
         return EOF;
     }
     return 0;
