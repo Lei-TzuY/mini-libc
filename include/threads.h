@@ -21,6 +21,7 @@ enum {
 };
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
+int thrd_detach(thrd_t thr);
 int thrd_join(thrd_t thr, int *res);
 thrd_t thrd_current(void);
 int thrd_equal(thrd_t lhs, thrd_t rhs);
