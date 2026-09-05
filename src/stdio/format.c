@@ -6,7 +6,9 @@
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
 #define MINI_FORMAT_PAD_CHUNK 16U
-#define MINI_FLOAT_MAX_PRECISION 9U
+#define MINI_FLOAT_DECIMAL_MAX_PRECISION 9U
+#define MINI_FLOAT_HEX_MAX_PRECISION 13U
+#define MINI_FLOAT_TEXT_CAPACITY 96U
 
 struct mini_format_args {
     unsigned long gp[5];
@@ -57,6 +59,19 @@ struct mini_format_spec {
     unsigned int precision;
     enum mini_format_length length;
     char conversion;
+};
+
+enum mini_float_class {
+    MINI_FLOAT_FINITE,
+    MINI_FLOAT_INFINITY,
+    MINI_FLOAT_NAN
+};
+
+struct mini_float_parts {
+    enum mini_float_class kind;
+    int negative;
+    unsigned int exponent_field;
+    unsigned long long fraction;
 };
 
 static int invalid_stream(FILE *stream)
@@ -327,7 +342,7 @@ static int parse_spec(const char **cursor, struct mini_format_spec *spec,
             int precision = word_to_int(next_word(args));
 
             ++p;
-        if (precision < 0) {
+            if (precision < 0) {
                 spec->precision_set = 0;
             } else {
                 spec->precision = (unsigned int)precision;
@@ -526,6 +541,92 @@ static int emit_number(struct mini_format_sink *sink,
     return 0;
 }
 
+static void decompose_double(double value, struct mini_float_parts *parts)
+{
+    unsigned long long bits = double_bits(value);
+
+    parts->negative = (bits >> 63) != 0ULL;
+    parts->exponent_field = (unsigned int)((bits >> 52) & 0x7ffULL);
+    parts->fraction = bits & 0xfffffffffffffULL;
+    if (parts->exponent_field == 0x7ffU) {
+        parts->kind = parts->fraction == 0ULL ?
+                          MINI_FLOAT_INFINITY : MINI_FLOAT_NAN;
+    } else {
+        parts->kind = MINI_FLOAT_FINITE;
+    }
+}
+
+static int is_upper_float(char conversion)
+{
+    return conversion == 'F' || conversion == 'E' || conversion == 'G' ||
+           conversion == 'A';
+}
+
+static unsigned int float_sign(const struct mini_format_spec *spec,
+                               int negative, char *prefix)
+{
+    if (negative) {
+        prefix[0] = '-';
+        return 1U;
+    }
+    if (spec->plus) {
+        prefix[0] = '+';
+        return 1U;
+    }
+    if (spec->space) {
+        prefix[0] = ' ';
+        return 1U;
+    }
+    return 0U;
+}
+
+static int emit_float_text(struct mini_format_sink *sink,
+                           const struct mini_format_spec *spec, int negative,
+                           const char *radix_prefix,
+                           unsigned int radix_length, const char *text,
+                           unsigned int text_length, int zero_allowed,
+                           unsigned int *count)
+{
+    char sign[1];
+    unsigned int sign_length = float_sign(spec, negative, sign);
+    unsigned int total = sign_length + radix_length + text_length;
+    unsigned int spaces = 0U;
+    unsigned int zeros = 0U;
+
+    if (spec->width > total) {
+        unsigned int padding = spec->width - total;
+
+        if (spec->zero && !spec->left && zero_allowed) {
+            zeros = padding;
+        } else {
+            spaces = padding;
+        }
+    }
+
+    if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+        return EOF;
+    }
+    if (sign_length != 0U &&
+        emit_bytes(sink, sign, sign_length, count) == EOF) {
+        return EOF;
+    }
+    if (radix_length != 0U &&
+        emit_bytes(sink, radix_prefix, radix_length, count) == EOF) {
+        return EOF;
+    }
+    if (emit_repeat(sink, '0', zeros, count) == EOF) {
+        return EOF;
+    }
+    if (text_length != 0U &&
+        emit_bytes(sink, text, text_length, count) == EOF) {
+        return EOF;
+    }
+    if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+        return EOF;
+    }
+    return 0;
+}
+
 static unsigned long long decimal_scale(unsigned int precision)
 {
     static const unsigned long long scales[] = {
@@ -536,138 +637,384 @@ static unsigned long long decimal_scale(unsigned int precision)
     return scales[precision];
 }
 
-static int emit_fixed(struct mini_format_sink *sink,
-                      const struct mini_format_spec *spec, double value,
-                      unsigned int *count)
+static unsigned int append_exponent(char *text, char marker, int exponent,
+                                    unsigned int minimum_digits)
 {
-    unsigned long long bits = double_bits(value);
-    unsigned long long exponent = (bits >> 52) & 0x7ffULL;
-    unsigned long long mantissa = bits & 0xfffffffffffffULL;
-    int negative = (bits >> 63) != 0ULL;
-    char prefix[1];
-    unsigned int prefix_length = 0;
+    char reverse[8];
+    unsigned int magnitude;
+    unsigned int digits = 0U;
+    unsigned int i;
+    unsigned int offset = 0U;
+
+    text[offset++] = marker;
+    text[offset++] = exponent < 0 ? '-' : '+';
+    if (exponent < 0) {
+        magnitude = (unsigned int)(-(exponent + 1)) + 1U;
+    } else {
+        magnitude = (unsigned int)exponent;
+    }
+
+    do {
+        reverse[digits++] = (char)('0' + magnitude % 10U);
+        magnitude /= 10U;
+    } while (magnitude != 0U || digits < minimum_digits);
+
+    for (i = 0U; i < digits; ++i) {
+        text[offset + i] = reverse[digits - 1U - i];
+    }
+    return offset + digits;
+}
+
+static void make_significant_decimal(double value, unsigned int digit_count,
+                                     char *digits, int *exponent10)
+{
+    double normalized;
+    double scaled;
+    double remainder;
+    unsigned long long scale;
+    unsigned long long magnitude;
+    unsigned int i;
+    int exponent = 0;
+
+    if (value == 0.0) {
+        for (i = 0U; i < digit_count; ++i) {
+            digits[i] = '0';
+        }
+        *exponent10 = 0;
+        return;
+    }
+
+    normalized = value;
+    while (normalized >= 10.0) {
+        normalized /= 10.0;
+        ++exponent;
+    }
+    while (normalized < 1.0) {
+        normalized *= 10.0;
+        --exponent;
+    }
+
+    scale = decimal_scale(digit_count - 1U);
+    scaled = normalized * (double)scale;
+    magnitude = (unsigned long long)scaled;
+    remainder = scaled - (double)magnitude;
+    if (remainder > 0.5 ||
+        (remainder == 0.5 && (magnitude & 1ULL) != 0ULL)) {
+        ++magnitude;
+    }
+    if (magnitude == scale * 10ULL) {
+        magnitude = scale;
+        ++exponent;
+    }
+
+    for (i = digit_count; i != 0U; --i) {
+        digits[i - 1U] = (char)('0' + magnitude % 10ULL);
+        magnitude /= 10ULL;
+    }
+    *exponent10 = exponent;
+}
+
+static int make_fixed_text(const struct mini_format_spec *spec, double value,
+                           char *text, unsigned int *length)
+{
     unsigned int precision = spec->precision_set ? spec->precision : 6U;
-    unsigned int body_length;
-    unsigned int spaces = 0;
-    unsigned int zero_padding = 0;
+    unsigned long long whole;
+    unsigned long long scale;
+    unsigned long long fractional;
+    double fraction;
+    double scaled;
+    double remainder;
+    char reverse[64];
+    size_t whole_count;
+    unsigned int i;
+    unsigned int offset = 0U;
+
+    if (precision > MINI_FLOAT_DECIMAL_MAX_PRECISION ||
+        !(value < 18446744073709551616.0)) {
+        return 0;
+    }
+
+    whole = (unsigned long long)value;
+    scale = decimal_scale(precision);
+    fraction = value - (double)whole;
+    scaled = fraction * (double)scale;
+    fractional = (unsigned long long)scaled;
+    remainder = scaled - (double)fractional;
+    if (remainder > 0.5 ||
+        (remainder == 0.5 &&
+         ((precision == 0U ? whole : fractional) & 1ULL) != 0ULL)) {
+        ++fractional;
+        if (fractional == scale) {
+            fractional = 0ULL;
+            ++whole;
+        }
+    }
+
+    whole_count = make_digits(whole, 10U, 0, reverse);
+    for (i = (unsigned int)whole_count; i != 0U; --i) {
+        text[offset++] = reverse[i - 1U];
+    }
+    if (precision != 0U || spec->alternate) {
+        text[offset++] = '.';
+    }
+    if (precision != 0U) {
+        char fraction_digits[MINI_FLOAT_DECIMAL_MAX_PRECISION];
+
+        for (i = precision; i != 0U; --i) {
+            fraction_digits[i - 1U] = (char)('0' + fractional % 10ULL);
+            fractional /= 10ULL;
+        }
+        for (i = 0U; i < precision; ++i) {
+            text[offset++] = fraction_digits[i];
+        }
+    }
+
+    *length = offset;
+    return 1;
+}
+
+static int make_scientific_text(const struct mini_format_spec *spec,
+                                double value, char *text,
+                                unsigned int *length)
+{
+    unsigned int precision = spec->precision_set ? spec->precision : 6U;
+    char digits[MINI_FLOAT_DECIMAL_MAX_PRECISION + 1U];
+    int exponent;
+    unsigned int i;
+    unsigned int offset = 0U;
+
+    if (precision > MINI_FLOAT_DECIMAL_MAX_PRECISION) {
+        return 0;
+    }
+
+    make_significant_decimal(value, precision + 1U, digits, &exponent);
+    text[offset++] = digits[0];
+    if (precision != 0U || spec->alternate) {
+        text[offset++] = '.';
+        for (i = 1U; i <= precision; ++i) {
+            text[offset++] = digits[i];
+        }
+    }
+    offset += append_exponent(text + offset,
+                              spec->conversion == 'E' ? 'E' : 'e',
+                              exponent, 2U);
+    *length = offset;
+    return 1;
+}
+
+static int make_general_text(const struct mini_format_spec *spec,
+                             double value, char *text,
+                             unsigned int *length)
+{
+    unsigned int precision = spec->precision_set ? spec->precision : 6U;
+    char digits[MINI_FLOAT_DECIMAL_MAX_PRECISION];
+    int exponent;
+    unsigned int effective;
+    unsigned int i;
+    unsigned int offset = 0U;
+
+    if (precision == 0U) {
+        precision = 1U;
+    }
+    if (precision > MINI_FLOAT_DECIMAL_MAX_PRECISION) {
+        return 0;
+    }
+
+    make_significant_decimal(value, precision, digits, &exponent);
+    effective = precision;
+    if (!spec->alternate) {
+        while (effective > 1U && digits[effective - 1U] == '0') {
+            --effective;
+        }
+    }
+
+    if (exponent < -4 || exponent >= (int)precision) {
+        text[offset++] = digits[0];
+        if (effective > 1U || spec->alternate) {
+            text[offset++] = '.';
+            for (i = 1U; i < effective; ++i) {
+                text[offset++] = digits[i];
+            }
+        }
+        offset += append_exponent(text + offset,
+                                  spec->conversion == 'G' ? 'E' : 'e',
+                                  exponent, 2U);
+    } else {
+        int point = exponent + 1;
+
+        if (point <= 0) {
+            text[offset++] = '0';
+            text[offset++] = '.';
+            for (i = 0U; i < (unsigned int)(-point); ++i) {
+                text[offset++] = '0';
+            }
+            for (i = 0U; i < effective; ++i) {
+                text[offset++] = digits[i];
+            }
+        } else {
+            unsigned int point_index = (unsigned int)point;
+
+            for (i = 0U; i < point_index; ++i) {
+                text[offset++] = i < effective ? digits[i] : '0';
+            }
+            if (point_index < effective || spec->alternate) {
+                text[offset++] = '.';
+                for (i = point_index; i < effective; ++i) {
+                    text[offset++] = digits[i];
+                }
+            }
+        }
+    }
+
+    *length = offset;
+    return 1;
+}
+
+static char hex_digit(unsigned int value, int uppercase)
+{
+    static const char lower[] = "0123456789abcdef";
+    static const char upper[] = "0123456789ABCDEF";
+
+    return (uppercase ? upper : lower)[value & 15U];
+}
+
+static int make_hex_text(const struct mini_format_spec *spec,
+                         const struct mini_float_parts *parts, char *text,
+                         unsigned int *length)
+{
+    unsigned int precision;
+    unsigned long long kept;
+    unsigned int leading;
+    int exponent2;
+    unsigned int i;
+    unsigned int offset = 0U;
+    int uppercase = spec->conversion == 'A';
+
+    if (spec->precision_set && spec->precision > MINI_FLOAT_HEX_MAX_PRECISION) {
+        return 0;
+    }
+
+    if (parts->exponent_field == 0U && parts->fraction == 0ULL) {
+        leading = 0U;
+        exponent2 = 0;
+    } else if (parts->exponent_field == 0U) {
+        leading = 0U;
+        exponent2 = -1022;
+    } else {
+        leading = 1U;
+        exponent2 = (int)parts->exponent_field - 1023;
+    }
+
+    if (!spec->precision_set) {
+        precision = MINI_FLOAT_HEX_MAX_PRECISION;
+        kept = parts->fraction;
+        while (precision != 0U && (kept & 0xfULL) == 0ULL) {
+            kept >>= 4;
+            --precision;
+        }
+    } else {
+        precision = spec->precision;
+        if (precision == MINI_FLOAT_HEX_MAX_PRECISION) {
+            kept = parts->fraction;
+        } else {
+            unsigned int discard =
+                (MINI_FLOAT_HEX_MAX_PRECISION - precision) * 4U;
+            unsigned long long mask = (1ULL << discard) - 1ULL;
+            unsigned long long remainder = parts->fraction & mask;
+            unsigned long long half = 1ULL << (discard - 1U);
+            unsigned long long parity;
+
+            kept = precision == 0U ? 0ULL : parts->fraction >> discard;
+            parity = precision == 0U ? (unsigned long long)leading : kept;
+            if (remainder > half ||
+                (remainder == half && (parity & 1ULL) != 0ULL)) {
+                if (precision == 0U) {
+                    ++leading;
+                } else {
+                    ++kept;
+                    if (kept == (1ULL << (precision * 4U))) {
+                        kept = 0ULL;
+                        ++leading;
+                    }
+                }
+            }
+        }
+    }
+
+    text[offset++] = hex_digit(leading, uppercase);
+    if (precision != 0U || spec->alternate) {
+        text[offset++] = '.';
+        for (i = 0U; i < precision; ++i) {
+            unsigned int shift = (precision - 1U - i) * 4U;
+
+            text[offset++] = hex_digit((unsigned int)(kept >> shift), uppercase);
+        }
+    }
+    offset += append_exponent(text + offset, uppercase ? 'P' : 'p',
+                              exponent2, 1U);
+    *length = offset;
+    return 1;
+}
+
+static int emit_floating(struct mini_format_sink *sink,
+                         const struct mini_format_spec *spec, double value,
+                         unsigned int *count)
+{
+    struct mini_float_parts parts;
+    char text[MINI_FLOAT_TEXT_CAPACITY];
+    unsigned int length = 0U;
+    int uppercase = is_upper_float(spec->conversion);
+    double magnitude;
 
     if (spec->length != MINI_LEN_NONE && spec->length != MINI_LEN_L) {
         return invalid_format();
     }
-    if (precision > MINI_FLOAT_MAX_PRECISION) {
-        return invalid_format();
+
+    decompose_double(value, &parts);
+    if (parts.kind != MINI_FLOAT_FINITE) {
+        const char *special;
+
+        if (parts.kind == MINI_FLOAT_INFINITY) {
+            special = uppercase ? "INF" : "inf";
+        } else {
+            special = uppercase ? "NAN" : "nan";
+        }
+        return emit_float_text(sink, spec, parts.negative, (const char *)0, 0U,
+                               special, 3U, 0, count);
     }
 
-    if (negative) {
-        prefix[prefix_length++] = '-';
-    } else if (spec->plus) {
-        prefix[prefix_length++] = '+';
-    } else if (spec->space) {
-        prefix[prefix_length++] = ' ';
+    magnitude = parts.negative ? -value : value;
+    if (spec->conversion == 'f' || spec->conversion == 'F') {
+        if (!make_fixed_text(spec, magnitude, text, &length)) {
+            return invalid_format();
+        }
+        return emit_float_text(sink, spec, parts.negative, (const char *)0, 0U,
+                               text, length, 1, count);
     }
-
-    if (exponent == 0x7ffULL) {
-        const char *text = mantissa == 0ULL ? "inf" : "nan";
-
-        body_length = prefix_length + 3U;
-        if (spec->width > body_length) {
-            spaces = spec->width - body_length;
+    if (spec->conversion == 'e' || spec->conversion == 'E') {
+        if (!make_scientific_text(spec, magnitude, text, &length)) {
+            return invalid_format();
         }
-        if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
-            return EOF;
-        }
-        if (prefix_length != 0U &&
-            emit_bytes(sink, prefix, prefix_length, count) == EOF) {
-            return EOF;
-        }
-        if (emit_bytes(sink, text, 3U, count) == EOF) {
-            return EOF;
-        }
-        if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
-            return EOF;
-        }
-        return 0;
+        return emit_float_text(sink, spec, parts.negative, (const char *)0, 0U,
+                               text, length, 1, count);
     }
-
-    if (negative) {
-        value = -value;
+    if (spec->conversion == 'g' || spec->conversion == 'G') {
+        if (!make_general_text(spec, magnitude, text, &length)) {
+            return invalid_format();
+        }
+        return emit_float_text(sink, spec, parts.negative, (const char *)0, 0U,
+                               text, length, 1, count);
     }
-    if (!(value < 18446744073709551616.0)) {
-        return invalid_format();
+    if (spec->conversion == 'a' || spec->conversion == 'A') {
+        const char *radix = uppercase ? "0X" : "0x";
+
+        if (!make_hex_text(spec, &parts, text, &length)) {
+            return invalid_format();
+        }
+        return emit_float_text(sink, spec, parts.negative, radix, 2U,
+                               text, length, 1, count);
     }
-
-    {
-        unsigned long long whole = (unsigned long long)value;
-        unsigned long long scale = decimal_scale(precision);
-        double fraction = value - (double)whole;
-        double scaled = fraction * (double)scale;
-        unsigned long long fractional = (unsigned long long)scaled;
-        double remainder = scaled - (double)fractional;
-        unsigned long long round_parity = precision == 0U ? whole : fractional;
-        char whole_digits[64];
-        char fraction_digits[MINI_FLOAT_MAX_PRECISION];
-        size_t whole_count;
-        unsigned int i;
-        unsigned int point = precision != 0U || spec->alternate;
-
-        if (remainder > 0.5 ||
-            (remainder == 0.5 && (round_parity & 1ULL) != 0ULL)) {
-            ++fractional;
-            if (fractional == scale) {
-                fractional = 0ULL;
-                ++whole;
-            }
-        }
-
-        whole_count = make_digits(whole, 10U, 0, whole_digits);
-        for (i = precision; i != 0U; --i) {
-            fraction_digits[i - 1U] = (char)('0' + (fractional % 10ULL));
-            fractional /= 10ULL;
-        }
-
-        body_length = prefix_length + (unsigned int)whole_count + point + precision;
-        if (spec->width > body_length) {
-            unsigned int padding = spec->width - body_length;
-
-            if (spec->zero && !spec->left) {
-                zero_padding = padding;
-            } else {
-                spaces = padding;
-            }
-        }
-
-        if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
-            return EOF;
-        }
-        if (prefix_length != 0U &&
-            emit_bytes(sink, prefix, prefix_length, count) == EOF) {
-            return EOF;
-        }
-        if (emit_repeat(sink, '0', zero_padding, count) == EOF) {
-            return EOF;
-        }
-        for (i = (unsigned int)whole_count; i != 0U; --i) {
-            if (emit_bytes(sink, &whole_digits[i - 1U], 1U, count) == EOF) {
-                return EOF;
-            }
-        }
-        if (point) {
-            char dot = '.';
-
-            if (emit_bytes(sink, &dot, 1U, count) == EOF) {
-                return EOF;
-            }
-        }
-        if (precision != 0U &&
-            emit_bytes(sink, fraction_digits, precision, count) == EOF) {
-            return EOF;
-        }
-        if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
-            return EOF;
-        }
-    }
-
-    return 0;
+    return invalid_format();
 }
 
 static long long next_signed(struct mini_format_args *args,
@@ -748,8 +1095,11 @@ static int emit_conversion(struct mini_format_sink *sink,
         }
         return emit_number(sink, spec, value, 0, base, uppercase, 0, count);
     }
-    if (spec->conversion == 'f') {
-        return emit_fixed(sink, spec, next_double(args), count);
+    if (spec->conversion == 'f' || spec->conversion == 'F' ||
+        spec->conversion == 'e' || spec->conversion == 'E' ||
+        spec->conversion == 'g' || spec->conversion == 'G' ||
+        spec->conversion == 'a' || spec->conversion == 'A') {
+        return emit_floating(sink, spec, next_double(args), count);
     }
     if (spec->conversion == '%') {
         char percent = '%';

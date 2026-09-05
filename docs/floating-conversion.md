@@ -1,7 +1,7 @@
 # Floating conversion core and phase status
 
-mini-libc now has one stdio-independent floating lexical/conversion engine shared
-by the public string-conversion APIs and formatted input. The engine is private;
+mini-libc has one stdio-independent floating lexical/conversion engine shared by
+the public string-conversion APIs and formatted input. The engine is private;
 callers provide byte-source callbacks plus an explicit transaction policy rather
 than depending on `FILE`, heap storage, or a public parser object.
 
@@ -46,12 +46,12 @@ hexadecimal, infinity, NaN, sign, rounding, and range machinery as
 `strtof`/`strtod`.
 
 Formatted input deliberately selects a different transaction policy. It preserves
-mini-libc's existing input-item contract: once a floating item has begun, an
-incomplete exponent is part of the failed input item rather than being rolled
-back to the exponent marker. Thus scanning `1e+X` still consumes `1e+`, reports a
-matching failure, and leaves `X` as the one looked-ahead byte. This caller policy
-is separate from the reusable numeric lexer/converter rather than implemented by
-a duplicate scanner parser.
+mini-libc's input-item contract: once a floating item has begun, an incomplete
+exponent is part of the failed input item rather than being rolled back to the
+exponent marker. Thus scanning `1e+X` still consumes `1e+`, reports a matching
+failure, and leaves `X` as the one looked-ahead byte. This caller policy is
+separate from the reusable numeric lexer/converter rather than implemented by a
+duplicate scanner parser.
 
 Assignment suppression asks the engine to perform lexical consumption without
 numeric range conversion. A suppressed huge exponent therefore does not invent
@@ -97,6 +97,22 @@ Negative zero is preserved through both public conversions and formatted input.
 Infinity and NaN are constructed and classified from the target IEEE-754 binary
 representations without depending on host-libc conversion routines.
 
+## Output relationship
+
+Formatted output no longer lags the floating input/string-conversion surface.
+`printf`/`fprintf`/`snprintf` and public `v*` entries now execute `%f/%F`,
+`%e/%E`, `%g/%G`, and `%a/%A` through their existing XMM/public-`va_list`
+transport and FILE/memory sinks. Output does not call this input lexer: it has a
+separate representation-to-text responsibility, but it now follows the same
+bounded-claims discipline.
+
+Decimal `%e`/`%g` formatting is explicitly bounded to at most nine decimal
+fraction/significant digits as applicable and is not advertised as a universal
+correctly-rounded dtoa algorithm. Hexadecimal `%a`/`%A` is derived directly from
+the binary64 fields; omitted precision retains the exact value while trimming
+only trailing zero nibbles, and explicit precision through 13 hexadecimal
+fraction digits uses nearest-even discarded-bit rounding.
+
 ## Executable evidence
 
 The freestanding `strtod_probe` covers decimal and scientific forms, hexadecimal
@@ -114,26 +130,29 @@ checks exact result bits where appropriate, NaN classification/sign separately,
 decimal bit-for-bit equivalence.
 
 The pinned tiny-c integration compiles and executes public hexadecimal `strtod`,
-decimal `strtof`, and `%la` through the shared scanner. The same integration
-binary runs through GNU `ld` and the pinned mini-elf toolchain. GCC and Clang run
-the full freestanding/runtime suite plus host-libc-independence inspection.
+decimal `strtof`, and `%la` through the shared scanner. It now also compiles
+ordinary and public-`va_list` `%e/%g/%a` output, so the executable proves both
+text-to-value and value-to-text floating paths before being linked by GNU `ld`
+and the pinned mini-elf toolchain. GCC and Clang run the full
+freestanding/runtime suite plus host-libc-independence inspection.
 
 ## Phase boundary and next frontier
 
-Floating lexical/conversion ownership is now centralized: stdlib string
-conversion and stdio formatted input share one engine while keeping their
-different transaction semantics explicit. The scanner-local floating numeric
-subsystem is closed.
+Floating lexical/conversion ownership is centralized and floating formatted
+output breadth is now complete within its documented binary64 bounds. The project
+therefore has executable decimal, hexadecimal, infinity/NaN, and signed-zero
+behavior in both directions without duplicating scanner parsers or formatting
+sinks and without claiming more rounding conformance than the implementations
+prove.
 
-The next higher-value floating frontier is **formatted output breadth**. The
-output formatter currently proves binary64 transport with bounded `%f`, but
-`%e`/`%E`, `%g`/`%G`, and `%a`/`%A` still lack executable conversion behavior.
-A coherent next slice should factor reusable binary64 decomposition/rounding and
-notation selection into the existing formatter, preserve FILE/memory sinks and
-ordinary/public-`va_list` transport, and prove the new families through
-GCC/Clang/tiny-c/mini-elf execution without claiming a general-purpose dtoa
-algorithm beyond the implemented bounds.
+The next architectural frontier moves below floating notation into
+**configurable stream buffering and buffer ownership**. The fixed private
+256-byte FILE buffers are now the more important architectural constraint:
+`setvbuf`/`setbuf`, full/line/unbuffered modes, caller-owned buffer lifetime, and
+safe read/write mode transitions must integrate with the existing logical cursor,
+positioning, flush, close, and normal-exit lifecycle rather than being bolted onto
+each high-level stdio call.
 
 `long double`, locale-sensitive conversion, wide-character I/O, `%n`, pointer
-formatting, configurable buffering, `tmpfile`, threading/TLS, C11
-exclusive-create modes, and allocator tuning remain separate later phases.
+formatting, `tmpfile`, threading/TLS, C11 exclusive-create modes, and allocator
+tuning remain separate later phases.

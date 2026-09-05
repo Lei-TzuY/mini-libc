@@ -59,8 +59,8 @@ bytes, and the first byte outside the set remains unread.
 
 ## Floating conversion model
 
-All floating conversion letters now enter one shared lexical/conversion engine.
-The accepted C-locale input families are:
+All floating conversion letters enter one shared lexical/conversion engine. The
+accepted C-locale input families are:
 
 - decimal digits with an optional point and optional `e`/`E` exponent;
 - `0x`/`0X` hexadecimal input with an optional point and optional `p`/`P`
@@ -69,8 +69,8 @@ The accepted C-locale input families are:
 - case-insensitive `NAN`/`NAN(payload)` with an ASCII alphanumeric/underscore
   payload.
 
-One optional sign may precede every family. `%a`/`%A` are now executable rather
-than rejected syntax; `%f`, `%e`, and `%g` families intentionally select the same
+One optional sign may precede every family. `%a`/`%A` are executable rather than
+rejected syntax; `%f`, `%e`, and `%g` families intentionally select the same
 shared input grammar rather than separate notation-specific parsers.
 
 Field width limits the complete input item. Assignment suppression performs
@@ -175,19 +175,21 @@ run the complete freestanding/runtime suite and host-libc-independence inspectio
 
 ## Phase boundary and next frontier
 
-Formatted input now has one complete internal ownership model: FILE/string source
-handling stays in stdio, while floating lexical/numeric conversion lives in one
-reusable internal engine shared with `strtof`/`strtod`. `%a`/`%A`, decimal forms,
-special values, range handling, and the scanner-specific input-item transaction
-policy are executable rather than roadmap placeholders.
+Formatted input and public floating conversion are now closed companion phases:
+FILE/string source handling remains in stdio, while decimal/hex/special lexical
+and numeric conversion is owned by one reusable internal engine. The formatter
+has now caught up as well: `%f/%F`, `%e/%E`, `%g/%G`, and `%a/%A` output execute
+through the established XMM/public-`va_list` and FILE/memory architecture rather
+than requiring another floating parser or transport layer.
 
-The next higher floating frontier is **formatted output breadth**: `%e`/`%E`,
-`%g`/`%G`, and `%a`/`%A` should extend the existing formatter's proven XMM/
-public-`va_list` transport and FILE/memory sinks through reusable binary64
-decomposition, rounding, and notation-selection logic. That work must keep the
-bounded numeric claims explicit instead of presenting a partial dtoa algorithm
-as general correct rounding.
+The next architectural promotion is **configurable stream buffering and buffer
+ownership**. That work belongs below formatted input/output: `setvbuf`/`setbuf`
+should select full, line, or unbuffered behavior while preserving this scanner's
+shared logical read cursor, one-byte pushback, update-stream direction barriers,
+positioning semantics, and error indicators. Caller-provided versus libc-owned
+buffer lifetime must be explicit and executable before higher-level stdio grows
+further.
 
 `long double`, wide-character scanning, locale-sensitive behavior, `%n`, pointer
-formatting, configurable buffering, `tmpfile`, threading/TLS, C11
-exclusive-create modes, and allocator tuning remain separate later phases.
+formatting, `tmpfile`, threading/TLS, C11 exclusive-create modes, and allocator
+tuning remain separate later phases.

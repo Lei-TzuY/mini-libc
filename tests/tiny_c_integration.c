@@ -95,6 +95,8 @@ int main(int argc, char **argv, char **envp)
         "tiny-c-integration-ok:+00007:0x2a:-5000000000:11:22:33:1.5\n";
     static const char expected_memory_output[] = "mem:1:2:3:4:5";
     static const char expected_float_output[] = "fp:1:2:3:4:5:6:7:8:9";
+    static const char expected_notation_output[] =
+        "1.25e+01|0.0001234|0x1.8p+0";
     char *end;
     char *value;
     char *io_path;
@@ -308,6 +310,22 @@ int main(int argc, char **argv, char **envp)
     if (formatted != 10 || strcmp(format_buffer, "[    1.50]") != 0 || errno != EIO) {
         free(buffer);
         return 32;
+    }
+
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "%.2e|%.4g|%a", 12.5, 0.0001234, 1.5);
+    if (formatted != (int)(sizeof(expected_notation_output) - 1U) ||
+        strcmp(format_buffer, expected_notation_output) != 0 || errno != EIO) {
+        free(buffer);
+        return 40;
+    }
+
+    formatted = tiny_vsnprintf(format_buffer, sizeof(format_buffer),
+                               "%.2e|%.4g|%a", 12.5, 0.0001234, 1.5);
+    if (formatted != (int)(sizeof(expected_notation_output) - 1U) ||
+        strcmp(format_buffer, expected_notation_output) != 0 || errno != EIO) {
+        free(buffer);
+        return 41;
     }
 
     formatted = tiny_vsnprintf(format_buffer, sizeof(format_buffer),
