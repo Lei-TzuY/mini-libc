@@ -3,14 +3,16 @@ SIGNAL_RENAMES := -Dmini_sys_rt_sigaction=mini_test_rt_sigaction \
                   -Dmini_sys_gettid=mini_test_gettid \
                   -Dmini_sys_tgkill=mini_test_tgkill
 
-$(LIBC): $(BUILD)/signal.o $(BUILD)/signal_restorer.o
+$(LIBC): $(BUILD)/signal.o
 all: $(BUILD)/signal_probe $(BUILD)/signal_test
+inspect: signal_inspect
+
+test: signal_test_run
+
+.PHONY: signal_inspect signal_test_run
 
 $(BUILD)/signal.o: src/signal/signal.c include/signal.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/signal_restorer.o: src/signal/restorer.S | $(BUILD)
-	$(CC) $(ASFLAGS) -c $< -o $@
 
 $(BUILD)/signal_probe.o: tests/signal_probe.c include/signal.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
@@ -26,3 +28,9 @@ $(BUILD)/signal_test.o: tests/signal_test.c include/signal.h include/errno.h | $
 
 $(BUILD)/signal_test: $(BUILD)/signal_test.o $(BUILD)/signal_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+signal_test_run: $(BUILD)/signal_probe $(BUILD)/signal_test
+	./tests/run-signal.sh
+
+signal_inspect: $(BUILD)/signal_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/signal_probe
