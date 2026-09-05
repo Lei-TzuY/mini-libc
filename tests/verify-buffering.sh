@@ -15,8 +15,10 @@ $CC -Iinclude $CFLAGS \
     -Dmini_sys_openat=mini_test_openat -Dmini_sys_close=mini_test_close \
     -Dmalloc=mini_test_malloc -Dfree=mini_test_free \
     -c src/stdio/file.c -o "$OUT/file.o"
+$CC -Iinclude $CFLAGS -c src/stdio/position.c -o "$OUT/position.o"
 $CC -Iinclude $CFLAGS -c tests/stdio_buffering_test.c -o "$OUT/test.o"
 $CC -Iinclude $CFLAGS -c src/errno/errno.c -o "$OUT/errno.o"
-$CC -no-pie -o "$OUT/test" "$OUT/test.o" "$OUT/stdio.o" "$OUT/file.o" "$OUT/errno.o"
+$CC -no-pie -o "$OUT/test" "$OUT/test.o" "$OUT/stdio.o" "$OUT/file.o" \
+    "$OUT/position.o" "$OUT/errno.o"
 
 "$OUT/test"
