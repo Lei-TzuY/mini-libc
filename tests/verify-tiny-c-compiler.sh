@@ -36,6 +36,8 @@ done
     -o "$OUT/rebind.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_time_integration.c \
     -o "$OUT/time.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_termination_integration.c \
+    -o "$OUT/termination.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -48,6 +50,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/time" \
         "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/termination" \
+        "$OUT/termination.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -60,6 +64,8 @@ else
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/time" \
         "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/termination" \
+        "$OUT/termination.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -137,10 +143,29 @@ if [ "$time_output" != "tiny-time-ok" ]; then
     exit 1
 fi
 
+set +e
+termination_quick_output=$("$OUT/termination" quick)
+termination_quick_status=$?
+set -e
+if [ "$termination_quick_status" -ne 41 ] || [ "$termination_quick_output" != 21 ]; then
+    echo "unexpected tiny-c quick termination: status=$termination_quick_status output='$termination_quick_output'" >&2
+    exit 1
+fi
+
+set +e
+termination_abort_output=$("$OUT/termination" abort 2>/dev/null)
+termination_abort_status=$?
+set -e
+if [ "$termination_abort_status" -ne 134 ] || [ "$termination_abort_output" != H ]; then
+    echo "unexpected tiny-c abort termination: status=$termination_abort_status output='$termination_abort_output'" >&2
+    exit 1
+fi
+
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
 ./tests/verify-no-host-libc.sh "$OUT/time"
+./tests/verify-no-host-libc.sh "$OUT/termination"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
