@@ -28,7 +28,10 @@ int main(int argc, char **argv)
     char full_buffer[2];
     char line_buffer[8];
     char setbuf_storage[BUFSIZ];
+    char tmp_buffer[4];
+    char tmp_word[4];
     FILE *stream;
+    int tmp_value;
 
     if (argc != 2) {
         return 1;
@@ -120,8 +123,39 @@ int main(int argc, char **argv)
         return 17;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    errno = ERANGE;
+    stream = tmpfile();
+    if (stream == (FILE *)0 || errno != ERANGE ||
+        setvbuf(stream, tmp_buffer, _IOFBF, sizeof(tmp_buffer)) != 0 ||
+        fprintf(stream, "tmp:%d", 7) != 5 || ftell(stream) != 5L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         return 18;
+    }
+    rewind(stream);
+    tmp_word[0] = '\0';
+    tmp_value = 0;
+    if (ferror(stream) || feof(stream) || ftell(stream) != 0L ||
+        fscanf(stream, "%3[a-z]:%d", tmp_word, &tmp_value) != 2 ||
+        tmp_word[0] != 't' || tmp_word[1] != 'm' || tmp_word[2] != 'p' ||
+        tmp_word[3] != '\0' || tmp_value != 7 || ftell(stream) != 5L ||
+        fseek(stream, 0L, SEEK_END) != 0 || fputc('!', stream) != '!' ||
+        ftell(stream) != 6L) {
+        fclose(stream);
+        return 19;
+    }
+    rewind(stream);
+    if (fgetc(stream) != 't' || fgetc(stream) != 'm' ||
+        fgetc(stream) != 'p' || fgetc(stream) != ':' ||
+        fgetc(stream) != '7' || fgetc(stream) != '!' ||
+        fgetc(stream) != EOF || !feof(stream) || ferror(stream) ||
+        fclose(stream) != 0) {
+        return 20;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 21;
     }
     return 0;
 }

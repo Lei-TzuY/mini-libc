@@ -12,6 +12,7 @@
 #define MINI_O_CREAT 64
 #define MINI_O_TRUNC 512
 #define MINI_O_APPEND 1024
+#define MINI_O_TMPFILE 4259840
 
 static int parse_open_mode(const char *mode, int *flags,
                            unsigned int *stream_mode)
@@ -67,6 +68,24 @@ static int parse_open_mode(const char *mode, int *flags,
     }
 
     return 1;
+}
+
+static void initialize_owned_stream(FILE *stream, int fd,
+                                    unsigned int stream_mode)
+{
+    stream->fd = fd;
+    stream->mode = stream_mode;
+    stream->state = 0;
+    stream->next = (FILE *)0;
+    stream->write_length = 0;
+    stream->write_buffer = (unsigned char *)0;
+    stream->read_offset = 0;
+    stream->read_length = 0;
+    stream->pushback_valid = 0U;
+    stream->pushback_byte = 0U;
+    stream->read_buffer = (unsigned char *)0;
+    stream->buffer_size = 0;
+    __mini_stdio_register(stream);
 }
 
 void __mini_stdio_release_buffer(FILE *stream)
@@ -186,19 +205,33 @@ FILE *fopen(const char *restrict filename, const char *restrict mode)
         return (FILE *)0;
     }
 
-    stream->fd = (int)result;
-    stream->mode = stream_mode;
-    stream->state = 0;
-    stream->next = (FILE *)0;
-    stream->write_length = 0;
-    stream->write_buffer = (unsigned char *)0;
-    stream->read_offset = 0;
-    stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
-    stream->read_buffer = (unsigned char *)0;
-    stream->buffer_size = 0;
-    __mini_stdio_register(stream);
+    initialize_owned_stream(stream, (int)result, stream_mode);
+    return stream;
+}
+
+FILE *tmpfile(void)
+{
+    FILE *stream;
+    long result;
+
+    stream = (FILE *)malloc(sizeof(*stream));
+    if (stream == (FILE *)0) {
+        return (FILE *)0;
+    }
+
+    result = mini_sys_openat(MINI_AT_FDCWD, "/tmp",
+                             MINI_O_RDWR | MINI_O_TMPFILE, 0600U);
+    if (result < 0) {
+        int error = (int)-result;
+
+        free(stream);
+        errno = error;
+        return (FILE *)0;
+    }
+
+    initialize_owned_stream(stream, (int)result,
+                            MINI_FILE_READABLE | MINI_FILE_WRITABLE |
+                                MINI_FILE_OWNED);
     return stream;
 }
 
