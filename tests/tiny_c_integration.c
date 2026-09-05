@@ -79,15 +79,24 @@ int main(int argc, char **argv, char **envp)
     }
 
     if (fseek(stream, 3L, SEEK_SET) != 0 || feof(stream) ||
-        fread(io_buffer, 1, 4, stream) != 4) {
+        fgetc(stream) != '3' || ftell(stream) != 4L ||
+        ungetc('!', stream) != '!' || ftell(stream) != 3L ||
+        fgetc(stream) != '!' || ftell(stream) != 4L) {
         fclose(stream);
         free(buffer);
         return 11;
     }
-    io_buffer[4] = '\0';
-    if (strcmp(io_buffer, "345X") != 0 || fclose(stream) != 0) {
+    if (fgets(io_buffer, 5, stream) != io_buffer || strcmp(io_buffer, "45XY") != 0 ||
+        ftell(stream) != 8L || fread(io_buffer, 1, 2, stream) != 2 ||
+        io_buffer[0] != '8' || io_buffer[1] != '9' ||
+        fgetc(stream) != EOF || !feof(stream)) {
+        fclose(stream);
         free(buffer);
         return 12;
+    }
+    if (fclose(stream) != 0) {
+        free(buffer);
+        return 13;
     }
 
     formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
@@ -95,7 +104,7 @@ int main(int argc, char **argv, char **envp)
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 13;
+        return 14;
     }
 
     free(buffer);
