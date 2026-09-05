@@ -63,6 +63,7 @@ static int parse_open_mode(const char *mode, int *flags,
         *flags |= MINI_O_CREAT | MINI_O_TRUNC;
     } else if (kind == 'a') {
         *flags |= MINI_O_CREAT | MINI_O_APPEND;
+        *stream_mode |= MINI_FILE_APPEND;
     }
 
     return 1;
