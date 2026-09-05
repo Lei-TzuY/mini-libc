@@ -36,3 +36,5 @@ signal_test_run: $(BUILD)/signal_probe $(BUILD)/signal_test $(BUILD)/runtime_pro
 
 signal_inspect: $(BUILD)/signal_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/signal_probe
+
+include mk/setjmp.mk
