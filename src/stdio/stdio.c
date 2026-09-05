@@ -6,16 +6,19 @@
 #include "stdio_internal.h"
 
 static FILE mini_stderr = {
-    2, MINI_FILE_WRITABLE | MINI_FILE_UNBUFFERED, 0, (FILE *)0, 0, {0},
-    0, 0, 0U, 0U, {0}
+    2, MINI_FILE_WRITABLE | MINI_FILE_UNBUFFERED, 0, (FILE *)0,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    {0}, {0}
 };
 static FILE mini_stdout = {
-    1, MINI_FILE_WRITABLE, 0, &mini_stderr, 0, {0},
-    0, 0, 0U, 0U, {0}
+    1, MINI_FILE_WRITABLE, 0, &mini_stderr,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    {0}, {0}
 };
 static FILE mini_stdin = {
-    0, MINI_FILE_READABLE, 0, &mini_stdout, 0, {0},
-    0, 0, 0U, 0U, {0}
+    0, MINI_FILE_READABLE, 0, &mini_stdout,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    {0}, {0}
 };
 
 FILE *__mini_stdin = &mini_stdin;
@@ -50,6 +53,58 @@ static int readable_stream(FILE *stream)
     return stream != (FILE *)0 && (stream->mode & MINI_FILE_READABLE) != 0U;
 }
 
+static void ensure_storage(FILE *stream)
+{
+    if (stream->buffer_size == 0U) {
+        stream->buffer_size = MINI_FILE_BUFFER_SIZE;
+    }
+    if (stream->write_buffer == (unsigned char *)0) {
+        stream->write_buffer = stream->inline_write_buffer;
+    }
+    if (stream->read_buffer == (unsigned char *)0) {
+        stream->read_buffer = stream->inline_read_buffer;
+    }
+}
+
+int __mini_stdio_sync_input(FILE *stream)
+{
+    unsigned long max_long = (~0UL) >> 1;
+    size_t unread = 0;
+    long result;
+
+    if (!readable_stream(stream)) {
+        errno = EINVAL;
+        return EOF;
+    }
+    if (stream->read_length >= stream->read_offset) {
+        unread = stream->read_length - stream->read_offset;
+    }
+    if (stream->pushback_valid != 0U) {
+        ++unread;
+    }
+    if ((stream->state & MINI_FILE_READ_NEEDS_POSITION) == 0U && unread == 0U) {
+        return 0;
+    }
+    if (unread > (size_t)max_long) {
+        errno = EINVAL;
+        return EOF;
+    }
+
+    result = mini_sys_lseek(stream->fd, -(long)unread, SEEK_CUR);
+    if (result < 0) {
+        errno = (int)-result;
+        return EOF;
+    }
+
+    stream->read_offset = 0;
+    stream->read_length = 0;
+    stream->pushback_valid = 0U;
+    stream->pushback_byte = 0U;
+    stream->state &= ~(MINI_FILE_EOF | MINI_FILE_READ_NEEDS_POSITION |
+                       MINI_FILE_WRITE_NEEDS_SYNC);
+    return 0;
+}
+
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
 {
     size_t completed = 0;
@@ -64,6 +119,32 @@ size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
         return mark_read_error(stream, EINVAL, 0);
     }
 
+    if ((stream->mode & MINI_FILE_UNBUFFERED) != 0U) {
+        while (completed < length) {
+            size_t remaining = length - completed;
+            long result = mini_sys_read(stream->fd, buffer + completed,
+                                        (unsigned long)remaining);
+
+            if (result < 0) {
+                stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+                return mark_read_error(stream, (int)-result, completed);
+            }
+            if (result == 0) {
+                stream->state |= MINI_FILE_EOF;
+                stream->state &= ~MINI_FILE_READ_NEEDS_POSITION;
+                return completed;
+            }
+            if ((size_t)result > remaining) {
+                stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+                return mark_read_error(stream, EIO, completed);
+            }
+            completed += (size_t)result;
+            stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+        }
+        return completed;
+    }
+
+    ensure_storage(stream);
     while (completed < length) {
         if (stream->pushback_valid != 0U) {
             buffer[completed++] = stream->pushback_byte;
@@ -93,7 +174,7 @@ size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
 
         {
             long result = mini_sys_read(stream->fd, stream->read_buffer,
-                                        MINI_FILE_BUFFER_SIZE);
+                                        (unsigned long)stream->buffer_size);
 
             if (result < 0) {
                 stream->state |= MINI_FILE_READ_NEEDS_POSITION;
@@ -106,7 +187,7 @@ size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
                 stream->state &= ~MINI_FILE_READ_NEEDS_POSITION;
                 return completed;
             }
-            if ((unsigned long)result > (unsigned long)MINI_FILE_BUFFER_SIZE) {
+            if ((size_t)result > stream->buffer_size) {
                 stream->state |= MINI_FILE_READ_NEEDS_POSITION;
                 return mark_read_error(stream, EIO, completed);
             }
@@ -153,6 +234,10 @@ int __mini_stdio_flush_buffer(FILE *stream)
     }
 
     length = stream->write_length;
+    if (length == 0U) {
+        return 0;
+    }
+    ensure_storage(stream);
     while (completed < length) {
         size_t remaining = length - completed;
         long result = mini_sys_write(stream->fd,
@@ -196,27 +281,44 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
         return write_raw(stream, buffer, length);
     }
 
+    ensure_storage(stream);
     while (accepted < length) {
         size_t space;
         size_t chunk;
         size_t i;
+        int flush_line = 0;
 
-        if (stream->write_length == MINI_FILE_BUFFER_SIZE) {
+        if (stream->write_length == stream->buffer_size) {
             if (__mini_stdio_flush_buffer(stream) == EOF) {
                 return accepted;
             }
         }
 
-        space = MINI_FILE_BUFFER_SIZE - stream->write_length;
+        space = stream->buffer_size - stream->write_length;
         chunk = length - accepted;
         if (chunk > space) {
             chunk = space;
+        }
+        if ((stream->mode & MINI_FILE_LINE_BUFFERED) != 0U) {
+            for (i = 0; i < chunk; ++i) {
+                if (buffer[accepted + i] == (unsigned char)'\n') {
+                    chunk = i + 1U;
+                    flush_line = 1;
+                    break;
+                }
+            }
         }
         for (i = 0; i < chunk; ++i) {
             stream->write_buffer[stream->write_length + i] = buffer[accepted + i];
         }
         stream->write_length += chunk;
         accepted += chunk;
+
+        if (stream->write_length == stream->buffer_size || flush_line) {
+            if (__mini_stdio_flush_buffer(stream) == EOF) {
+                return accepted;
+            }
+        }
     }
 
     return accepted;
