@@ -2,9 +2,9 @@
 
 mini-libc now has an executable C11 thread/runtime baseline for Linux x86-64.
 It creates real kernel threads, joins and detaches them through the kernel
-clear-TID lifecycle, provides a futex-backed plain mutex, installs per-thread
-`errno` state, and serializes the shared brk allocator so distinct threads can
-allocate and free concurrently.
+clear-TID lifecycle, provides futex-backed plain mutexes and condition variables,
+installs per-thread `errno` state, and serializes the shared brk allocator so
+distinct threads can allocate and free concurrently.
 
 This phase is not a header-only `<threads.h>` surface. Thread creation, lifetime
 ownership, detach reclamation, synchronization, TLS setup, allocator interaction,
@@ -20,12 +20,14 @@ cross-toolchain executable evidence.
   `thrd_exit`;
 - `mtx_t` plus `mtx_init`, `mtx_lock`, `mtx_trylock`, `mtx_unlock`, and
   `mtx_destroy`;
+- `cnd_t` plus `cnd_init`, `cnd_wait`, `cnd_signal`, `cnd_broadcast`, and
+  `cnd_destroy`;
 - `thrd_success`, `thrd_nomem`, `thrd_timedout`, `thrd_busy`, `thrd_error`, and
   `mtx_plain` result/type constants.
 
-Only plain mutexes are implemented. Recursive/timed mutexes, `thrd_sleep`,
-`thrd_yield`, condition variables, `once_flag`/`call_once`, and the TSS APIs are
-outside this phase.
+Only plain mutexes and untimed condition waits are implemented. Recursive/timed
+mutexes, `cnd_timedwait`, `thrd_sleep`, `thrd_yield`, `once_flag`/`call_once`, and
+the TSS APIs are outside this phase.
 
 ## Dynamic thread controls and publication
 
@@ -151,16 +153,39 @@ keep the historical process fallback. Freestanding startup installs the
 TCB-backed provider, so each mini-libc-created thread resolves the same
 source-level errno lvalue to its own slot.
 
-## Mutex and futex contract
+## Mutex, condition-variable, and futex contract
 
 A plain `mtx_t` is one integer state word. Lock acquisition uses the standalone
 private x86 `xchg` primitive, which is an atomic full barrier. A contended thread
 sleeps with raw `futex(FUTEX_WAIT)` and unlock exchanges the word back to zero
 before waking one waiter with `FUTEX_WAKE`.
 
-The atomic primitive is a separate archive object shared by the mutex, allocator,
-and thread-registry synchronization paths without forcing programs that only use
-`malloc` to pull clone/thread-lifecycle code into their static image.
+A `cnd_t` is one integer generation word. `cnd_signal` atomically increments the
+generation and wakes one futex waiter; `cnd_broadcast` increments the same
+generation and wakes all waiters. The generation increment uses a private x86
+`lock xadd` primitive shared with the existing atomic support instead of compiler
+atomic builtins or a heap-backed waiter list.
+
+`cnd_wait` atomically observes the current generation through the same primitive,
+releases the caller's mutex, waits on the old generation with raw
+`FUTEX_WAIT`, and reacquires the mutex before returning. The critical
+release-to-sleep race is closed by the futex expected-value check: if a signaler
+increments the generation after the mutex is released but before the waiter
+enters the kernel sleep, the wait returns `EAGAIN` instead of blocking on a wake
+that already happened. `EINTR` retries the same generation; ordinary futex wake
+or an `EAGAIN` generation mismatch both complete the wait path. Unexpected futex
+failures still reacquire the mutex before returning `thrd_error`.
+
+Condition signaling is not a sticky token mechanism and spurious wakes are
+allowed. Correct callers protect a predicate with the associated mutex and loop
+around `cnd_wait`. Destroying a mutex or condition variable while another thread
+is using it remains outside valid usage. The public condition calls preserve the
+caller's pre-existing `errno` in the same style as the thread/mutex surface.
+
+The atomic primitives remain separate archive objects shared by mutex,
+condition-variable, allocator, and thread-registry synchronization paths without
+forcing programs that only use `malloc` to pull clone/thread-lifecycle code into
+their static image.
 
 `mtx_trylock` reports `thrd_busy` when the state is already held. Unlocking an
 unlocked mini-libc mutex is rejected with `thrd_error`. Ownership tracking,
@@ -204,6 +229,21 @@ the previous fixed-table implementation:
 - the earlier four-worker allocator stress still performs 2,400 concurrent
   allocation/resize/free cycles while preserving independent per-thread errno.
 
+A separate freestanding condition probe creates six waiters behind one mutex and
+condition predicate. All six report readiness through a second condition. The
+main thread grants one token and calls `cnd_signal`, requires exactly one worker
+to complete, then grants the remaining tokens and calls `cnd_broadcast`, after
+which every worker must finish and join with its distinct expected result. Worker
+and main errno sentinels remain unchanged across condition calls.
+
+The hosted deterministic condition harness does not rely on scheduler timing. It
+injects a generation increment from the fake mutex unlock exactly after
+`cnd_wait` takes its snapshot and before the fake futex wait executes. The wait
+must use the old expected generation, observe `EAGAIN`, reacquire the mutex, and
+return success. The same harness covers interrupted-wait retry, unexpected futex
+errors with mandatory mutex reacquisition, unlock/relock failures, wake failures,
+signal-versus-broadcast wake counts, null arguments, and errno preservation.
+
 The existing process-termination probe continues to keep a child alive while the
 main thread calls `_Exit(37)` and requires that no child `survived` marker can
 appear, proving process-wide `SYS_exit_group` behavior remains intact.
@@ -213,24 +253,30 @@ user threads before joining any of them, crossing the historical 16-slot limit
 through code produced by the pinned compiler. It then creates and detaches eight
 running targets, checks join/second-detach rejection, waits for all workers to
 finish, performs a post-stress heap sanity allocation, and still joins an
-explicit `thrd_exit(91)` target. The same object graph is linked and executed
-through both GNU `ld` and the pinned mini-elf-toolchain. Host-libc-independence
-inspection includes the thread executables.
+explicit `thrd_exit(91)` target.
+
+A separate tiny-c condition executable creates four condition waiters, waits for
+all of them through a progress condition, releases exactly one with `cnd_signal`,
+then releases the rest with `cnd_broadcast` and joins every worker. The same
+condition executable is linked and run through both GNU `ld` and the pinned
+mini-elf-toolchain. Host-libc-independence inspection includes the condition
+probe and pinned integration executable.
 
 ## Phase boundary and promotion
 
 Thread creation, dynamic join/detach lifecycle, exactly-once detached user
-resource reclamation, a plain mutex, per-thread errno, and concurrent heap
-ownership are now executable runtime capabilities. This still does **not** make
-mini-libc globally thread-safe. FILE registry/buffering, termination callback
-registries, environment storage, and hidden string state remain unsynchronized
-unless their individual contracts say otherwise.
+resource reclamation, a plain mutex, untimed condition-variable synchronization,
+per-thread errno, and concurrent heap ownership are now executable runtime
+capabilities. This still does **not** make mini-libc globally thread-safe. FILE
+registry/buffering, termination callback registries, environment storage, and
+hidden string state remain unsynchronized unless their individual contracts say
+otherwise.
 
-The next architectural frontier is **condition-variable synchronization** rather
-than more thread API names. A coherent follow-on should add a real `cnd_t`
-wait/signal/broadcast state machine on top of the existing futex and plain-mutex
-substrate, prove atomic release/sleep/reacquire behavior with multiple waiters,
-and keep lost-wakeup behavior under deterministic executable stress. Once that
-blocking synchronization primitive is real, timed waits/sleep, `call_once`/TSS,
-or broader shared-runtime synchronization such as FILE/registry locking can be
-promoted as separate phases.
+The next architectural frontier is **timed blocking synchronization**, not more
+untimed condition variants. A coherent follow-on should build on the existing
+raw time/futex substrate to add an explicit absolute-time condition wait contract
+and thread sleep, then decide the timed-mutex surface without weakening the plain
+mutex semantics. Timeout-vs-signal races, expired deadlines, interruption, and
+mutex reacquisition must have deterministic executable coverage. Once timed
+blocking is real, `call_once`/TSS or broader shared-runtime synchronization such
+as FILE/registry locking can be promoted as separate phases.
