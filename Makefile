@@ -421,3 +421,5 @@ inspect: all
 
 clean:
 	rm -rf $(BUILD)
+
+include mk/signal.mk

@@ -1,6 +1,14 @@
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <time.h>
+
+static volatile sig_atomic_t seen_signal;
+
+static void record_signal(int sig)
+{
+    seen_signal = sig;
+}
 
 int main(void)
 {
@@ -12,6 +20,7 @@ int main(void)
     double delta;
     volatile unsigned long work = 1UL;
     unsigned long i;
+    void (*previous)(int);
 
     errno = EIO;
     if (timespec_get(&now, TIME_UTC) != TIME_UTC || now.tv_sec <= 0 ||
@@ -42,8 +51,31 @@ int main(void)
     }
     (void)work;
 
-    if (puts("tiny-time-ok") < 0) {
+    previous = signal(SIGTERM, record_signal);
+    if (previous != SIG_DFL || errno != EIO) {
+        return 6;
+    }
+    seen_signal = 0;
+    if (raise(SIGTERM) != 0 || seen_signal != SIGTERM || errno != EIO) {
         return 7;
+    }
+
+    previous = signal(SIGTERM, SIG_IGN);
+    if (previous != record_signal) {
+        return 8;
+    }
+    seen_signal = 0;
+    if (raise(SIGTERM) != 0 || seen_signal != 0) {
+        return 9;
+    }
+
+    previous = signal(SIGTERM, SIG_DFL);
+    if (previous != SIG_IGN) {
+        return 10;
+    }
+
+    if (puts("tiny-time-ok") < 0) {
+        return 11;
     }
     return 0;
 }
