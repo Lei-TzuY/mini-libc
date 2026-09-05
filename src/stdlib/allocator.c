@@ -5,6 +5,8 @@
 #include <string.h>
 
 #define MINI_ALLOC_ALIGNMENT 16UL
+#define MINI_FUTEX_WAIT 0
+#define MINI_FUTEX_WAKE 1
 
 typedef unsigned long mini_uintptr_t;
 
@@ -22,6 +24,25 @@ static struct mini_block *block_head;
 static struct mini_block *block_tail;
 static mini_uintptr_t heap_end;
 static int heap_initialized;
+static volatile int allocator_lock_word;
+
+extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
+
+static void allocator_lock(void)
+{
+    while (__mini_atomic_exchange_int(&allocator_lock_word, 1) != 0) {
+        (void)mini_sys_futex(&allocator_lock_word, MINI_FUTEX_WAIT, 1,
+                             (const void *)0, (volatile int *)0, 0);
+    }
+}
+
+static void allocator_unlock(void)
+{
+    if (__mini_atomic_exchange_int(&allocator_lock_word, 0) != 0) {
+        (void)mini_sys_futex(&allocator_lock_word, MINI_FUTEX_WAKE, 1,
+                             (const void *)0, (volatile int *)0, 0);
+    }
+}
 
 static int align_size(size_t size, size_t *aligned)
 {
@@ -158,21 +179,25 @@ void *malloc(size_t size)
         return (void *)0;
     }
 
+    allocator_lock();
     block = find_free_block(aligned);
     if (block != (struct mini_block *)0) {
         (void)split_block(block, aligned);
         block->is_free = 0;
         block->requested_size = size;
+        allocator_unlock();
         return (void *)(block + 1);
     }
 
     block = grow_heap(aligned);
-    if (block == (struct mini_block *)0) {
-        errno = ENOMEM;
-        return (void *)0;
+    if (block != (struct mini_block *)0) {
+        block->requested_size = size;
+        allocator_unlock();
+        return (void *)(block + 1);
     }
-    block->requested_size = size;
-    return (void *)(block + 1);
+    allocator_unlock();
+    errno = ENOMEM;
+    return (void *)0;
 }
 
 static int blocks_adjacent(const struct mini_block *left,
@@ -210,6 +235,7 @@ void free(void *ptr)
         return;
     }
 
+    allocator_lock();
     block = ((struct mini_block *)ptr) - 1;
     block->is_free = 1;
     merge_with_next(block);
@@ -224,6 +250,7 @@ void free(void *ptr)
         blocks_adjacent(previous, block)) {
         merge_with_next(previous);
     }
+    allocator_unlock();
 }
 
 void *realloc(void *ptr, size_t size)
@@ -244,11 +271,13 @@ void *realloc(void *ptr, size_t size)
         return (void *)0;
     }
 
-    block = ((struct mini_block *)ptr) - 1;
     if (!align_size(size, &aligned)) {
         errno = ENOMEM;
         return (void *)0;
     }
+
+    allocator_lock();
+    block = ((struct mini_block *)ptr) - 1;
 
     if (aligned <= block->size) {
         split = split_block(block, aligned);
@@ -256,6 +285,7 @@ void *realloc(void *ptr, size_t size)
             merge_with_next(split);
         }
         block->requested_size = size;
+        allocator_unlock();
         return ptr;
     }
 
@@ -272,6 +302,7 @@ void *realloc(void *ptr, size_t size)
                 merge_with_next(split);
             }
             block->requested_size = size;
+            allocator_unlock();
             return ptr;
         }
 
@@ -288,6 +319,7 @@ void *realloc(void *ptr, size_t size)
                     block->size = aligned;
                     block_tail = block;
                     block->requested_size = size;
+                    allocator_unlock();
                     return ptr;
                 }
             }
@@ -305,17 +337,20 @@ void *realloc(void *ptr, size_t size)
                 heap_end = target;
                 block->size = aligned;
                 block->requested_size = size;
+                allocator_unlock();
                 return ptr;
             }
         }
     }
+
+    copy_size = block->requested_size < size ? block->requested_size : size;
+    allocator_unlock();
 
     replacement = malloc(size);
     if (replacement == (void *)0) {
         return (void *)0;
     }
 
-    copy_size = block->requested_size < size ? block->requested_size : size;
     memcpy(replacement, ptr, copy_size);
     free(ptr);
     return replacement;
