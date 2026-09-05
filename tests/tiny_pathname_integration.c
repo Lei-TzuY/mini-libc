@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     FILE *stream;
     char buffer[8];
 
-    if (argc != 3) {
+    if (argc != 4) {
         return 1;
     }
     if (!remove_if_present(argv[1]) || !remove_if_present(argv[2])) {
@@ -87,8 +87,17 @@ int main(int argc, char **argv)
         return 13;
     }
 
-    if (puts(ok) == EOF) {
+    errno = ERANGE;
+    if (remove(argv[3]) != 0 || errno != ERANGE) {
         return 14;
+    }
+    errno = ERANGE;
+    if (remove(argv[3]) != -1 || errno != ENOENT) {
+        return 15;
+    }
+
+    if (puts(ok) == EOF) {
+        return 16;
     }
     return 0;
 }
