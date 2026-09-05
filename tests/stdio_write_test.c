@@ -54,7 +54,7 @@ static size_t read_call_count;
 static size_t open_call_count;
 static size_t close_call_count;
 
-static unsigned long allocation_storage[64];
+static unsigned long allocation_storage[128];
 static int allocation_in_use;
 static int allocation_fail;
 static size_t allocation_calls;
@@ -159,7 +159,7 @@ long mini_test_read(int fd, void *buf, unsigned long count)
     long result;
 
     if (read_script_index >= read_script_count || read_call_count >= 64 ||
-        count != 1 || fd != read_script[read_script_index].fd) {
+        count == 0 || fd != read_script[read_script_index].fd) {
         return -EINVAL;
     }
 
@@ -167,7 +167,7 @@ long mini_test_read(int fd, void *buf, unsigned long count)
     result = read_script[read_script_index].result;
     if (result == 1) {
         *(unsigned char *)buf = read_script[read_script_index].byte;
-    } else if (result > 1) {
+    } else if (result > 1 || (result > 0 && (unsigned long)result > count)) {
         return -EINVAL;
     }
     ++read_script_index;
