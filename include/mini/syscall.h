@@ -18,7 +18,10 @@ long mini_sys_lseek(int fd, long offset, int whence);
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,
                            unsigned long sigsetsize);
 long mini_sys_getpid(void);
+long mini_sys_arch_prctl(int code, unsigned long address);
 long mini_sys_gettid(void);
+long mini_sys_futex(volatile int *uaddr, int op, int value,
+                    const void *timeout, volatile int *uaddr2, int value3);
 long mini_sys_tgkill(int tgid, int tid, int sig);
 long mini_sys_openat(int dirfd, const char *path, int flags, unsigned int mode);
 long mini_sys_unlinkat(int dirfd, const char *path, int flags);
