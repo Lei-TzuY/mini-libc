@@ -71,43 +71,43 @@ fi
 
 strtok_output="$(./build/strtok_probe)"
 if [ "$strtok_output" != "strtok-ok" ]; then
-    echo "unexpected strtok probe output: $strtok_output" >&2
+    echo "unexpected strtok output: $strtok_output" >&2
     exit 1
 fi
 
 strerror_output="$(./build/strerror_probe)"
 if [ "$strerror_output" != "strerror-ok" ]; then
-    echo "unexpected strerror probe output: $strerror_output" >&2
+    echo "unexpected strerror output: $strerror_output" >&2
     exit 1
 fi
 
 ctype_output="$(./build/ctype_probe)"
 if [ "$ctype_output" != "ctype-ok" ]; then
-    echo "unexpected ctype probe output: $ctype_output" >&2
+    echo "unexpected ctype output: $ctype_output" >&2
     exit 1
 fi
 
 bsearch_output="$(./build/bsearch_probe)"
 if [ "$bsearch_output" != "bsearch-ok" ]; then
-    echo "unexpected bsearch probe output: $bsearch_output" >&2
+    echo "unexpected bsearch output: $bsearch_output" >&2
     exit 1
 fi
 
 atoi_output="$(./build/atoi_probe)"
 if [ "$atoi_output" != "atoi-ok" ]; then
-    echo "unexpected atoi probe output: $atoi_output" >&2
+    echo "unexpected atoi output: $atoi_output" >&2
     exit 1
 fi
 
 errno_output="$(./build/errno_probe)"
 if [ "$errno_output" != "errno-ok" ]; then
-    echo "unexpected errno probe output: $errno_output" >&2
+    echo "unexpected errno output: $errno_output" >&2
     exit 1
 fi
 
 strtol_output="$(./build/strtol_probe)"
 if [ "$strtol_output" != "strtol-ok" ]; then
-    echo "unexpected strtol probe output: $strtol_output" >&2
+    echo "unexpected strtol output: $strtol_output" >&2
     exit 1
 fi
 
@@ -226,7 +226,7 @@ rm -f "$block_io_path" "$input_buffer_path"
 scan_path=build/scan_probe.tmp
 rm -f "$scan_path"
 set +e
-scan_output="$(printf '41 token Q' | ./build/scan_probe)"
+scan_output="$(printf '41 token Q 1.5 -2.5e2' | ./build/scan_probe)"
 scan_status=$?
 set -e
 if [ "$scan_status" -ne 0 ]; then
