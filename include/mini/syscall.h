@@ -19,6 +19,7 @@ long mini_sys_openat(int dirfd, const char *path, int flags, unsigned int mode);
 long mini_sys_unlinkat(int dirfd, const char *path, int flags);
 long mini_sys_renameat(int olddirfd, const char *oldpath,
                        int newdirfd, const char *newpath);
+long mini_sys_clock_gettime(int clockid, void *tp);
 long mini_sys_brk(void *addr);
 long mini_sys_mmap(void *addr, unsigned long length, int prot, int flags,
                    int fd, long offset);

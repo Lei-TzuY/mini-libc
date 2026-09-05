@@ -31,6 +31,7 @@ FILE_RENAMES := -Dmini_sys_openat=mini_test_openat -Dmini_sys_close=mini_test_cl
                 -Dmalloc=mini_test_malloc -Dfree=mini_test_free
 BLOCK_RENAMES := -Dmini_sys_read=mini_test_read -Dmini_sys_write=mini_test_write
 POSITION_RENAMES := -Dmini_sys_lseek=mini_test_lseek
+TIME_RENAMES := -Dmini_sys_clock_gettime=mini_test_clock_gettime
 
 BUILD := build
 LIBC := $(BUILD)/libc.a
@@ -43,7 +44,7 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/stdio.o $(BUILD)/format.o $(BUILD)/format_entry.o \
             $(BUILD)/scan.o $(BUILD)/float_parse.o $(BUILD)/scan_entry.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
-            $(BUILD)/errno.o
+            $(BUILD)/time.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -51,13 +52,14 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/strtoul_probe $(BUILD)/strtod_probe \
             $(BUILD)/allocator_probe $(BUILD)/calloc_probe \
             $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
-            $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe
+            $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe \
+            $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
               $(BUILD)/strtoul_differential $(BUILD)/strtod_differential \
               $(BUILD)/allocator_failure_test $(BUILD)/stdio_write_test \
-              $(BUILD)/stdio_block_test $(BUILD)/stdio_scan_test
+              $(BUILD)/stdio_block_test $(BUILD)/stdio_scan_test $(BUILD)/time_test
 
 .PHONY: all clean test inspect
 
@@ -139,6 +141,9 @@ $(BUILD)/block_io.o: src/stdio/block.c src/stdio/stdio_internal.h include/stdio.
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/position.o: src/stdio/position.c src/stdio/stdio_internal.h include/stdio.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/time.o: src/time/time.c include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/errno.o: src/errno/errno.c include/errno.h | $(BUILD)
@@ -261,6 +266,9 @@ $(BUILD)/block_io_probe.o: tests/block_io_probe.c include/mini/syscall.h include
 $(BUILD)/scan_probe.o: tests/scan_probe.c include/mini/syscall.h include/stdio.h include/string.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/time_probe.o: tests/time_probe.c include/mini/syscall.h include/time.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/stdio_test_impl.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(STDIO_RENAMES) -c $< -o $@
 
@@ -276,6 +284,9 @@ $(BUILD)/position_test_impl.o: src/stdio/position.c src/stdio/stdio_internal.h i
 $(BUILD)/scan_test_impl.o: src/stdio/scan.c src/stdio/stdio_internal.h src/internal/float_parse.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/time_test_impl.o: src/time/time.c include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(TIME_RENAMES) -c $< -o $@
+
 $(BUILD)/stdio_write_test.o: tests/stdio_write_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
@@ -283,6 +294,9 @@ $(BUILD)/stdio_block_test.o: tests/stdio_block_test.c include/stdio.h include/st
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/stdio_scan_test.o: tests/stdio_scan_test.c include/stdio.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/time_test.o: tests/time_test.c include/time.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/allocator_test_impl.o: src/stdlib/allocator.c include/stdlib.h include/stddef.h include/errno.h include/mini/syscall.h include/string.h | $(BUILD)
@@ -357,6 +371,9 @@ $(BUILD)/block_io_probe: $(BUILD)/block_io_probe.o $(CRT0) $(LIBC)
 $(BUILD)/scan_probe: $(BUILD)/scan_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/scan_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/time_probe: $(BUILD)/time_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/time_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/memory_differential: $(BUILD)/memory_differential.o $(BUILD)/memory_diff_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
@@ -391,6 +408,9 @@ $(BUILD)/stdio_block_test: $(BUILD)/stdio_block_test.o $(BUILD)/stdio_test_impl.
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 $(BUILD)/stdio_scan_test: $(BUILD)/stdio_scan_test.o $(BUILD)/stdio_test_impl.o $(BUILD)/scan_test_impl.o $(BUILD)/float_parse_test_impl.o $(BUILD)/scan_entry.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+$(BUILD)/time_test: $(BUILD)/time_test.o $(BUILD)/time_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 test: all

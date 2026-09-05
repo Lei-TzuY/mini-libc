@@ -34,6 +34,8 @@ done
     -o "$OUT/pathname.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_rebind_integration.c \
     -o "$OUT/rebind.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_time_integration.c \
+    -o "$OUT/time.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -44,6 +46,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/time" \
+        "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -54,6 +58,8 @@ else
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/time" \
+        "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -125,9 +131,16 @@ if [ "$(cat "$rebind_old")" != "OLD" ] || [ "$(cat "$rebind_new")" != "NEW" ]; t
 fi
 rm -f "$rebind_old" "$rebind_new"
 
+time_output=$("$OUT/time")
+if [ "$time_output" != "tiny-time-ok" ]; then
+    echo "unexpected tiny-c time output: $time_output" >&2
+    exit 1
+fi
+
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
+./tests/verify-no-host-libc.sh "$OUT/time"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"

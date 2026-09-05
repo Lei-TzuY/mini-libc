@@ -123,6 +123,12 @@ if [ "$strtod_output" != "strtod-ok" ]; then
     exit 1
 fi
 
+time_output="$(./build/time_probe)"
+if [ "$time_output" != "time-ok" ]; then
+    echo "unexpected time output: $time_output" >&2
+    exit 1
+fi
+
 allocator_output="$(./build/allocator_probe)"
 if [ "$allocator_output" != "allocator-ok" ]; then
     echo "unexpected allocator output: $allocator_output" >&2
@@ -268,5 +274,6 @@ host_cc=${CC:-cc}
 ./build/stdio_write_test
 ./build/stdio_block_test
 ./build/stdio_scan_test
+./build/time_test
 
-echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, allocator, calloc, realloc, getenv, inherited/owned/rebound/block/formatted stdio, configurable buffering, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, strtof/strtod, time, allocator, calloc, realloc, getenv, inherited/owned/rebound/block/formatted stdio, configurable buffering, buffered input/pushback, formatted input, positioning, compiler-neutrality, and differential probes passed"
