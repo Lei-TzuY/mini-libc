@@ -281,6 +281,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
     long mapping;
     long clone_result;
     char *stack_top;
+    unsigned int tss_index;
     int saved_errno = errno;
 
     if (thr == (thrd_t *)0 || func == (thrd_start_t)0) {
@@ -317,6 +318,10 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
     control->tcb.control = control;
     control->tcb.errno_value = 0;
     control->tcb.reserved = 0U;
+    for (tss_index = 0U; tss_index < MINI_TSS_MAX_KEYS; ++tss_index) {
+        control->tcb.tss_values[tss_index] = (void *)0;
+        control->tcb.tss_generations[tss_index] = 0U;
+    }
 
     registry_lock();
     insert_control_locked(control);
@@ -358,9 +363,12 @@ void __mini_thread_run(struct mini_thread_control *control)
 
 _Noreturn void thrd_exit(int res)
 {
-    struct mini_thread_tcb *tcb = __mini_thread_current_tcb();
-    struct mini_thread_control *control =
-        (struct mini_thread_control *)tcb->control;
+    struct mini_thread_tcb *tcb;
+    struct mini_thread_control *control;
+
+    __mini_tss_run_destructors();
+    tcb = __mini_thread_current_tcb();
+    control = (struct mini_thread_control *)tcb->control;
 
     if (control != (struct mini_thread_control *)0) {
         control->result = res;
