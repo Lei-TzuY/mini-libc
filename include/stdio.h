@@ -9,6 +9,11 @@
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+#define _IOFBF 0
+#define _IOLBF 1
+#define _IONBF 2
+#define BUFSIZ 256
+
 typedef struct __mini_FILE FILE;
 
 extern FILE *__mini_stdin;
@@ -22,6 +27,8 @@ extern FILE *__mini_stderr;
 FILE *fopen(const char *restrict filename, const char *restrict mode);
 int fclose(FILE *stream);
 int fflush(FILE *stream);
+int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size);
+void setbuf(FILE *restrict stream, char *restrict buf);
 size_t fread(void *restrict ptr, size_t size, size_t nmemb,
              FILE *restrict stream);
 size_t fwrite(const void *restrict ptr, size_t size, size_t nmemb,
