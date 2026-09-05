@@ -8,6 +8,9 @@ typedef int (*thrd_start_t)(void *);
 
 typedef struct {
     int __state;
+    int __type;
+    unsigned long __owner;
+    int __depth;
 } mtx_t;
 
 typedef struct {
@@ -23,7 +26,9 @@ enum {
 };
 
 enum {
-    mtx_plain = 0
+    mtx_plain = 0,
+    mtx_recursive = 1,
+    mtx_timed = 2
 };
 
 int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
@@ -37,6 +42,8 @@ _Noreturn void thrd_exit(int res);
 int mtx_init(mtx_t *mtx, int type);
 int mtx_lock(mtx_t *mtx);
 int mtx_trylock(mtx_t *mtx);
+int mtx_timedlock(mtx_t *restrict mtx,
+                  const struct timespec *restrict time_point);
 int mtx_unlock(mtx_t *mtx);
 void mtx_destroy(mtx_t *mtx);
 

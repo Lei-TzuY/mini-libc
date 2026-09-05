@@ -7,7 +7,7 @@ allocator, TLS, and detached-reaper contracts remain documented there.
 
 ## Public surface
 
-`<threads.h>` now adds:
+`<threads.h>` provides:
 
 ```c
 int cnd_timedwait(cnd_t *restrict cond, mtx_t *restrict mtx,
@@ -19,9 +19,10 @@ int thrd_sleep(const struct timespec *duration,
 Including `<threads.h>` also makes the C11 `struct timespec` definition available
 through `<time.h>`.
 
-Timed and recursive mutex types remain outside this phase. In particular,
-`mtx_timedlock`, `mtx_timed`, `mtx_recursive`, `thrd_yield`, `once_flag` /
-`call_once`, and the TSS APIs are not claimed here.
+The subsequent typed-mutex phase has now added `mtx_recursive`, `mtx_timed`,
+recursive+timed combinations, and `mtx_timedlock`; those semantics and their
+runtime evidence are authoritative in `docs/mutex-types.md`. `thrd_yield`,
+`once_flag` / `call_once`, and the TSS APIs remain outside the completed surface.
 
 ## Absolute condition deadline
 
@@ -80,7 +81,7 @@ all public return paths.
 ## Executable evidence
 
 The hosted condition harness remains scheduler-independent. In addition to the
-existing generation-race and untimed error paths it now proves:
+existing generation-race and untimed error paths it proves:
 
 - the exact `FUTEX_WAIT_BITSET | FUTEX_CLOCK_REALTIME` operation and
   `FUTEX_BITSET_MATCH_ANY` value;
@@ -110,10 +111,10 @@ thread scheduler behavior are all exercised through the cross-repository gate.
 ## Runtime-wide synchronization status
 
 The thread runtime now includes dynamic join/detach ownership, per-thread errno,
-plain futex mutexes, untimed and timed condition waits, relative thread sleep,
-condition broadcast/signal, a synchronized allocator, and—since the separate
-shared-stdio phase—the recursive futex-backed FILE/registry synchronization
-layer. Memory-only formatted I/O remains independent of the shared FILE lock.
+plain/recursive/timed mutexes, untimed and timed condition waits, relative thread
+sleep, condition broadcast/signal, a synchronized allocator, and the recursive
+futex-backed shared FILE/registry synchronization layer. Memory-only formatted
+I/O remains independent of the shared FILE lock.
 
 This still is not a claim that every process-global libc subsystem is fully
 thread-safe. Termination callback registries, environment mutation/storage, and
@@ -121,14 +122,12 @@ hidden string continuation state require their own ownership contracts.
 
 ## Phase boundary and promotion
 
-Timed condition waiting and thread sleep close the first timed-blocking phase.
-The next coherent `<threads.h>` frontier is **mutex type and timed-acquisition
-semantics**: add explicit timed/recursive mutex representation and
-`mtx_timedlock` without weakening the current small plain-mutex fast path.
-Absolute deadline handling, timeout-versus-unlock races, recursive ownership,
-wrong-thread unlock behavior, and errno preservation need deterministic and real
-multi-thread evidence before that phase can claim completion.
+Timed condition waiting and thread sleep closed the first timed-blocking phase.
+The following mutex-type phase has now also closed recursive ownership and
+absolute `mtx_timedlock` semantics; see `docs/mutex-types.md`.
 
-After mutex type semantics are real, `call_once` and thread-specific storage are
-the next larger C11 lifecycle frontier rather than additional condition-variable
-variants.
+The next larger C11 lifecycle frontier is **exactly-once initialization and
+thread-specific storage**: `once_flag` / `call_once` plus `tss_t` creation,
+get/set/delete, and destructor execution during thread exit. That work needs a
+process-wide once state machine and per-thread destructor lifecycle rather than
+additional condition or mutex variants.
