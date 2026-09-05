@@ -12,7 +12,12 @@ int main(int argc, char **argv, char **envp)
     char *io_path;
     char *buffer;
     char io_buffer[11];
+    char scan_pair[2];
     FILE *stream;
+    unsigned int scan_a;
+    unsigned int scan_b;
+    unsigned int scan_c;
+    unsigned int scan_d;
     int formatted;
 
     (void)envp;
@@ -94,9 +99,20 @@ int main(int argc, char **argv, char **envp)
         free(buffer);
         return 12;
     }
-    if (fclose(stream) != 0) {
+
+    rewind(stream);
+    if (fscanf(stream, "%2u%2u%2u%2c%2u",
+               &scan_a, &scan_b, &scan_c, scan_pair, &scan_d) != 5 ||
+        scan_a != 1U || scan_b != 23U || scan_c != 45U ||
+        scan_pair[0] != 'X' || scan_pair[1] != 'Y' || scan_d != 89U ||
+        ftell(stream) != 10L) {
+        fclose(stream);
         free(buffer);
         return 13;
+    }
+    if (fclose(stream) != 0) {
+        free(buffer);
+        return 14;
     }
 
     formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
@@ -104,7 +120,7 @@ int main(int argc, char **argv, char **envp)
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 14;
+        return 15;
     }
 
     free(buffer);
