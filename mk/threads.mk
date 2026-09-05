@@ -1,10 +1,11 @@
 CONDITION_RENAMES := -Dmini_sys_futex=mini_test_futex \
                      -Dmtx_lock=mini_test_mtx_lock \
                      -Dmtx_unlock=mini_test_mtx_unlock
+MUTEX_RENAMES := -Dthrd_current=mini_test_thrd_current
 SLEEP_RENAMES := -Dmini_sys_nanosleep=mini_test_nanosleep
 
-$(LIBC): $(BUILD)/atomic.o $(BUILD)/condition.o $(BUILD)/sleep.o $(BUILD)/thread_runtime.o $(BUILD)/thread.o $(BUILD)/thread_entry.o
-all: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/condition_test
+$(LIBC): $(BUILD)/atomic.o $(BUILD)/condition.o $(BUILD)/mutex.o $(BUILD)/sleep.o $(BUILD)/thread_runtime.o $(BUILD)/lifecycle.o $(BUILD)/thread_entry.o
+all: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/condition_test $(BUILD)/mutex_test
 inspect: thread_inspect
 test: thread_test_run
 
@@ -16,13 +17,16 @@ $(BUILD)/atomic.o: src/internal/atomic.S | $(BUILD)
 $(BUILD)/condition.o: src/thread/condition.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/mutex.o: src/thread/mutex.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/sleep.o: src/thread/sleep.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_runtime.o: src/thread/runtime.c src/internal/thread_runtime.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/thread.o: src/thread/thread.c src/internal/thread_runtime.h include/threads.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/lifecycle.o: src/thread/lifecycle.c src/internal/thread_runtime.h include/threads.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_entry.o: src/thread/thread_entry.S | $(BUILD)
@@ -58,12 +62,22 @@ $(BUILD)/condition_test.o: tests/condition_test.c include/threads.h include/time
 $(BUILD)/condition_test: $(BUILD)/condition_test.o $(BUILD)/condition_test_impl.o $(BUILD)/sleep_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/condition_test
+$(BUILD)/mutex_test_impl.o: src/thread/mutex.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(MUTEX_RENAMES) -c $< -o $@
+
+$(BUILD)/mutex_test.o: tests/mutex_test.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/mutex_test: $(BUILD)/mutex_test.o $(BUILD)/mutex_test_impl.o $(BUILD)/atomic.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^
+
+thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/condition_test $(BUILD)/mutex_test
 	@test "$$($(BUILD)/thread_probe)" = "threads-ok"
 	@output="$$($(BUILD)/thread_exit_group_probe)"; status=$$?; \
 		test "$$status" -eq 37 && test -z "$$output"
 	@test "$$($(BUILD)/condition_probe)" = "conditions-ok"
 	@$(BUILD)/condition_test
+	@$(BUILD)/mutex_test
 
 thread_inspect: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe
