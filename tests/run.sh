@@ -107,7 +107,7 @@ fi
 
 strtol_output="$(./build/strtol_probe)"
 if [ "$strtol_output" != "strtol-ok" ]; then
-    echo "unexpected strtol probe output: $strtol_output" >&2
+    echo "unexpected strtol output: $strtol_output" >&2
     exit 1
 fi
 
@@ -226,7 +226,7 @@ rm -f "$block_io_path" "$input_buffer_path"
 scan_path=build/scan_probe.tmp
 rm -f "$scan_path"
 set +e
-scan_output="$(printf '41 token Q' | ./build/scan_probe)"
+scan_output="$(printf '41 token Q 1.5 -2.5e2' | ./build/scan_probe)"
 scan_status=$?
 set -e
 if [ "$scan_status" -ne 0 ]; then

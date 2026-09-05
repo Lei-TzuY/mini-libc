@@ -114,6 +114,13 @@ int main(int argc, char **argv, char **envp)
     unsigned int memory_hex;
     int memory_last;
     int stdin_values[6] = {0, 0, 0, 0, 0, 0};
+    float file_scan_float = 0.0f;
+    float memory_scan_float = 0.0f;
+    float stdin_scan_float = 0.0f;
+    double file_scan_double = 0.0;
+    double memory_scan_double = 0.0;
+    double memory_scan_negative_zero = 1.0;
+    double stdin_scan_double = 0.0;
     int formatted;
 
     (void)envp;
@@ -213,6 +220,24 @@ int main(int argc, char **argv, char **envp)
         return 14;
     }
 
+    stream = fopen(io_path, "w+");
+    if (stream == (FILE *)0) {
+        free(buffer);
+        return 33;
+    }
+    if (fputs("1.5 -2.5e2", stream) < 0 || fseek(stream, 0L, SEEK_SET) != 0 ||
+        tiny_vfscanf(stream, "%f %lf", &file_scan_float,
+                     &file_scan_double) != 2 ||
+        file_scan_float != 1.5f || file_scan_double != -250.0) {
+        fclose(stream);
+        free(buffer);
+        return 33;
+    }
+    if (fclose(stream) != 0) {
+        free(buffer);
+        return 33;
+    }
+
     errno = EIO;
     if (tiny_vsscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
                      &memory_auto, &memory_oct, memory_letters, &memory_hex,
@@ -223,6 +248,22 @@ int main(int argc, char **argv, char **envp)
         memory_last != 7 || errno != EIO) {
         free(buffer);
         return 15;
+    }
+
+    if (tiny_vsscanf("1.5 -2.5e2 -0.0", "%f %lf %lf",
+                     &memory_scan_float, &memory_scan_double,
+                     &memory_scan_negative_zero) != 3 ||
+        memory_scan_float != 1.5f || memory_scan_double != -250.0 ||
+        errno != EIO) {
+        free(buffer);
+        return 34;
+    }
+    formatted = snprintf(format_buffer, sizeof(format_buffer), "%.1f:%.0f",
+                         memory_scan_negative_zero, memory_scan_double);
+    if (formatted != 9 || strcmp(format_buffer, "-0.0:-250") != 0 ||
+        errno != EIO) {
+        free(buffer);
+        return 35;
     }
 
     if (tiny_va_sum(7, 1, 2, 3, 4, 5, 6, 7) != 28 || errno != EIO) {
@@ -293,6 +334,12 @@ int main(int argc, char **argv, char **envp)
         errno != EIO) {
         free(buffer);
         return 21;
+    }
+    if (tiny_vscanf(" %f %lf", &stdin_scan_float, &stdin_scan_double) != 2 ||
+        stdin_scan_float != 1.5f || stdin_scan_double != -250.0 ||
+        errno != EIO) {
+        free(buffer);
+        return 36;
     }
 
     formatted = tiny_vprintf("%s:%+06d:%#x:%lld:%u:%u:%u:%.1f\n",

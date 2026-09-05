@@ -97,6 +97,14 @@ int main(void)
     char memory_letters[3];
     char mismatch[2] = {'?', '\0'};
     char character = '\0';
+    char float_tail = '?';
+    float memory_float = 0.0f;
+    float memory_float_two = 0.0f;
+    float width_float = 0.0f;
+    float range_float = 7.0f;
+    double memory_double = 0.0;
+    double memory_double_two = 0.0;
+    double range_double = 7.0;
     size_t calls_before_memory;
 
     errno = ERANGE;
@@ -164,13 +172,51 @@ int main(void)
         return 10;
     }
 
+    errno = EIO;
+    if (test_vsscanf("1.5 -2.5e2 .75 6.02E2", "%f %lf %e %lG",
+                     &memory_float, &memory_double, &memory_float_two,
+                     &memory_double_two) != 4 ||
+        memory_float != 1.5f || memory_double != -250.0 ||
+        memory_float_two != 0.75f || memory_double_two != 602.0 ||
+        errno != EIO || read_calls != calls_before_memory) {
+        return 11;
+    }
+
+    errno = EIO;
+    if (sscanf("1.5X", "%3f%c", &width_float, &float_tail) != 2 ||
+        width_float != 1.5f || float_tail != 'X' || errno != EIO ||
+        read_calls != calls_before_memory) {
+        return 12;
+    }
+
+    float_tail = '?';
+    errno = EIO;
+    if (sscanf("1e999X", "%*f%c", &float_tail) != 1 || float_tail != 'X' ||
+        errno != EIO || read_calls != calls_before_memory) {
+        return 13;
+    }
+
+    range_float = 7.0f;
+    errno = EIO;
+    if (sscanf("1e9999", "%f", &range_float) != 0 || range_float != 7.0f ||
+        errno != ERANGE || read_calls != calls_before_memory) {
+        return 14;
+    }
+
+    range_double = 7.0;
+    errno = EIO;
+    if (sscanf("1e-9999", "%lf", &range_double) != 0 || range_double != 7.0 ||
+        errno != ERANGE || read_calls != calls_before_memory) {
+        return 15;
+    }
+
     first = 99;
     if (scanf("%d", &first) != EOF || first != 99 || !feof(stdin) ||
         ferror(stdin) || read_calls != 2) {
-        return 11;
+        return 16;
     }
     if (scanf("%d", &first) != EOF || read_calls != 2) {
-        return 12;
+        return 17;
     }
 
     return 0;

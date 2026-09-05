@@ -62,6 +62,7 @@ int main(void)
     char memory_letters[3];
     char character = '\0';
     char input_character = '\0';
+    char float_roundtrip[16];
     FILE *stream;
     int first = 0;
     int second = 777;
@@ -77,6 +78,15 @@ int main(void)
     unsigned int hex = 0;
     unsigned int hex_upper = 0;
     unsigned int memory_hex = 0;
+    float file_float = 0.0f;
+    float file_float_two = 0.0f;
+    float memory_float = 0.0f;
+    float stdin_float = 0.0f;
+    double file_double = 0.0;
+    double file_double_two = 0.0;
+    double memory_double = 0.0;
+    double memory_negative_zero = 1.0;
+    double stdin_double = 0.0;
 
     stream = fopen(path, "w+");
     if (stream == (FILE *)0 ||
@@ -162,6 +172,42 @@ int main(void)
         return 11;
     }
 
+    stream = fopen(path, "w+");
+    if (stream == (FILE *)0 ||
+        fputs("1.5 -2.5e2 .75 6.02E2", stream) < 0 ||
+        fseek(stream, 0L, SEEK_SET) != 0) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 12;
+    }
+    errno = EIO;
+    if (test_vfscanf(stream, "%f %lf %e %lG", &file_float, &file_double,
+                     &file_float_two, &file_double_two) != 4 ||
+        file_float != 1.5f || file_double != -250.0 ||
+        file_float_two != 0.75f || file_double_two != 602.0 ||
+        errno != EIO || ferror(stream)) {
+        fclose(stream);
+        return 13;
+    }
+    if (fclose(stream) != 0) {
+        return 14;
+    }
+
+    stream = fopen(path, "w+");
+    file_float = 9.0f;
+    if (stream == (FILE *)0 || fputs("1e+X", stream) < 0 ||
+        fseek(stream, 0L, SEEK_SET) != 0) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 15;
+    }
+    if (fscanf(stream, "%f", &file_float) != 0 || file_float != 9.0f ||
+        fgetc(stream) != 'X' || fclose(stream) != 0) {
+        return 16;
+    }
+
     errno = EIO;
     if (test_vsscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
                      &memory_auto, &memory_oct, memory_letters, &memory_hex,
@@ -170,28 +216,45 @@ int main(void)
         memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
         memory_letters[2] != '\0' || memory_hex != 0x89U ||
         memory_last != 7 || errno != EIO) {
-        return 12;
+        return 17;
     }
 
     if (sscanf("X", "%d", &memory_fail) != 0 || memory_fail != 91) {
-        return 13;
+        return 18;
     }
     if (sscanf("", "%d", &memory_fail) != EOF || memory_fail != 91) {
-        return 14;
+        return 19;
+    }
+
+    errno = EIO;
+    if (test_vsscanf("1.5 -2.5e2 -0.0", "%f %lf %lf",
+                     &memory_float, &memory_double,
+                     &memory_negative_zero) != 3 ||
+        memory_float != 1.5f || memory_double != -250.0 || errno != EIO) {
+        return 20;
+    }
+    if (snprintf(float_roundtrip, sizeof(float_roundtrip), "%.1f",
+                 memory_negative_zero) != 4 ||
+        strcmp(float_roundtrip, "-0.0") != 0) {
+        return 21;
     }
 
     errno = ERANGE;
     if (test_vscanf("%d %5s %c", &stdin_value, input_word, &input_character) != 3 ||
         stdin_value != 41 || strcmp(input_word, "token") != 0 ||
         input_character != 'Q' || errno != ERANGE) {
-        return 15;
+        return 22;
+    }
+    if (test_vscanf(" %f %lf", &stdin_float, &stdin_double) != 2 ||
+        stdin_float != 1.5f || stdin_double != -250.0 || errno != ERANGE) {
+        return 23;
     }
     if (scanf("%d", &stdin_value) != EOF) {
-        return 16;
+        return 24;
     }
 
     if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
-        return 17;
+        return 25;
     }
     return 0;
 }

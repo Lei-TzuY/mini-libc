@@ -68,9 +68,13 @@ general compiler-specific escape hatch.
 
 ## Shared normalization model
 
-The input scanner continues to consume its established INTEGER-class destination
-cursor because every currently supported scan destination is a pointer. The
-output formatter now consumes a richer private cursor with two independent
+The input scanner consumes its established INTEGER-class destination cursor
+because every supported scan destination is a pointer. This remains true for
+floating input: `%f` receives `float *` and `%lf` receives `double *`; the object
+ultimately written contains a floating value, but the variadic argument crossing
+the ABI boundary is still a pointer.
+
+The output formatter consumes a richer private cursor with two independent
 register lanes plus one shared overflow pointer:
 
 - up to five remaining 8-byte GP words;
@@ -98,10 +102,12 @@ same overflow pointer. This is the critical mixed SysV property: register-backed
 arguments do not advance the overflow cursor, while a spilled argument of either
 class consumes its stack slot at the point its conversion is processed.
 
-Input `vscanf`/`vfscanf`/`vsscanf` adapters remain GP-only because they receive
-pointers. They normalize `gp_offset` and `overflow_arg_area` into the scanner's
-existing destination cursor and do not need an FP lane merely because the future
-destination object may itself contain a floating value.
+Input `vscanf`/`vfscanf`/`vsscanf` adapters remain GP-only even after floating
+formatted input becomes executable. They normalize `gp_offset` and
+`overflow_arg_area` into the scanner's existing destination cursor and never
+consume `fp_offset`, because no floating scalar is passed by value to the scan
+function. Adding `%f`/`%lf` therefore requires no XMM save/copy path on the input
+side.
 
 ## Executable evidence
 
@@ -110,7 +116,7 @@ functions using `va_start`, `va_arg`, `va_copy`, and `va_end`. Integer traversal
 crosses the GP register boundary into the overflow stack, and copied lists are
 consumed independently.
 
-Output now adds real floating transport evidence rather than a dormant ABI shim.
+Output includes real floating transport evidence rather than a dormant ABI shim.
 The freestanding stdio probe calls ordinary `snprintf` with nine `double`
 arguments so the ninth value spills past XMM0-XMM7. A caller-defined variadic
 wrapper repeats the same sequence through `vsnprintf`, proving public `fp_offset`
@@ -123,33 +129,40 @@ documented in `docs/formatted-output.md`. Dynamic width/precision additionally
 mix GP arguments with a floating argument in one format, proving that the two
 register cursors remain independent while converging on one parser.
 
-Input wrappers retain the symmetric GP destination evidence: six-destination
-`vscanf`, FILE-backed `vfscanf`, memory-backed `vsscanf`, matching/EOF behavior,
-and stack-resident receiving pointers.
+Input wrappers use the symmetric pointer path. Existing six-destination
+`vscanf`, FILE-backed `vfscanf`, and memory-backed `vsscanf` cases force receiving
+pointers across the GP register/overflow boundary. Floating scanner coverage then
+passes `float *` and `double *` through the exact same GP cursor across FILE,
+memory, and stdin. This proves the important ABI distinction directly: floating
+**output values** need XMM transport, while floating **input destinations** do
+not.
 
 The pinned tiny-c integration compiles caller-defined wrappers for all six public
-`v*` formatted-I/O APIs. It now also compiles ordinary and public-`va_list`
-nine-double formatting calls and a floating `vprintf` status line, then executes
-the same binary through GNU `ld` and the pinned mini-elf toolchain. GCC and Clang
-run the normal freestanding/runtime suite and host-libc-independence inspection.
+`v*` formatted-I/O APIs. It compiles ordinary and public-`va_list` nine-double
+formatting calls, floating FILE/memory/stdin scans through `float *`/`double *`,
+and a scanned-negative-zero round trip back through `snprintf`. The same binary
+executes through GNU `ld` and the pinned mini-elf toolchain. GCC and Clang run the
+normal freestanding/runtime suite and host-libc-independence inspection.
 
 ## Phase boundary and next frontier
 
-The public variadic core now has executable **INTEGER + binary64 floating
-transport** on the output side, while the scanner retains the pointer-only GP
-path appropriate to its current conversion surface. Ordinary variadic calls and
-caller-created `va_list` state both feed the same formatter without compiler-
-specific `va_arg` use inside production C.
+The public variadic core now has executable mixed INTEGER/binary64 transport for
+formatted output and a pointer-only INTEGER-class destination path for formatted
+input, including floating destinations. Both ordinary variadic calls and
+caller-created `va_list` state feed the existing formatter/scanner engines
+without compiler-specific `va_arg` use inside production C.
 
-The next architectural frontier is **floating formatted input**. Unlike output,
-this does not require passing a floating value through a variadic XMM lane;
-`scanf`-family arguments are destination pointers and remain INTEGER-class.
-The real gap is therefore lexical/conversion architecture: parse decimal floating
-input through the existing FILE/string scanner source, preserve matching versus
-input failure and one-byte rollback, assign `%f`/`%lf` destinations with explicit
-range semantics, and evaluate a shared conversion core suitable for a later
-`strtod` public surface. The same GCC/Clang/tiny-c/mini-elf executable gates must
-remain intact.
+Floating formatted input therefore closes without any scanner FP-register shim:
+the newly added work is lexical and numeric conversion, not variadic transport.
+The bounded finite decimal/scientific conversion contract is documented in
+`docs/formatted-input.md`.
+
+The next architectural frontier is a reusable **public decimal floating
+conversion core** for `strtof`/`strtod`. Before exposing that API, the proven
+scanner-local conversion machinery should be refactored only alongside a real
+standard contract: `endptr` and no-conversion behavior, overflow/underflow,
+`inf`/`nan`, and hexadecimal floating syntax. A later scanner `%a`/`%A` surface
+can then reuse that core rather than duplicating numeric parsing.
 
 Further floating-output families, `%n`, pointer formatting, wide-character I/O,
 locale-sensitive behavior, configurable buffering, `tmpfile`, threading/TLS,
