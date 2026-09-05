@@ -1,18 +1,3 @@
-FILE_SYNC_RENAMES := -Dsetvbuf=__mini_setvbuf_unlocked \
-                     -Dsetbuf=__mini_setbuf_unlocked \
-                     -Dfreopen=__mini_freopen_unlocked \
-                     -Dfclose=__mini_fclose_unlocked
-POSITION_SYNC_RENAMES := -Dfseek=__mini_fseek_unlocked \
-                         -Dftell=__mini_ftell_unlocked \
-                         -Drewind=__mini_rewind_unlocked
-FORMAT_SYNC_RENAMES := -D__mini_format_dispatch=__mini_format_dispatch_unlocked
-SCAN_SYNC_RENAMES := -D__mini_scan_dispatch=__mini_scan_dispatch_unlocked
-
-$(BUILD)/file_stream.o $(BUILD)/file_stream_test_impl.o: CFLAGS += $(FILE_SYNC_RENAMES)
-$(BUILD)/position.o $(BUILD)/position_test_impl.o: CFLAGS += $(POSITION_SYNC_RENAMES)
-$(BUILD)/format.o: CFLAGS += $(FORMAT_SYNC_RENAMES)
-$(BUILD)/scan.o $(BUILD)/scan_test_impl.o: CFLAGS += $(SCAN_SYNC_RENAMES)
-
 $(LIBC): $(BUILD)/file_sync.o $(BUILD)/position_sync.o $(BUILD)/format_sync.o $(BUILD)/scan_sync.o
 all: $(BUILD)/stdio_thread_probe
 test: stdio_sync_test_run
