@@ -8,6 +8,8 @@
 #define MINI_FILE_OWNED 4U
 #define MINI_FILE_UNBUFFERED 8U
 #define MINI_FILE_APPEND 16U
+#define MINI_FILE_LINE_BUFFERED 32U
+#define MINI_FILE_BUFFER_OWNED 64U
 
 #define MINI_FILE_EOF 4U
 #define MINI_FILE_ERROR 8U
@@ -22,12 +24,15 @@ struct __mini_FILE {
     unsigned int state;
     FILE *next;
     size_t write_length;
-    unsigned char write_buffer[MINI_FILE_BUFFER_SIZE];
+    unsigned char *write_buffer;
     size_t read_offset;
     size_t read_length;
     unsigned int pushback_valid;
     unsigned char pushback_byte;
-    unsigned char read_buffer[MINI_FILE_BUFFER_SIZE];
+    unsigned char *read_buffer;
+    size_t buffer_size;
+    unsigned char inline_write_buffer[MINI_FILE_BUFFER_SIZE];
+    unsigned char inline_read_buffer[MINI_FILE_BUFFER_SIZE];
 };
 
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length);
@@ -35,7 +40,9 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
                           size_t length);
 int __mini_stdio_flush_buffer(FILE *stream);
 int __mini_stdio_flush_all(void);
+int __mini_stdio_sync_input(FILE *stream);
 void __mini_stdio_register(FILE *stream);
 void __mini_stdio_unregister(FILE *stream);
+void __mini_stdio_release_buffer(FILE *stream);
 
 #endif
