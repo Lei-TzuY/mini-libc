@@ -12,12 +12,12 @@ int main(int argc, char **argv, char **envp)
     char *io_path;
     char *buffer;
     char io_buffer[11];
-    char scan_pair[2];
+    char scan_digit[2];
+    char scan_letters[3];
     FILE *stream;
-    unsigned int scan_a;
-    unsigned int scan_b;
-    unsigned int scan_c;
-    unsigned int scan_d;
+    int scan_auto;
+    unsigned int scan_decimal;
+    unsigned int scan_hex;
     int formatted;
 
     (void)envp;
@@ -101,11 +101,13 @@ int main(int argc, char **argv, char **envp)
     }
 
     rewind(stream);
-    if (fscanf(stream, "%2u%2u%2u%2c%2u",
-               &scan_a, &scan_b, &scan_c, scan_pair, &scan_d) != 5 ||
-        scan_a != 1U || scan_b != 23U || scan_c != 45U ||
-        scan_pair[0] != 'X' || scan_pair[1] != 'Y' || scan_d != 89U ||
-        ftell(stream) != 10L) {
+    if (fscanf(stream, "%3i%2u%1[0-9]%2[A-Z]%2x",
+               &scan_auto, &scan_decimal, scan_digit, scan_letters,
+               &scan_hex) != 5 ||
+        scan_auto != 10 || scan_decimal != 34U ||
+        scan_digit[0] != '5' || scan_digit[1] != '\0' ||
+        scan_letters[0] != 'X' || scan_letters[1] != 'Y' ||
+        scan_letters[2] != '\0' || scan_hex != 0x89U || ftell(stream) != 10L) {
         fclose(stream);
         free(buffer);
         return 13;

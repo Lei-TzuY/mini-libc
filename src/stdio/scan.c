@@ -32,6 +32,9 @@ struct mini_scan_spec {
     unsigned int width;
     enum mini_scan_length length;
     char conversion;
+    int set_negated;
+    const char *set_begin;
+    const char *set_end;
 };
 
 enum mini_scan_status {
@@ -82,6 +85,20 @@ static int is_digit(int c)
     return c >= '0' && c <= '9';
 }
 
+static int digit_value(int c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
 static int skip_input_space(FILE *stream)
 {
     for (;;) {
@@ -126,6 +143,32 @@ static int parse_width(const char **cursor, unsigned int *value)
     return 1;
 }
 
+static int parse_scanset(const char **cursor, struct mini_scan_spec *spec)
+{
+    const char *p = *cursor;
+
+    spec->set_negated = 0;
+    if (*p == '^') {
+        spec->set_negated = 1;
+        ++p;
+    }
+
+    spec->set_begin = p;
+    if (*p == ']') {
+        ++p;
+    }
+    while (*p != '\0' && *p != ']') {
+        ++p;
+    }
+    if (*p != ']') {
+        return 0;
+    }
+
+    spec->set_end = p;
+    *cursor = p + 1;
+    return 1;
+}
+
 static int parse_spec(const char **cursor, struct mini_scan_spec *spec)
 {
     const char *p = *cursor;
@@ -136,6 +179,9 @@ static int parse_spec(const char **cursor, struct mini_scan_spec *spec)
     spec->width = 0;
     spec->length = MINI_SCAN_LEN_NONE;
     spec->conversion = '\0';
+    spec->set_negated = 0;
+    spec->set_begin = (const char *)0;
+    spec->set_end = (const char *)0;
 
     if (*p == '*') {
         spec->suppress = 1;
@@ -166,13 +212,28 @@ static int parse_spec(const char **cursor, struct mini_scan_spec *spec)
         }
     }
 
+    if (*p == '[') {
+        if (spec->length != MINI_SCAN_LEN_NONE) {
+            return 0;
+        }
+        spec->conversion = '[';
+        ++p;
+        if (!parse_scanset(&p, spec)) {
+            return 0;
+        }
+        *cursor = p;
+        return 1;
+    }
+
     spec->conversion = *p;
     if (*p == '\0') {
         return 0;
     }
     ++p;
 
-    if (spec->conversion == 'd' || spec->conversion == 'u') {
+    if (spec->conversion == 'd' || spec->conversion == 'i' ||
+        spec->conversion == 'u' || spec->conversion == 'o' ||
+        spec->conversion == 'x' || spec->conversion == 'X') {
         *cursor = p;
         return 1;
     }
@@ -297,11 +358,26 @@ static int assign_unsigned(struct mini_scan_args *args,
     return 1;
 }
 
-static int scan_decimal(FILE *stream, const struct mini_scan_spec *spec,
-                        struct mini_scan_args *args, int signed_conversion)
+static void accumulate_digit(unsigned long long *magnitude, int *overflow,
+                             unsigned int base, unsigned int digit)
+{
+    if (!*overflow) {
+        if (*magnitude > (~0ULL - digit) / (unsigned long long)base) {
+            *overflow = 1;
+        } else {
+            *magnitude = *magnitude * (unsigned long long)base + digit;
+        }
+    }
+}
+
+static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
+                        struct mini_scan_args *args, unsigned int requested_base,
+                        int signed_conversion)
 {
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
+    unsigned int base = requested_base;
     unsigned long long magnitude = 0;
+    unsigned int digits = 0;
     int negative = 0;
     int overflow = 0;
     int c;
@@ -323,28 +399,54 @@ static int scan_decimal(FILE *stream, const struct mini_scan_spec *spec,
         }
         c = fgetc(stream);
         if (c == EOF) {
-            return MINI_SCAN_INPUT_FAIL;
+            return MINI_SCAN_MATCH_FAIL;
         }
     }
 
-    if (!is_digit(c)) {
-        if (ungetc(c, stream) == EOF) {
-            return MINI_SCAN_INPUT_FAIL;
+    if ((requested_base == 0U || requested_base == 16U) && c == '0' &&
+        remaining > 1U) {
+        int next = fgetc(stream);
+
+        if (next == 'x' || next == 'X') {
+            base = 16U;
+            remaining -= 2U;
+            if (remaining == 0U) {
+                return MINI_SCAN_MATCH_FAIL;
+            }
+            c = fgetc(stream);
+            if (c == EOF) {
+                return MINI_SCAN_MATCH_FAIL;
+            }
+        } else {
+            if (requested_base == 0U) {
+                base = 8U;
+            } else {
+                base = 16U;
+            }
+            accumulate_digit(&magnitude, &overflow, base, 0U);
+            digits = 1U;
+            --remaining;
+            if (next == EOF || remaining == 0U) {
+                goto integer_done;
+            }
+            c = next;
         }
-        return MINI_SCAN_MATCH_FAIL;
+    } else if (requested_base == 0U) {
+        base = c == '0' ? 8U : 10U;
     }
 
     for (;;) {
-        unsigned int digit = (unsigned int)(c - '0');
+        int value = digit_value(c);
 
-        if (!overflow) {
-            if (magnitude > (~0ULL - digit) / 10ULL) {
-                overflow = 1;
-            } else {
-                magnitude = magnitude * 10ULL + digit;
+        if (value < 0 || (unsigned int)value >= base) {
+            if (ungetc(c, stream) == EOF) {
+                return MINI_SCAN_INPUT_FAIL;
             }
+            break;
         }
 
+        accumulate_digit(&magnitude, &overflow, base, (unsigned int)value);
+        ++digits;
         --remaining;
         if (remaining == 0U) {
             break;
@@ -354,14 +456,12 @@ static int scan_decimal(FILE *stream, const struct mini_scan_spec *spec,
         if (c == EOF) {
             break;
         }
-        if (!is_digit(c)) {
-            if (ungetc(c, stream) == EOF) {
-                return MINI_SCAN_INPUT_FAIL;
-            }
-            break;
-        }
     }
 
+integer_done:
+    if (digits == 0U) {
+        return MINI_SCAN_MATCH_FAIL;
+    }
     if (spec->suppress) {
         return MINI_SCAN_SUCCESS;
     }
@@ -461,6 +561,84 @@ static int scan_characters(FILE *stream, const struct mini_scan_spec *spec,
     return MINI_SCAN_SUCCESS;
 }
 
+static int scanset_contains(const struct mini_scan_spec *spec, int c)
+{
+    const char *p = spec->set_begin;
+    unsigned int byte = (unsigned int)(unsigned char)c;
+    int matched = 0;
+
+    while (p < spec->set_end) {
+        unsigned int first = (unsigned int)(unsigned char)p[0];
+
+        if (spec->set_end - p >= 3 && p[1] == '-' &&
+            (unsigned char)p[0] <= (unsigned char)p[2]) {
+            unsigned int last = (unsigned int)(unsigned char)p[2];
+
+            if (byte >= first && byte <= last) {
+                matched = 1;
+            }
+            p += 3;
+        } else {
+            if (byte == first) {
+                matched = 1;
+            }
+            ++p;
+        }
+    }
+
+    return spec->set_negated ? !matched : matched;
+}
+
+static int scan_scanset(FILE *stream, const struct mini_scan_spec *spec,
+                        struct mini_scan_args *args)
+{
+    unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
+    char *destination = (char *)0;
+    unsigned int count = 0;
+    int c = fgetc(stream);
+
+    if (c == EOF) {
+        return MINI_SCAN_INPUT_FAIL;
+    }
+    if (!scanset_contains(spec, c)) {
+        if (ungetc(c, stream) == EOF) {
+            return MINI_SCAN_INPUT_FAIL;
+        }
+        return MINI_SCAN_MATCH_FAIL;
+    }
+
+    if (!spec->suppress) {
+        destination = (char *)next_word(args);
+    }
+
+    for (;;) {
+        if (!spec->suppress) {
+            destination[count] = (char)(unsigned char)c;
+        }
+        ++count;
+        --remaining;
+        if (remaining == 0U) {
+            break;
+        }
+
+        c = fgetc(stream);
+        if (c == EOF) {
+            break;
+        }
+        if (!scanset_contains(spec, c)) {
+            if (ungetc(c, stream) == EOF) {
+                return MINI_SCAN_INPUT_FAIL;
+            }
+            break;
+        }
+    }
+
+    if (!spec->suppress) {
+        destination[count] = '\0';
+    }
+    return MINI_SCAN_SUCCESS;
+}
+
 static int match_literal(FILE *stream, int expected)
 {
     int c = fgetc(stream);
@@ -531,11 +709,19 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
             if (spec.conversion == '%') {
                 status = match_literal(stream, '%');
             } else if (spec.conversion == 'd') {
-                status = scan_decimal(stream, &spec, args, 1);
+                status = scan_integer(stream, &spec, args, 10U, 1);
+            } else if (spec.conversion == 'i') {
+                status = scan_integer(stream, &spec, args, 0U, 1);
             } else if (spec.conversion == 'u') {
-                status = scan_decimal(stream, &spec, args, 0);
+                status = scan_integer(stream, &spec, args, 10U, 0);
+            } else if (spec.conversion == 'o') {
+                status = scan_integer(stream, &spec, args, 8U, 0);
+            } else if (spec.conversion == 'x' || spec.conversion == 'X') {
+                status = scan_integer(stream, &spec, args, 16U, 0);
             } else if (spec.conversion == 's') {
                 status = scan_string(stream, &spec, args);
+            } else if (spec.conversion == '[') {
+                status = scan_scanset(stream, &spec, args);
             } else {
                 status = scan_characters(stream, &spec, args);
             }
