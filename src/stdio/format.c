@@ -6,18 +6,23 @@
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
 #define MINI_FORMAT_PAD_CHUNK 16U
+#define MINI_FLOAT_MAX_PRECISION 9U
 
 struct mini_format_args {
     unsigned long gp[5];
+    unsigned long fp[8];
     unsigned long *overflow;
     unsigned int gp_index;
     unsigned int gp_count;
+    unsigned int fp_index;
+    unsigned int fp_count;
 };
 
 _Static_assert(sizeof(unsigned long) == 8U, "formatted ABI requires LP64 long");
 _Static_assert(sizeof(void *) == 8U, "formatted ABI requires 64-bit pointers");
 _Static_assert(sizeof(unsigned int) == 4U, "formatted ABI requires 32-bit int");
-_Static_assert(sizeof(struct mini_format_args) == 56U,
+_Static_assert(sizeof(double) == 8U, "formatted ABI requires binary64 double");
+_Static_assert(sizeof(struct mini_format_args) == 128U,
                "formatted ABI state size changed");
 
 enum mini_format_length {
@@ -88,6 +93,47 @@ static unsigned long next_word(struct mini_format_args *args)
     value = *args->overflow;
     ++args->overflow;
     return value;
+}
+
+static double load_double_bits(const void *address)
+{
+    double value;
+    unsigned char *out = (unsigned char *)&value;
+    const unsigned char *in = (const unsigned char *)address;
+    size_t i;
+
+    for (i = 0; i < sizeof(value); ++i) {
+        out[i] = in[i];
+    }
+    return value;
+}
+
+static unsigned long long double_bits(double value)
+{
+    unsigned long long bits = 0ULL;
+    unsigned char *out = (unsigned char *)&bits;
+    const unsigned char *in = (const unsigned char *)&value;
+    size_t i;
+
+    for (i = 0; i < sizeof(value); ++i) {
+        out[i] = in[i];
+    }
+    return bits;
+}
+
+static double next_double(struct mini_format_args *args)
+{
+    if (args->fp_index < args->fp_count) {
+        double value = load_double_bits(&args->fp[args->fp_index]);
+        ++args->fp_index;
+        return value;
+    }
+
+    {
+        double value = load_double_bits(args->overflow);
+        ++args->overflow;
+        return value;
+    }
 }
 
 static int word_to_int(unsigned long word)
@@ -480,6 +526,149 @@ static int emit_number(struct mini_format_sink *sink,
     return 0;
 }
 
+static unsigned long long decimal_scale(unsigned int precision)
+{
+    static const unsigned long long scales[] = {
+        1ULL, 10ULL, 100ULL, 1000ULL, 10000ULL,
+        100000ULL, 1000000ULL, 10000000ULL, 100000000ULL, 1000000000ULL
+    };
+
+    return scales[precision];
+}
+
+static int emit_fixed(struct mini_format_sink *sink,
+                      const struct mini_format_spec *spec, double value,
+                      unsigned int *count)
+{
+    unsigned long long bits = double_bits(value);
+    unsigned long long exponent = (bits >> 52) & 0x7ffULL;
+    unsigned long long mantissa = bits & 0xfffffffffffffULL;
+    int negative = (bits >> 63) != 0ULL;
+    char prefix[1];
+    unsigned int prefix_length = 0;
+    unsigned int precision = spec->precision_set ? spec->precision : 6U;
+    unsigned int body_length;
+    unsigned int spaces = 0;
+    unsigned int zero_padding = 0;
+
+    if (spec->length != MINI_LEN_NONE && spec->length != MINI_LEN_L) {
+        return invalid_format();
+    }
+    if (precision > MINI_FLOAT_MAX_PRECISION) {
+        return invalid_format();
+    }
+
+    if (negative) {
+        prefix[prefix_length++] = '-';
+    } else if (spec->plus) {
+        prefix[prefix_length++] = '+';
+    } else if (spec->space) {
+        prefix[prefix_length++] = ' ';
+    }
+
+    if (exponent == 0x7ffULL) {
+        const char *text = mantissa == 0ULL ? "inf" : "nan";
+
+        body_length = prefix_length + 3U;
+        if (spec->width > body_length) {
+            spaces = spec->width - body_length;
+        }
+        if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+            return EOF;
+        }
+        if (prefix_length != 0U &&
+            emit_bytes(sink, prefix, prefix_length, count) == EOF) {
+            return EOF;
+        }
+        if (emit_bytes(sink, text, 3U, count) == EOF) {
+            return EOF;
+        }
+        if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+            return EOF;
+        }
+        return 0;
+    }
+
+    if (negative) {
+        value = -value;
+    }
+    if (!(value < 18446744073709551616.0)) {
+        return invalid_format();
+    }
+
+    {
+        unsigned long long whole = (unsigned long long)value;
+        unsigned long long scale = decimal_scale(precision);
+        double fraction = value - (double)whole;
+        double scaled = fraction * (double)scale;
+        unsigned long long fractional = (unsigned long long)scaled;
+        double remainder = scaled - (double)fractional;
+        char whole_digits[64];
+        char fraction_digits[MINI_FLOAT_MAX_PRECISION];
+        size_t whole_count;
+        unsigned int i;
+        unsigned int point = precision != 0U || spec->alternate;
+
+        if (remainder > 0.5 ||
+            (remainder == 0.5 && (fractional & 1ULL) != 0ULL)) {
+            ++fractional;
+            if (fractional == scale) {
+                fractional = 0ULL;
+                ++whole;
+            }
+        }
+
+        whole_count = make_digits(whole, 10U, 0, whole_digits);
+        for (i = precision; i != 0U; --i) {
+            fraction_digits[i - 1U] = (char)('0' + (fractional % 10ULL));
+            fractional /= 10ULL;
+        }
+
+        body_length = prefix_length + (unsigned int)whole_count + point + precision;
+        if (spec->width > body_length) {
+            unsigned int padding = spec->width - body_length;
+
+            if (spec->zero && !spec->left) {
+                zero_padding = padding;
+            } else {
+                spaces = padding;
+            }
+        }
+
+        if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+            return EOF;
+        }
+        if (prefix_length != 0U &&
+            emit_bytes(sink, prefix, prefix_length, count) == EOF) {
+            return EOF;
+        }
+        if (emit_repeat(sink, '0', zero_padding, count) == EOF) {
+            return EOF;
+        }
+        for (i = (unsigned int)whole_count; i != 0U; --i) {
+            if (emit_bytes(sink, &whole_digits[i - 1U], 1U, count) == EOF) {
+                return EOF;
+            }
+        }
+        if (point) {
+            char dot = '.';
+
+            if (emit_bytes(sink, &dot, 1U, count) == EOF) {
+                return EOF;
+            }
+        }
+        if (precision != 0U &&
+            emit_bytes(sink, fraction_digits, precision, count) == EOF) {
+            return EOF;
+        }
+        if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
+            return EOF;
+        }
+    }
+
+    return 0;
+}
+
 static long long next_signed(struct mini_format_args *args,
                              enum mini_format_length length)
 {
@@ -557,6 +746,9 @@ static int emit_conversion(struct mini_format_sink *sink,
             base = 16U;
         }
         return emit_number(sink, spec, value, 0, base, uppercase, 0, count);
+    }
+    if (spec->conversion == 'f') {
+        return emit_fixed(sink, spec, next_double(args), count);
     }
     if (spec->conversion == '%') {
         char percent = '%';
