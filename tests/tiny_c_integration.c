@@ -7,6 +7,7 @@ int main(int argc, char **argv, char **envp)
 {
     static const char expected_output[] =
         "tiny-c-integration-ok:+00007:0x2a:-5000000000:11:22:33\n";
+    static const char expected_memory_output[] = "mem:1:2:3:4:5";
     char *end;
     char *value;
     char *io_path;
@@ -15,6 +16,8 @@ int main(int argc, char **argv, char **envp)
     char scan_digit[2];
     char scan_letters[3];
     char memory_letters[3];
+    char format_buffer[32];
+    char trunc_buffer[6];
     FILE *stream;
     int scan_auto;
     unsigned int scan_decimal;
@@ -134,12 +137,26 @@ int main(int argc, char **argv, char **envp)
         return 15;
     }
 
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "mem:%d:%d:%d:%d:%d", 1, 2, 3, 4, 5);
+    if (formatted != (int)(sizeof(expected_memory_output) - 1U) ||
+        strcmp(format_buffer, expected_memory_output) != 0 || errno != EIO) {
+        free(buffer);
+        return 16;
+    }
+
+    formatted = snprintf(trunc_buffer, sizeof(trunc_buffer), "value:%u", 123U);
+    if (formatted != 9 || strcmp(trunc_buffer, "value") != 0 || errno != EIO) {
+        free(buffer);
+        return 17;
+    }
+
     formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
                        buffer, 7, 0x2aU, -5000000000LL, 11U, 22U, 33U);
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 16;
+        return 18;
     }
 
     free(buffer);
