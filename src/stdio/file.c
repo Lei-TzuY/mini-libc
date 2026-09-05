@@ -119,7 +119,7 @@ int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size)
         ((stream->state & MINI_FILE_READ_NEEDS_POSITION) != 0U ||
          stream->read_offset != stream->read_length ||
          stream->pushback_valid != 0U) &&
-        __mini_stdio_sync_input(stream) == EOF) {
+        fseek(stream, 0L, SEEK_CUR) != 0) {
         sync_error = errno;
         if (new_owned != 0U) {
             free(new_buffer);
