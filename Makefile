@@ -39,8 +39,8 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/ctype.o $(BUILD)/atoi.o $(BUILD)/strtol.o \
             $(BUILD)/strtoul.o $(BUILD)/bsearch.o $(BUILD)/allocator.o \
             $(BUILD)/calloc.o $(BUILD)/getenv.o $(BUILD)/stdio.o \
-            $(BUILD)/format.o $(BUILD)/file_stream.o $(BUILD)/block_io.o \
-            $(BUILD)/position.o $(BUILD)/errno.o
+            $(BUILD)/format.o $(BUILD)/format_entry.o $(BUILD)/file_stream.o \
+            $(BUILD)/block_io.o $(BUILD)/position.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -111,6 +111,9 @@ $(BUILD)/stdio.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h i
 
 $(BUILD)/format.o: src/stdio/format.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/format_entry.o: src/stdio/format_entry.S | $(BUILD)
+	$(CC) $(ASFLAGS) -c $< -o $@
 
 $(BUILD)/file_stream.o: src/stdio/file.c src/stdio/stdio_internal.h include/stdio.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
