@@ -44,6 +44,18 @@ enum mini_scan_status {
     MINI_SCAN_RANGE_FAIL = -2
 };
 
+enum mini_scan_source_kind {
+    MINI_SCAN_SOURCE_FILE,
+    MINI_SCAN_SOURCE_STRING
+};
+
+struct mini_scan_source {
+    enum mini_scan_source_kind kind;
+    FILE *stream;
+    const unsigned char *string_begin;
+    const unsigned char *string_cursor;
+};
+
 static int invalid_stream(FILE *stream)
 {
     if (stream != (FILE *)0) {
@@ -99,16 +111,50 @@ static int digit_value(int c)
     return -1;
 }
 
-static int skip_input_space(FILE *stream)
+static int source_get(struct mini_scan_source *source)
+{
+    if (source->kind == MINI_SCAN_SOURCE_FILE) {
+        return fgetc(source->stream);
+    }
+
+    if (*source->string_cursor == '\0') {
+        return EOF;
+    }
+
+    {
+        int value = (int)*source->string_cursor;
+        ++source->string_cursor;
+        return value;
+    }
+}
+
+static int source_unget(int c, struct mini_scan_source *source)
+{
+    if (source->kind == MINI_SCAN_SOURCE_FILE) {
+        return ungetc(c, source->stream);
+    }
+
+    if (c == EOF || source->string_cursor == source->string_begin) {
+        return EOF;
+    }
+    if (source->string_cursor[-1] != (unsigned char)c) {
+        return EOF;
+    }
+
+    --source->string_cursor;
+    return (int)(unsigned char)c;
+}
+
+static int skip_input_space(struct mini_scan_source *source)
 {
     for (;;) {
-        int c = fgetc(stream);
+        int c = source_get(source);
 
         if (c == EOF) {
             return 0;
         }
         if (!is_scan_space(c)) {
-            if (ungetc(c, stream) == EOF) {
+            if (source_unget(c, source) == EOF) {
                 return -1;
             }
             return 1;
@@ -370,7 +416,8 @@ static void accumulate_digit(unsigned long long *magnitude, int *overflow,
     }
 }
 
-static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
+static int scan_integer(struct mini_scan_source *source,
+                        const struct mini_scan_spec *spec,
                         struct mini_scan_args *args, unsigned int requested_base,
                         int signed_conversion)
 {
@@ -382,11 +429,11 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
     int overflow = 0;
     int c;
 
-    if (skip_input_space(stream) < 0) {
+    if (skip_input_space(source) < 0) {
         return MINI_SCAN_INPUT_FAIL;
     }
 
-    c = fgetc(stream);
+    c = source_get(source);
     if (c == EOF) {
         return MINI_SCAN_INPUT_FAIL;
     }
@@ -397,7 +444,7 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
         if (remaining == 0U) {
             return MINI_SCAN_MATCH_FAIL;
         }
-        c = fgetc(stream);
+        c = source_get(source);
         if (c == EOF) {
             return MINI_SCAN_MATCH_FAIL;
         }
@@ -405,7 +452,7 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
 
     if ((requested_base == 0U || requested_base == 16U) && c == '0' &&
         remaining > 1U) {
-        int next = fgetc(stream);
+        int next = source_get(source);
 
         if (next == 'x' || next == 'X') {
             base = 16U;
@@ -413,7 +460,7 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
             if (remaining == 0U) {
                 return MINI_SCAN_MATCH_FAIL;
             }
-            c = fgetc(stream);
+            c = source_get(source);
             if (c == EOF) {
                 return MINI_SCAN_MATCH_FAIL;
             }
@@ -439,7 +486,7 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
         int value = digit_value(c);
 
         if (value < 0 || (unsigned int)value >= base) {
-            if (ungetc(c, stream) == EOF) {
+            if (source_unget(c, source) == EOF) {
                 return MINI_SCAN_INPUT_FAIL;
             }
             break;
@@ -452,7 +499,7 @@ static int scan_integer(FILE *stream, const struct mini_scan_spec *spec,
             break;
         }
 
-        c = fgetc(stream);
+        c = source_get(source);
         if (c == EOF) {
             break;
         }
@@ -481,7 +528,8 @@ integer_done:
     return MINI_SCAN_SUCCESS;
 }
 
-static int scan_string(FILE *stream, const struct mini_scan_spec *spec,
+static int scan_string(struct mini_scan_source *source,
+                       const struct mini_scan_spec *spec,
                        struct mini_scan_args *args)
 {
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
@@ -489,16 +537,16 @@ static int scan_string(FILE *stream, const struct mini_scan_spec *spec,
     unsigned int count = 0;
     int c;
 
-    if (skip_input_space(stream) < 0) {
+    if (skip_input_space(source) < 0) {
         return MINI_SCAN_INPUT_FAIL;
     }
 
-    c = fgetc(stream);
+    c = source_get(source);
     if (c == EOF) {
         return MINI_SCAN_INPUT_FAIL;
     }
     if (is_scan_space(c)) {
-        if (ungetc(c, stream) == EOF) {
+        if (source_unget(c, source) == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
         return MINI_SCAN_MATCH_FAIL;
@@ -518,12 +566,12 @@ static int scan_string(FILE *stream, const struct mini_scan_spec *spec,
             break;
         }
 
-        c = fgetc(stream);
+        c = source_get(source);
         if (c == EOF) {
             break;
         }
         if (is_scan_space(c)) {
-            if (ungetc(c, stream) == EOF) {
+            if (source_unget(c, source) == EOF) {
                 return MINI_SCAN_INPUT_FAIL;
             }
             break;
@@ -536,7 +584,8 @@ static int scan_string(FILE *stream, const struct mini_scan_spec *spec,
     return MINI_SCAN_SUCCESS;
 }
 
-static int scan_characters(FILE *stream, const struct mini_scan_spec *spec,
+static int scan_characters(struct mini_scan_source *source,
+                           const struct mini_scan_spec *spec,
                            struct mini_scan_args *args)
 {
     unsigned int width = spec->width_set ? spec->width : 1U;
@@ -548,7 +597,7 @@ static int scan_characters(FILE *stream, const struct mini_scan_spec *spec,
     }
 
     for (count = 0; count < width; ++count) {
-        int c = fgetc(stream);
+        int c = source_get(source);
 
         if (c == EOF) {
             return MINI_SCAN_INPUT_FAIL;
@@ -589,19 +638,20 @@ static int scanset_contains(const struct mini_scan_spec *spec, int c)
     return spec->set_negated ? !matched : matched;
 }
 
-static int scan_scanset(FILE *stream, const struct mini_scan_spec *spec,
+static int scan_scanset(struct mini_scan_source *source,
+                        const struct mini_scan_spec *spec,
                         struct mini_scan_args *args)
 {
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
     char *destination = (char *)0;
     unsigned int count = 0;
-    int c = fgetc(stream);
+    int c = source_get(source);
 
     if (c == EOF) {
         return MINI_SCAN_INPUT_FAIL;
     }
     if (!scanset_contains(spec, c)) {
-        if (ungetc(c, stream) == EOF) {
+        if (source_unget(c, source) == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
         return MINI_SCAN_MATCH_FAIL;
@@ -621,12 +671,12 @@ static int scan_scanset(FILE *stream, const struct mini_scan_spec *spec,
             break;
         }
 
-        c = fgetc(stream);
+        c = source_get(source);
         if (c == EOF) {
             break;
         }
         if (!scanset_contains(spec, c)) {
-            if (ungetc(c, stream) == EOF) {
+            if (source_unget(c, source) == EOF) {
                 return MINI_SCAN_INPUT_FAIL;
             }
             break;
@@ -639,15 +689,15 @@ static int scan_scanset(FILE *stream, const struct mini_scan_spec *spec,
     return MINI_SCAN_SUCCESS;
 }
 
-static int match_literal(FILE *stream, int expected)
+static int match_literal(struct mini_scan_source *source, int expected)
 {
-    int c = fgetc(stream);
+    int c = source_get(source);
 
     if (c == EOF) {
         return MINI_SCAN_INPUT_FAIL;
     }
     if (c != expected) {
-        if (ungetc(c, stream) == EOF) {
+        if (source_unget(c, source) == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
         return MINI_SCAN_MATCH_FAIL;
@@ -663,18 +713,11 @@ static int handle_status(int status, int assignments)
     return assignments;
 }
 
-int __mini_scan_dispatch(FILE *stream, const char *format,
+static int scan_dispatch(struct mini_scan_source *source, const char *format,
                          struct mini_scan_args *args)
 {
     const char *cursor = format;
     int assignments = 0;
-
-    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
-        return invalid_stream(stream);
-    }
-    if (format == (const char *)0 || args == (struct mini_scan_args *)0) {
-        return invalid_format();
-    }
 
     while (*cursor != '\0') {
         int status;
@@ -683,14 +726,14 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
             while (is_scan_space((unsigned char)*cursor)) {
                 ++cursor;
             }
-            if (skip_input_space(stream) < 0) {
+            if (skip_input_space(source) < 0) {
                 return handle_status(MINI_SCAN_INPUT_FAIL, assignments);
             }
             continue;
         }
 
         if (*cursor != '%') {
-            status = match_literal(stream, (unsigned char)*cursor);
+            status = match_literal(source, (unsigned char)*cursor);
             if (status != MINI_SCAN_SUCCESS) {
                 return handle_status(status, assignments);
             }
@@ -707,23 +750,23 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
             }
 
             if (spec.conversion == '%') {
-                status = match_literal(stream, '%');
+                status = match_literal(source, '%');
             } else if (spec.conversion == 'd') {
-                status = scan_integer(stream, &spec, args, 10U, 1);
+                status = scan_integer(source, &spec, args, 10U, 1);
             } else if (spec.conversion == 'i') {
-                status = scan_integer(stream, &spec, args, 0U, 1);
+                status = scan_integer(source, &spec, args, 0U, 1);
             } else if (spec.conversion == 'u') {
-                status = scan_integer(stream, &spec, args, 10U, 0);
+                status = scan_integer(source, &spec, args, 10U, 0);
             } else if (spec.conversion == 'o') {
-                status = scan_integer(stream, &spec, args, 8U, 0);
+                status = scan_integer(source, &spec, args, 8U, 0);
             } else if (spec.conversion == 'x' || spec.conversion == 'X') {
-                status = scan_integer(stream, &spec, args, 16U, 0);
+                status = scan_integer(source, &spec, args, 16U, 0);
             } else if (spec.conversion == 's') {
-                status = scan_string(stream, &spec, args);
+                status = scan_string(source, &spec, args);
             } else if (spec.conversion == '[') {
-                status = scan_scanset(stream, &spec, args);
+                status = scan_scanset(source, &spec, args);
             } else {
-                status = scan_characters(stream, &spec, args);
+                status = scan_characters(source, &spec, args);
             }
 
             if (status != MINI_SCAN_SUCCESS) {
@@ -736,4 +779,40 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
     }
 
     return assignments;
+}
+
+int __mini_scan_dispatch(FILE *stream, const char *format,
+                         struct mini_scan_args *args)
+{
+    struct mini_scan_source source;
+
+    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
+        return invalid_stream(stream);
+    }
+    if (format == (const char *)0 || args == (struct mini_scan_args *)0) {
+        return invalid_format();
+    }
+
+    source.kind = MINI_SCAN_SOURCE_FILE;
+    source.stream = stream;
+    source.string_begin = (const unsigned char *)0;
+    source.string_cursor = (const unsigned char *)0;
+    return scan_dispatch(&source, format, args);
+}
+
+int __mini_sscan_dispatch(const char *input, const char *format,
+                          struct mini_scan_args *args)
+{
+    struct mini_scan_source source;
+
+    if (input == (const char *)0 || format == (const char *)0 ||
+        args == (struct mini_scan_args *)0) {
+        return invalid_format();
+    }
+
+    source.kind = MINI_SCAN_SOURCE_STRING;
+    source.stream = (FILE *)0;
+    source.string_begin = (const unsigned char *)input;
+    source.string_cursor = (const unsigned char *)input;
+    return scan_dispatch(&source, format, args);
 }
