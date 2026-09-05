@@ -40,11 +40,11 @@ therefore eligible for that final flush.
 
 `_Exit(status)` bypasses both the callback registry and stdio flushing and calls
 raw `mini_sys_exit` directly. mini-libc now has inherited and dynamically owned
-`FILE` streams with fixed-size buffered output, block transfer, and positioning.
-`fclose` unregisters streams before owned storage is released, so normal exit
-only visits still-live streams. There is no `tmpfile` object or pathname cleanup
-phase yet. The kernel still closes descriptors remaining open when the process
-terminates.
+`FILE` streams with fixed-size buffered output, block transfer, positioning, and
+integer/string formatted output. `fclose` unregisters streams before owned
+storage is released, so normal exit only visits still-live streams. There is no
+`tmpfile` object or pathname cleanup phase yet. The kernel still closes
+descriptors remaining open when the process terminates.
 
 ## Function ABI
 
@@ -52,6 +52,20 @@ C functions use the System V AMD64 ABI. Integer/pointer arguments begin in
 `rdi`, `rsi`, `rdx`, `rcx`, `r8`, and `r9`. A `call` is issued with `%rsp`
 16-byte aligned, making the callee entry stack congruent to 8 modulo 16 after
 the return address is pushed.
+
+The public `printf` and `fprintf` entry points deliberately use a small assembly
+shim instead of compiler-specific C `va_list` builtins. This preserves the
+production C/header compiler-neutrality contract while keeping GCC, Clang, and
+the pinned tiny-c compiler on the same SysV AMD64 calling convention. For
+`printf(format, ...)`, the shim captures the five remaining INTEGER-class
+variadic registers (`rsi`, `rdx`, `rcx`, `r8`, and `r9`) plus the first overflow
+stack slot. For `fprintf(stream, format, ...)`, it captures the four remaining
+INTEGER-class variadic registers (`rdx`, `rcx`, `r8`, and `r9`) plus the first
+overflow stack slot. A private fixed-layout cursor then feeds the C formatter.
+The current supported conversions consume only INTEGER-class scalar or pointer
+arguments, so no XMM register-save area is captured. Floating-point formatted
+output must extend this ABI deliberately rather than being inferred from the
+current shim. mini-libc does not yet expose a public `stdarg.h` or `vfprintf`.
 
 ## Linux syscall ABI
 
@@ -126,6 +140,13 @@ Input transfer failures return only the number of complete elements; bytes from
 a partially transferred final input element remain observable but do not
 increment the return count.
 
+Formatted output reports an unsupported conversion, incomplete trailing `%`, an
+unrepresentable dynamic width, or a return-count overflow as `EOF` with
+`EINVAL`. These parser/count failures do not fabricate a raw stream error. If the
+formatter reaches the shared output path and that path fails, the stream error
+indicator and mapped I/O `errno` come from the same buffered FILE machinery used
+by `fwrite`, `fputs`, and `fputc`.
+
 A flush failure retains the unwritten suffix in the stream's private buffer. If
 part of the buffer was written before the failure, those bytes are removed from
 the pending prefix so a later retry does not duplicate them. `fflush(NULL)`
@@ -189,13 +210,28 @@ is sticky and later reads return `EOF` without issuing another syscall until
 `clearerr` or a successful positioning operation clears it. A negative raw
 result sets the error indicator, updates `errno`, and returns `EOF`.
 
-`fputc`, `putc`, `putchar`, `fputs`, `puts`, and `fwrite` share the same output
-path. Buffered streams first copy output into their private buffer and flush when
-additional data requires space or an explicit lifecycle boundary requests it.
-Unbuffered `stderr` writes through the raw syscall loop immediately. Raw flushes
-retry positive short writes. A negative raw return sets the stream error
-indicator and `errno`; a zero-progress write sets `EIO`. A partial failing flush
-retains only the bytes that have not yet reached the kernel.
+`fputc`, `putc`, `putchar`, `fputs`, `puts`, `fwrite`, `printf`, and `fprintf`
+share the same output path. Buffered streams first copy output into their private
+buffer and flush when additional data requires space or an explicit lifecycle
+boundary requests it. Unbuffered `stderr` writes through the raw syscall loop
+immediately. Raw flushes retry positive short writes. A negative raw return sets
+the stream error indicator and `errno`; a zero-progress write sets `EIO`. A
+partial failing flush retains only the bytes that have not yet reached the
+kernel.
+
+The formatted-output engine currently supports `%d`, `%i`, `%u`, `%o`, `%x`,
+`%X`, `%c`, `%s`, and `%%`. Integer conversions support `hh`, `h`, `l`, and `ll`
+length modifiers. The implemented flag set is `-`, `+`, space, `#`, and `0`;
+width and precision may be literal or supplied by `*`. Negative dynamic width is
+treated as left adjustment, negative dynamic precision is treated as omitted,
+integer zero with zero precision follows the empty-digit rule, and alternate
+octal/hexadecimal forms are generated without relying on signed overflow for
+minimum signed values. `printf` writes to `stdout`; `fprintf` writes to the
+specified writable stream. Both return the number of accepted formatted bytes
+when that count fits `int`, otherwise they return `EOF` under the deterministic
+`EINVAL` policy above. Floating-point conversions, `%p`, `%n`, positional
+arguments, locale-sensitive formatting, `vfprintf`, `sprintf`, and `snprintf`
+are not implemented by this milestone.
 
 `fread(ptr, size, nmemb, stream)` performs unbuffered block input. If either
 `size` or `nmemb` is zero, it returns zero without issuing a syscall. For a
@@ -270,10 +306,10 @@ for synchronization, then clears EOF and error indicators; because it returns
 `void`, a flush or seek failure remains observable through `errno`.
 
 The stream layer is single-threaded and the output buffer size is intentionally
-fixed for this milestone. There is no input buffering, `setvbuf`, formatted I/O,
-`fgetpos`/`fsetpos`, `tmpfile`, locking, or C11 exclusive-create `x` mode yet.
-Future stdio work must extend this FILE state machine and live-stream lifecycle
-rather than creating descriptor-specific side paths.
+fixed for this milestone. There is no input buffering, pushback, `fgets`,
+`setvbuf`, `fgetpos`/`fsetpos`, `tmpfile`, locking, or C11 exclusive-create `x`
+mode yet. Future stdio work must extend this FILE state machine and live-stream
+lifecycle rather than creating descriptor-specific side paths.
 
 ## Allocator ABI and ownership
 
@@ -326,7 +362,9 @@ proves that it can compile every production C source, then pins
 linked and executed without the host libc. The pinned integration executable
 creates data through buffered `fwrite`, uses `fseek`/`ftell` to overwrite a
 positioned range, rewinds and reads it through `fread`, then seeks again after
-EOF. Its final status line is written through buffered `stdout`, so successful
-capture proves that normal `exit` flushed the live stream in both linker paths.
-The harness independently verifies the final file bytes `012345XY89`. There is
-no dynamic loader or shared-library support yet.
+EOF. Its final status line is produced by `printf` with flags, width, hexadecimal,
+and `long long` formatting and enough variadic INTEGER-class arguments to cross
+from captured GP registers onto the overflow stack. Successful capture therefore
+proves both the formatted-output ABI and normal-exit buffered flush in the GNU ld
+and mini-elf linker paths. The harness independently verifies the final file
+bytes `012345XY89`. There is no dynamic loader or shared-library support yet.
