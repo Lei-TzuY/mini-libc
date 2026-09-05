@@ -36,11 +36,14 @@ int main(int argc, char **argv)
     static const char ok[] = "file-stream-ok\n";
     static const char exclusive_path[] = "build/file-stream-exclusive.tmp";
     static const char renamed_path[] = "build/file-stream-renamed.tmp";
+    static const char rebind_path[] = "build/file-stream-rebind.tmp";
+    static const char missing_rebind_path[] = "build/file-stream-rebind-missing.tmp";
     char full_buffer[2];
     char line_buffer[8];
     char setbuf_storage[BUFSIZ];
     char tmp_buffer[4];
     char tmp_word[4];
+    char rebind_buffer[4];
     FILE *stream;
     int tmp_value;
 
@@ -48,7 +51,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!remove_if_present(exclusive_path) || !remove_if_present(renamed_path)) {
+    if (!remove_if_present(exclusive_path) || !remove_if_present(renamed_path) ||
+        !remove_if_present(rebind_path) ||
+        !remove_if_present(missing_rebind_path)) {
         return 2;
     }
 
@@ -235,8 +240,68 @@ int main(int argc, char **argv)
         return 32;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+    stream = fopen(argv[1], "w+");
+    if (stream == (FILE *)0 ||
+        setvbuf(stream, rebind_buffer, _IOFBF, sizeof(rebind_buffer)) != 0 ||
+        fputs("OLD", stream) == EOF) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         return 33;
+    }
+    errno = ERANGE;
+    if (freopen(rebind_path, "w+", stream) != stream || errno != ERANGE ||
+        !file_equals(argv[1], "OLD", 3) || !file_equals(rebind_path, "", 0)) {
+        return 34;
+    }
+    if (fputs("NEW", stream) == EOF || !file_equals(rebind_path, "", 0) ||
+        fflush(stream) != 0 || !file_equals(rebind_path, "NEW", 3)) {
+        fclose(stream);
+        return 35;
+    }
+    rewind(stream);
+    if (fgetc(stream) != 'N' || fgetc(stream) != 'E' || fgetc(stream) != 'W' ||
+        fgetc(stream) != EOF || !feof(stream) || ferror(stream) ||
+        fclose(stream) != 0) {
+        return 36;
+    }
+
+    stream = fopen(argv[1], "r");
+    if (stream == (FILE *)0 || fgetc(stream) != 'O') {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 37;
+    }
+    errno = ERANGE;
+    if (freopen(rebind_path, "r++", stream) != (FILE *)0 || errno != EINVAL ||
+        fgetc(stream) != 'L' || fclose(stream) != 0) {
+        return 38;
+    }
+
+    stream = fopen(argv[1], "r");
+    if (stream == (FILE *)0) {
+        return 39;
+    }
+    errno = ERANGE;
+    if (freopen(missing_rebind_path, "r", stream) != (FILE *)0 ||
+        errno != ENOENT) {
+        return 40;
+    }
+
+    errno = ERANGE;
+    if (freopen(rebind_path, "a", stderr) != stderr || errno != ERANGE ||
+        fputc('!', stderr) != '!' || errno != ERANGE ||
+        !file_equals(rebind_path, "NEW!", 4) || fclose(stderr) != 0) {
+        return 41;
+    }
+
+    if (!remove_if_present(rebind_path)) {
+        return 42;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1) != (long)(sizeof(ok) - 1)) {
+        return 43;
     }
     return 0;
 }
