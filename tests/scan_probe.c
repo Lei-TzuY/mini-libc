@@ -22,7 +22,7 @@ int main(void)
     char word[5];
     char lower[4];
     char tail[6];
-    char literal_set[2];
+    char literal_set[3];
     char mismatch[2] = {'?', '\0'};
     char input_word[6];
     char character = '\0';
@@ -93,7 +93,8 @@ int main(void)
         return 6;
     }
     if (fscanf(stream, " %2[]-]", literal_set) != 1 ||
-        literal_set[0] != ']' || literal_set[1] != '-') {
+        literal_set[0] != ']' || literal_set[1] != '-' ||
+        literal_set[2] != '\0') {
         fclose(stream);
         return 7;
     }
