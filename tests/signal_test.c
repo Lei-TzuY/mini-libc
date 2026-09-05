@@ -1,5 +1,7 @@
 #include <errno.h>
+#include <setjmp.h>
 #include <signal.h>
+#include <stdlib.h>
 
 struct captured_kernel_sigaction {
     void (*handler)(int);
@@ -24,6 +26,20 @@ static int captured_tgkill_signal;
 static int getpid_calls;
 static int gettid_calls;
 static int tgkill_calls;
+
+static jmp_buf abort_jump;
+static int abort_capture;
+static int abort_events[4];
+static unsigned int abort_event_count;
+static int abort_fallback_status;
+
+static void record_abort_event(int event)
+{
+    if (abort_capture && abort_event_count < 4U) {
+        abort_events[abort_event_count] = event;
+        ++abort_event_count;
+    }
+}
 
 static void handler_a(int sig)
 {
@@ -52,6 +68,7 @@ long mini_test_rt_sigaction(int sig, const void *act, void *oldact,
     struct captured_kernel_sigaction *output =
         (struct captured_kernel_sigaction *)oldact;
 
+    record_abort_event(2);
     ++rt_sigaction_calls;
     captured_signal = sig;
     captured_sigset_size = sigsetsize;
@@ -82,11 +99,19 @@ long mini_test_gettid(void)
 
 long mini_test_tgkill(int tgid, int tid, int sig)
 {
+    record_abort_event(1);
     ++tgkill_calls;
     captured_tgid = tgid;
     captured_tid = tid;
     captured_tgkill_signal = sig;
     return tgkill_result;
+}
+
+_Noreturn void mini_test__Exit(int status)
+{
+    record_abort_event(3);
+    abort_fallback_status = status;
+    longjmp(abort_jump, 1);
 }
 
 static void reset_action_state(void)
@@ -113,6 +138,18 @@ static void reset_raise_state(void)
     getpid_calls = 0;
     gettid_calls = 0;
     tgkill_calls = 0;
+}
+
+static void reset_abort_state(void)
+{
+    unsigned int i;
+
+    abort_capture = 0;
+    abort_event_count = 0U;
+    abort_fallback_status = -1;
+    for (i = 0; i < 4U; ++i) {
+        abort_events[i] = 0;
+    }
 }
 
 int main(void)
@@ -162,6 +199,24 @@ int main(void)
         gettid_calls != 1 || tgkill_calls != 1 ||
         captured_tgkill_signal != SIGABRT) {
         return 5;
+    }
+
+    reset_action_state();
+    reset_raise_state();
+    reset_abort_state();
+    reported_old_handler = handler_a;
+    abort_capture = 1;
+    if (setjmp(abort_jump) == 0) {
+        abort();
+    }
+    abort_capture = 0;
+    if (abort_event_count != 4U || abort_events[0] != 1 ||
+        abort_events[1] != 2 || abort_events[2] != 1 ||
+        abort_events[3] != 3 || rt_sigaction_calls != 1 ||
+        captured_signal != SIGABRT || captured_action.handler != SIG_DFL ||
+        tgkill_calls != 2 || getpid_calls != 2 || gettid_calls != 2 ||
+        captured_tgkill_signal != SIGABRT || abort_fallback_status != 134) {
+        return 6;
     }
 
     return 0;

@@ -1,4 +1,5 @@
 #include <mini/syscall.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -36,6 +37,29 @@ static void marker_c(void)
 static void marker_x(void)
 {
     write_marker('X');
+}
+
+static void marker_1(void)
+{
+    write_marker('1');
+}
+
+static void marker_2(void)
+{
+    write_marker('2');
+}
+
+static void marker_3(void)
+{
+    write_marker('3');
+}
+
+static void abort_handler(int sig)
+{
+    if (sig != SIGABRT) {
+        _Exit(99);
+    }
+    write_marker('H');
 }
 
 static void buffered_b(void)
@@ -109,6 +133,46 @@ static int run_termination_probe(const char *mode)
             _Exit(98);
         }
         _Exit(30);
+    }
+
+    if (equals(mode, "c11-quick")) {
+        register_three();
+        if (at_quick_exit(marker_1) != 0 || at_quick_exit(marker_2) != 0 ||
+            at_quick_exit(marker_3) != 0 || fputc('Z', stdout) != 'Z') {
+            _Exit(100);
+        }
+        quick_exit(31);
+    }
+
+    if (equals(mode, "quick-capacity")) {
+        if (at_quick_exit((void (*)(void))0) == 0) {
+            _Exit(101);
+        }
+        for (i = 0; i < 32U; ++i) {
+            if (at_quick_exit(marker_x) != 0) {
+                _Exit(102);
+            }
+        }
+        if (at_quick_exit(marker_x) == 0) {
+            _Exit(103);
+        }
+        quick_exit(32);
+    }
+
+    if (equals(mode, "quick-normal-isolation")) {
+        if (at_quick_exit(marker_x) != 0 || atexit(marker_a) != 0) {
+            _Exit(104);
+        }
+        return 33;
+    }
+
+    if (equals(mode, "abort-handler")) {
+        if (atexit(marker_a) != 0 || at_quick_exit(marker_b) != 0 ||
+            signal(SIGABRT, abort_handler) == SIG_ERR ||
+            fputc('Z', stdout) != 'Z') {
+            _Exit(105);
+        }
+        abort();
     }
 
     return -1;
