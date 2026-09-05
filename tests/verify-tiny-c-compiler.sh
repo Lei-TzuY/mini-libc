@@ -32,6 +32,8 @@ done
     -o "$OUT/buffering.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_pathname_integration.c \
     -o "$OUT/pathname.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_rebind_integration.c \
+    -o "$OUT/rebind.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -40,6 +42,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/pathname" \
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/rebind" \
+        "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -48,6 +52,8 @@ else
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/pathname" \
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/rebind" \
+        "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -103,8 +109,25 @@ if [ -e "$pathname_source" ] || [ -e "$pathname_target" ] || [ -e "$pathname_dir
     exit 1
 fi
 
+rebind_old="$OUT/rebind-old.tmp"
+rebind_new="$OUT/rebind-new.tmp"
+rm -f "$rebind_old" "$rebind_new"
+rebind_output=$("$OUT/rebind" "$rebind_old" "$rebind_new")
+if [ "$rebind_output" != "tiny-rebind-ok" ]; then
+    echo "unexpected tiny-c rebind output: $rebind_output" >&2
+    rm -f "$rebind_old" "$rebind_new"
+    exit 1
+fi
+if [ "$(cat "$rebind_old")" != "OLD" ] || [ "$(cat "$rebind_new")" != "NEW" ]; then
+    echo "unexpected tiny-c rebind file contents" >&2
+    rm -f "$rebind_old" "$rebind_new"
+    exit 1
+fi
+rm -f "$rebind_old" "$rebind_new"
+
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
+./tests/verify-no-host-libc.sh "$OUT/rebind"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
