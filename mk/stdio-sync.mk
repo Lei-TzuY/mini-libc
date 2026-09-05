@@ -20,7 +20,11 @@ $(BUILD)/scan_sync.o: src/stdio/scan_sync.c src/stdio/stdio_internal.h include/s
 $(BUILD)/stdio_lock_fake.o: tests/stdio_lock_fake.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/stdio_write_test: $(BUILD)/file_sync.o $(BUILD)/stdio_lock_fake.o
+$(BUILD)/stdio_write_lseek_fake.o: tests/stdio_write_lseek_fake.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/stdio_write_test: $(BUILD)/file_sync.o $(BUILD)/position_test_impl.o \
+                          $(BUILD)/stdio_write_lseek_fake.o $(BUILD)/stdio_lock_fake.o
 $(BUILD)/stdio_block_test: $(BUILD)/position_sync.o $(BUILD)/stdio_lock_fake.o
 $(BUILD)/stdio_scan_test: $(BUILD)/scan_sync.o $(BUILD)/stdio_lock_fake.o
 
