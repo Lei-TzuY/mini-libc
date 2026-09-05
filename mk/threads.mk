@@ -60,3 +60,5 @@ thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)
 
 thread_inspect: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe
+
+include mk/stdio-sync.mk
