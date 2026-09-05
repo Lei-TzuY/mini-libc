@@ -12,7 +12,8 @@ struct writer_arg {
 };
 
 static mtx_t gate_lock;
-static cnd_t gate_condition;
+static cnd_t ready_condition;
+static cnd_t release_condition;
 static int ready_workers;
 static int release_workers;
 
@@ -31,12 +32,12 @@ static int writer(void *opaque)
         return 101;
     }
     ++ready_workers;
-    if (cnd_signal(&gate_condition) != thrd_success) {
+    if (cnd_signal(&ready_condition) != thrd_success) {
         (void)mtx_unlock(&gate_lock);
         return 102;
     }
     while (!release_workers) {
-        if (cnd_wait(&gate_condition, &gate_lock) != thrd_success) {
+        if (cnd_wait(&release_condition, &gate_lock) != thrd_success) {
             (void)mtx_unlock(&gate_lock);
             return 103;
         }
@@ -116,7 +117,8 @@ int main(void)
     int i;
 
     if (mtx_init(&gate_lock, mtx_plain) != thrd_success ||
-        cnd_init(&gate_condition) != thrd_success) {
+        cnd_init(&ready_condition) != thrd_success ||
+        cnd_init(&release_condition) != thrd_success) {
         return 1;
     }
 
@@ -137,12 +139,12 @@ int main(void)
         return 4;
     }
     while (ready_workers != WORKER_COUNT) {
-        if (cnd_wait(&gate_condition, &gate_lock) != thrd_success) {
+        if (cnd_wait(&ready_condition, &gate_lock) != thrd_success) {
             return 5;
         }
     }
     release_workers = 1;
-    if (cnd_broadcast(&gate_condition) != thrd_success ||
+    if (cnd_broadcast(&release_condition) != thrd_success ||
         mtx_unlock(&gate_lock) != thrd_success) {
         return 6;
     }
@@ -160,7 +162,8 @@ int main(void)
         return 8;
     }
 
-    cnd_destroy(&gate_condition);
+    cnd_destroy(&release_condition);
+    cnd_destroy(&ready_condition);
     mtx_destroy(&gate_lock);
     if (fputs(marker, stdout) == EOF || fflush(stdout) == EOF) {
         return 9;
