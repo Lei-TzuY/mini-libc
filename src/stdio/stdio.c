@@ -324,21 +324,21 @@ char *fgets(char *restrict s, int n, FILE *restrict stream)
     }
 
     while (count < n - 1) {
-        unsigned char byte;
+        int value = fgetc(stream);
 
-        if (__mini_stdio_read(stream, &byte, 1) != 1) {
+        if (value == EOF) {
+            if (!feof(stream)) {
+                s[count] = '\0';
+                return (char *)0;
+            }
             break;
         }
-        s[count++] = (char)byte;
-        if (byte == (unsigned char)'\n') {
+        s[count++] = (char)(unsigned char)value;
+        if (value == '\n') {
             break;
         }
     }
 
-    if (ferror(stream)) {
-        s[count] = '\0';
-        return (char *)0;
-    }
     if (count == 0 && feof(stream)) {
         return (char *)0;
     }
