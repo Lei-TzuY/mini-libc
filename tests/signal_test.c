@@ -39,6 +39,11 @@ void __mini_rt_sigreturn_restorer(void)
 {
 }
 
+void (*__mini_signal_restorer(void))(void)
+{
+    return __mini_rt_sigreturn_restorer;
+}
+
 long mini_test_rt_sigaction(int sig, const void *act, void *oldact,
                             unsigned long sigsetsize)
 {
