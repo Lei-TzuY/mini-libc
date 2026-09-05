@@ -25,6 +25,8 @@ extern FILE *__mini_stderr;
 #define stderr (__mini_stderr)
 
 FILE *fopen(const char *restrict filename, const char *restrict mode);
+FILE *freopen(const char *restrict filename, const char *restrict mode,
+              FILE *restrict stream);
 FILE *tmpfile(void);
 int remove(const char *filename);
 int rename(const char *oldname, const char *newname);
