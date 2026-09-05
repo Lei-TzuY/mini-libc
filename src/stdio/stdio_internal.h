@@ -40,7 +40,6 @@ size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
                           size_t length);
 int __mini_stdio_flush_buffer(FILE *stream);
 int __mini_stdio_flush_all(void);
-int __mini_stdio_sync_input(FILE *stream);
 void __mini_stdio_register(FILE *stream);
 void __mini_stdio_unregister(FILE *stream);
 void __mini_stdio_release_buffer(FILE *stream);
