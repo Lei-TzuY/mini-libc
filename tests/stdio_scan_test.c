@@ -50,13 +50,20 @@ int main(void)
     int second = 1234;
     int auto_hex = 0;
     int auto_oct = 0;
+    int memory_auto = 0;
+    int memory_oct = 0;
+    int memory_last = 0;
+    int memory_fail = 91;
     unsigned int hex = 0;
+    unsigned int memory_hex = 0;
     char word[5];
     char lower[4];
     char tail[6];
     char literal_set[3];
+    char memory_letters[3];
     char mismatch[2] = {'?', '\0'};
     char character = '\0';
+    size_t calls_before_memory;
 
     errno = ERANGE;
     if (scanf("%d %d %d %d %d %d",
@@ -102,13 +109,34 @@ int main(void)
         return 7;
     }
 
+    calls_before_memory = read_calls;
+    errno = EIO;
+    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+               &memory_auto, &memory_oct, memory_letters, &memory_hex,
+               &memory_last) != 5 ||
+        memory_auto != 42 || memory_oct != 63 ||
+        memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
+        memory_letters[2] != '\0' || memory_hex != 0x89U ||
+        memory_last != 7 || errno != EIO || read_calls != calls_before_memory) {
+        return 8;
+    }
+
+    if (sscanf("X", "%d", &memory_fail) != 0 || memory_fail != 91 ||
+        read_calls != calls_before_memory) {
+        return 9;
+    }
+    if (sscanf("", "%d", &memory_fail) != EOF || memory_fail != 91 ||
+        read_calls != calls_before_memory) {
+        return 10;
+    }
+
     first = 99;
     if (scanf("%d", &first) != EOF || first != 99 || !feof(stdin) ||
         ferror(stdin) || read_calls != 2) {
-        return 8;
+        return 11;
     }
     if (scanf("%d", &first) != EOF || read_calls != 2) {
-        return 9;
+        return 12;
     }
 
     return 0;
