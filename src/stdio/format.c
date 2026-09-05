@@ -603,6 +603,7 @@ static int emit_fixed(struct mini_format_sink *sink,
         double scaled = fraction * (double)scale;
         unsigned long long fractional = (unsigned long long)scaled;
         double remainder = scaled - (double)fractional;
+        unsigned long long round_parity = precision == 0U ? whole : fractional;
         char whole_digits[64];
         char fraction_digits[MINI_FLOAT_MAX_PRECISION];
         size_t whole_count;
@@ -610,7 +611,7 @@ static int emit_fixed(struct mini_format_sink *sink,
         unsigned int point = precision != 0U || spec->alternate;
 
         if (remainder > 0.5 ||
-            (remainder == 0.5 && (fractional & 1ULL) != 0ULL)) {
+            (remainder == 0.5 && (round_parity & 1ULL) != 0ULL)) {
             ++fractional;
             if (fractional == scale) {
                 fractional = 0ULL;
