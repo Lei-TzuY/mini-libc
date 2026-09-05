@@ -145,10 +145,15 @@ int main(void)
     if (printf("%") != EOF || errno != EINVAL || ferror(stdout)) {
         return 21;
     }
+    errno = ERANGE;
+    if (printf("%*s", (-2147483647 - 1), "x") != EOF ||
+        errno != EINVAL || ferror(stdout)) {
+        return 22;
+    }
 
     errno = ERANGE;
     if (fflush(stdout) == EOF || errno != ERANGE || ferror(stdout)) {
-        return 22;
+        return 23;
     }
 
     {
@@ -156,17 +161,17 @@ int main(void)
         long written = mini_sys_write(1, marker, sizeof(marker) - 1);
 
         if (written != (long)(sizeof(marker) - 1)) {
-            return 23;
+            return 24;
         }
     }
 
     if (mini_sys_close(1) != 0) {
-        return 24;
+        return 25;
     }
     clearerr(stdout);
     errno = ERANGE;
     if (printf("%300s", "x") != EOF || !ferror(stdout)) {
-        return 25;
+        return 26;
     }
 
     return 0;
