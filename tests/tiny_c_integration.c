@@ -221,15 +221,19 @@ int main(int argc, char **argv, char **envp)
     }
 
     stream = fopen(io_path, "w+");
-    if (stream == (FILE *)0 || fputs("1.5 -2.5e2", stream) < 0 ||
-        fseek(stream, 0L, SEEK_SET) != 0 ||
+    if (stream == (FILE *)0) {
+        free(buffer);
+        return 33;
+    }
+    if (fputs("1.5 -2.5e2", stream) < 0 || fseek(stream, 0L, SEEK_SET) != 0 ||
         tiny_vfscanf(stream, "%f %lf", &file_scan_float,
                      &file_scan_double) != 2 ||
-        file_scan_float != 1.5f || file_scan_double != -250.0 ||
-        fclose(stream) != 0) {
-        if (stream != (FILE *)0) {
-            fclose(stream);
-        }
+        file_scan_float != 1.5f || file_scan_double != -250.0) {
+        fclose(stream);
+        free(buffer);
+        return 33;
+    }
+    if (fclose(stream) != 0) {
         free(buffer);
         return 33;
     }
@@ -256,7 +260,7 @@ int main(int argc, char **argv, char **envp)
     }
     formatted = snprintf(format_buffer, sizeof(format_buffer), "%.1f:%.0f",
                          memory_scan_negative_zero, memory_scan_double);
-    if (formatted != 10 || strcmp(format_buffer, "-0.0:-250") != 0 ||
+    if (formatted != 9 || strcmp(format_buffer, "-0.0:-250") != 0 ||
         errno != EIO) {
         free(buffer);
         return 35;
