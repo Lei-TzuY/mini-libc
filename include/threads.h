@@ -8,6 +8,10 @@ typedef struct {
     int __state;
 } mtx_t;
 
+typedef struct {
+    int __sequence;
+} cnd_t;
+
 enum {
     thrd_success = 0,
     thrd_nomem = 1,
@@ -32,5 +36,11 @@ int mtx_lock(mtx_t *mtx);
 int mtx_trylock(mtx_t *mtx);
 int mtx_unlock(mtx_t *mtx);
 void mtx_destroy(mtx_t *mtx);
+
+int cnd_init(cnd_t *cond);
+int cnd_signal(cnd_t *cond);
+int cnd_broadcast(cnd_t *cond);
+int cnd_wait(cnd_t *cond, mtx_t *mtx);
+void cnd_destroy(cnd_t *cond);
 
 #endif
