@@ -23,6 +23,23 @@ __mini_atomic_fetch_add_int:
     ret
     .size __mini_atomic_fetch_add_int, .-__mini_atomic_fetch_add_int
 
+    .globl __mini_atomic_load_ulong
+    .hidden __mini_atomic_load_ulong
+    .type __mini_atomic_load_ulong, @function
+__mini_atomic_load_ulong:
+    movq (%rdi), %rax
+    ret
+    .size __mini_atomic_load_ulong, .-__mini_atomic_load_ulong
+
+    .globl __mini_atomic_exchange_ulong
+    .hidden __mini_atomic_exchange_ulong
+    .type __mini_atomic_exchange_ulong, @function
+__mini_atomic_exchange_ulong:
+    movq %rsi, %rax
+    xchgq %rax, (%rdi)
+    ret
+    .size __mini_atomic_exchange_ulong, .-__mini_atomic_exchange_ulong
+
     .globl __mini_stdio_lock
     .hidden __mini_stdio_lock
     .type __mini_stdio_lock, @function
