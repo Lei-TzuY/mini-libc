@@ -14,10 +14,15 @@ int main(int argc, char **argv, char **envp)
     char io_buffer[11];
     char scan_digit[2];
     char scan_letters[3];
+    char memory_letters[3];
     FILE *stream;
     int scan_auto;
     unsigned int scan_decimal;
     unsigned int scan_hex;
+    int memory_auto;
+    int memory_oct;
+    unsigned int memory_hex;
+    int memory_last;
     int formatted;
 
     (void)envp;
@@ -117,12 +122,24 @@ int main(int argc, char **argv, char **envp)
         return 14;
     }
 
+    errno = EIO;
+    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+               &memory_auto, &memory_oct, memory_letters, &memory_hex,
+               &memory_last) != 5 ||
+        memory_auto != 42 || memory_oct != 63 ||
+        memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
+        memory_letters[2] != '\0' || memory_hex != 0x89U ||
+        memory_last != 7 || errno != EIO) {
+        free(buffer);
+        return 15;
+    }
+
     formatted = printf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
                        buffer, 7, 0x2aU, -5000000000LL, 11U, 22U, 33U);
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 15;
+        return 16;
     }
 
     free(buffer);
