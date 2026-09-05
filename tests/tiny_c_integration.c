@@ -37,6 +37,39 @@ static int tiny_vprintf(const char *format, ...)
     return result;
 }
 
+static int tiny_vfscanf(FILE *stream, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfscanf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_vscanf(const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vscanf(format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_vsscanf(const char *source, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vsscanf(source, format, ap);
+    va_end(ap);
+    return result;
+}
+
 static int tiny_va_sum(int count, ...)
 {
     va_list ap;
@@ -79,6 +112,7 @@ int main(int argc, char **argv, char **envp)
     int memory_oct;
     unsigned int memory_hex;
     int memory_last;
+    int stdin_values[6] = {0, 0, 0, 0, 0, 0};
     int formatted;
 
     (void)envp;
@@ -162,9 +196,9 @@ int main(int argc, char **argv, char **envp)
     }
 
     rewind(stream);
-    if (fscanf(stream, "%3i%2u%1[0-9]%2[A-Z]%2x",
-               &scan_auto, &scan_decimal, scan_digit, scan_letters,
-               &scan_hex) != 5 ||
+    if (tiny_vfscanf(stream, "%3i%2u%1[0-9]%2[A-Z]%2x",
+                     &scan_auto, &scan_decimal, scan_digit, scan_letters,
+                     &scan_hex) != 5 ||
         scan_auto != 10 || scan_decimal != 34U ||
         scan_digit[0] != '5' || scan_digit[1] != '\0' ||
         scan_letters[0] != 'X' || scan_letters[1] != 'Y' ||
@@ -179,9 +213,9 @@ int main(int argc, char **argv, char **envp)
     }
 
     errno = EIO;
-    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
-               &memory_auto, &memory_oct, memory_letters, &memory_hex,
-               &memory_last) != 5 ||
+    if (tiny_vsscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+                     &memory_auto, &memory_oct, memory_letters, &memory_hex,
+                     &memory_last) != 5 ||
         memory_auto != 42 || memory_oct != 63 ||
         memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
         memory_letters[2] != '\0' || memory_hex != 0x89U ||
@@ -226,13 +260,23 @@ int main(int argc, char **argv, char **envp)
         return 20;
     }
 
+    if (tiny_vscanf("%d %d %d %d %d %d",
+                    &stdin_values[0], &stdin_values[1], &stdin_values[2],
+                    &stdin_values[3], &stdin_values[4], &stdin_values[5]) != 6 ||
+        stdin_values[0] != 1 || stdin_values[1] != 2 || stdin_values[2] != 3 ||
+        stdin_values[3] != 4 || stdin_values[4] != 5 || stdin_values[5] != 6 ||
+        errno != EIO) {
+        free(buffer);
+        return 21;
+    }
+
     formatted = tiny_vprintf("%s:%+06d:%#x:%lld:%u:%u:%u\n",
                              buffer, 7, 0x2aU, -5000000000LL,
                              11U, 22U, 33U);
     if (stdout == (FILE *)0 ||
         formatted != (int)(sizeof(expected_output) - 1U) || ferror(stdout)) {
         free(buffer);
-        return 21;
+        return 22;
     }
 
     free(buffer);
