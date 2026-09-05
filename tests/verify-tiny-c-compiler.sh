@@ -20,8 +20,9 @@ for source in $(find src -type f -name '*.c' -print | sort); do
 done
 
 "$CC" -fno-pie -c src/syscall/syscall.S -o "$OUT/syscall.o"
+"$CC" -fno-pie -c src/stdio/format_entry.S -o "$OUT/format_entry.o"
 "$CC" -fno-pie -c src/crt/crt0.S -o "$OUT/crt0.o"
-"$AR" rcs "$OUT/libc.a" $objects "$OUT/syscall.o"
+"$AR" rcs "$OUT/libc.a" $objects "$OUT/syscall.o" "$OUT/format_entry.o"
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
