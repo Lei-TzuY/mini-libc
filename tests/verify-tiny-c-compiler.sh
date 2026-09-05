@@ -48,6 +48,8 @@ done
     -o "$OUT/thread.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_condition_integration.c \
     -o "$OUT/condition.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_mutex_integration.c \
+    -o "$OUT/mutex.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -68,6 +70,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/thread.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/condition" \
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/mutex" \
+        "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -88,6 +92,8 @@ else
         "$OUT/thread.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/condition" \
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/mutex" \
+        "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -183,6 +189,12 @@ if [ "$condition_output" != "tiny-conditions-ok" ]; then
     exit 1
 fi
 
+mutex_output=$("$OUT/mutex")
+if [ "$mutex_output" != "tiny-mutex-ok" ]; then
+    echo "unexpected tiny-c mutex output: $mutex_output" >&2
+    exit 1
+fi
+
 set +e
 termination_quick_output=$("$OUT/termination" quick)
 termination_quick_status=$?
@@ -210,5 +222,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/setjmp-test"
 ./tests/verify-no-host-libc.sh "$OUT/thread"
 ./tests/verify-no-host-libc.sh "$OUT/condition"
+./tests/verify-no-host-libc.sh "$OUT/mutex"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
