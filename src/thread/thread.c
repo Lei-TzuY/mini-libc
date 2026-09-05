@@ -42,6 +42,7 @@ struct mini_thread_control {
     volatile int clear_tid;
     volatile int result;
     int lifecycle;
+    int published;
     void *stack;
     unsigned long stack_size;
     thrd_start_t start;
@@ -93,7 +94,8 @@ static struct mini_thread_control *find_control_locked(thrd_t thread)
     struct mini_thread_control *control = mini_thread_controls;
 
     while (control != (struct mini_thread_control *)0) {
-        if ((thrd_t)(unsigned int)control->tid == thread) {
+        if (control->published &&
+            (thrd_t)(unsigned int)control->tid == thread) {
             return control;
         }
         control = control->next;
@@ -126,7 +128,8 @@ static struct mini_thread_control *find_reapable_locked(void)
     struct mini_thread_control *control = mini_thread_controls;
 
     while (control != (struct mini_thread_control *)0) {
-        if (control->lifecycle == MINI_THREAD_DETACHED &&
+        if (control->published &&
+            control->lifecycle == MINI_THREAD_DETACHED &&
             control->clear_tid == 0) {
             control->lifecycle = MINI_THREAD_REAPING;
             return control;
@@ -141,7 +144,8 @@ static struct mini_thread_control *find_detached_locked(void)
     struct mini_thread_control *control = mini_thread_controls;
 
     while (control != (struct mini_thread_control *)0) {
-        if (control->lifecycle == MINI_THREAD_DETACHED) {
+        if (control->published &&
+            control->lifecycle == MINI_THREAD_DETACHED) {
             return control;
         }
         control = control->next;
@@ -236,6 +240,7 @@ static int ensure_reaper_locked(void)
     mini_reaper_control.clear_tid = -1;
     mini_reaper_control.result = 0;
     mini_reaper_control.lifecycle = MINI_THREAD_DETACHED;
+    mini_reaper_control.published = 1;
     mini_reaper_control.stack = (void *)mapping;
     mini_reaper_control.stack_size = MINI_THREAD_STACK_SIZE;
     mini_reaper_control.start = reaper_worker;
@@ -300,6 +305,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
     control->clear_tid = -1;
     control->result = 0;
     control->lifecycle = MINI_THREAD_JOINABLE;
+    control->published = 0;
     control->stack = (void *)mapping;
     control->stack_size = MINI_THREAD_STACK_SIZE;
     control->start = func;
@@ -328,21 +334,23 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
         return clone_result == MINI_RAW_ENOMEM ? thrd_nomem : thrd_error;
     }
 
+    registry_lock();
     control->tid = (int)clone_result;
-    *thr = (thrd_t)(unsigned int)control->tid;
+    control->published = 1;
+    if (control->lifecycle == MINI_THREAD_DETACHED) {
+        notify_reaper_locked();
+    }
+    registry_unlock();
+
+    *thr = (thrd_t)(unsigned long)clone_result;
     errno = saved_errno;
     return thrd_success;
 }
 
 void __mini_thread_run(struct mini_thread_control *control)
 {
-    long tid = mini_sys_gettid();
-    int result;
+    int result = control->start(control->arg);
 
-    if (tid > 0L) {
-        control->tid = (int)tid;
-    }
-    result = control->start(control->arg);
     thrd_exit(result);
 }
 
@@ -373,25 +381,33 @@ int thrd_equal(thrd_t lhs, thrd_t rhs)
 int thrd_detach(thrd_t thr)
 {
     struct mini_thread_control *control;
+    struct mini_thread_control *self_control = (struct mini_thread_control *)0;
     int saved_errno = errno;
-    int already_exited;
 
     if (thr == (thrd_t)0) {
         errno = saved_errno;
         return thrd_error;
     }
 
+    if (thrd_equal(thr, thrd_current())) {
+        struct mini_thread_tcb *tcb = __mini_thread_current_tcb();
+
+        self_control = (struct mini_thread_control *)tcb->control;
+    }
+
     registry_lock();
-    control = find_control_locked(thr);
+    control = self_control != (struct mini_thread_control *)0
+                  ? self_control
+                  : find_control_locked(thr);
     if (control == (struct mini_thread_control *)0 ||
+        control == &mini_reaper_control ||
         control->lifecycle != MINI_THREAD_JOINABLE) {
         registry_unlock();
         errno = saved_errno;
         return thrd_error;
     }
 
-    already_exited = control->clear_tid == 0;
-    if (already_exited) {
+    if (control->clear_tid == 0 && control->published) {
         control->lifecycle = MINI_THREAD_REAPING;
         registry_unlock();
         if (!reap_claimed_control(control, 1)) {
@@ -408,7 +424,9 @@ int thrd_detach(thrd_t thr)
         return thrd_error;
     }
     control->lifecycle = MINI_THREAD_DETACHED;
-    notify_reaper_locked();
+    if (control->published) {
+        notify_reaper_locked();
+    }
     registry_unlock();
     errno = saved_errno;
     return thrd_success;
