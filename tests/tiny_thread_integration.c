@@ -7,6 +7,7 @@
 #define DETACHED_THREADS 8
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
+#define WAIT_ATTEMPTS 1000
 
 struct worker_arg {
     int loops;
@@ -17,11 +18,17 @@ struct simple_worker_arg {
     int result;
 };
 
+struct mini_timeout {
+    long tv_sec;
+    long tv_nsec;
+};
+
 static mtx_t lock;
 static mtx_t gate;
 static int counter;
 static int detached_done;
 static thrd_t main_thread;
+static const struct mini_timeout wait_slice = {0L, 10000000L};
 
 static int bytes_match(const unsigned char *ptr, unsigned long size,
                        unsigned char pattern)
@@ -152,7 +159,9 @@ static int detached_worker(void *opaque)
 
 static int wait_for_detached(void)
 {
-    for (;;) {
+    int attempt;
+
+    for (attempt = 0; attempt < WAIT_ATTEMPTS; ++attempt) {
         int observed;
 
         if (mtx_lock(&lock) != thrd_success) {
@@ -166,9 +175,9 @@ static int wait_for_detached(void)
             return 1;
         }
         (void)mini_sys_futex((volatile int *)&detached_done, MINI_FUTEX_WAIT,
-                             observed, (const void *)0,
-                             (volatile int *)0, 0);
+                             observed, &wait_slice, (volatile int *)0, 0);
     }
+    return 0;
 }
 
 int main(void)
