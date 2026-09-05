@@ -217,6 +217,8 @@ static int reaper_worker(void *opaque)
                                  (volatile int *)0, 0);
         }
     }
+
+    return 0;
 }
 
 static int ensure_reaper_locked(void)
