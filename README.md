@@ -5,7 +5,7 @@ The long-term goal is to provide a progressively usable userspace runtime for
 `tiny-c-compiler`, `mini-elf-toolchain`, and eventually `minios-x86`, without
 trying to recreate glibc.
 
-## Current milestone: executable runtime lifecycle, buffered owned streams, formatted output and positioning,
+## Current milestone: executable runtime lifecycle, buffered owned streams, formatted output, buffered input and positioning,
 core libc primitives, allocation, environment access, and cross-toolchain bootstrap
 
 The repository builds real ELF executables through this path:
@@ -179,12 +179,16 @@ the POSIX `environ` global or environment mutation APIs.
 
 The `stdio.h` surface has an opaque `FILE` type and predefined `stdin`, `stdout`,
 and `stderr` expressions backed by inherited descriptors 0, 1, and 2. The
-concrete stream layout stays private. `stdin` input remains unbuffered. `stdout`
-and pathname-backed writable streams use a fixed 256-byte private output buffer;
-`stderr` remains unbuffered. `fgetc`/`getc`/`getchar` provide one-byte input,
-while `fputc`/`putc`, `fputs`, `putchar`, `puts`, and `fwrite` feed the shared
-output core. `feof`, `ferror`, and `clearerr` expose sticky per-stream EOF/error
-state.
+concrete stream layout stays private. Readable streams use a fixed 256-byte
+private input buffer with a logical cursor and one guaranteed pushed-back byte;
+`stdout` and pathname-backed writable streams use a separate fixed 256-byte
+private output buffer, while `stderr` remains unbuffered for output.
+`fgetc`/`getc`/`getchar`, `fread`, and `fgets` all consume one shared buffered
+read core. `ungetc` pushes one byte ahead of unread buffered input and clears the
+EOF indicator. `fputc`/`putc`, `fputs`, `putchar`, `puts`, and `fwrite` feed the
+shared output core. `feof`, `ferror`, and `clearerr` expose sticky per-stream
+EOF/error state; clearing indicators does not discard buffered input or bypass
+update-stream direction rules.
 
 `printf` and `fprintf` now layer formatted character/string and integer output on
 that same FILE core. The current formatter supports `%d`, `%i`, `%u`, `%o`, `%x`,
@@ -226,18 +230,24 @@ flush or close reports an error. If both fail, the first flush error is
 preserved. The predefined inherited streams can also be explicitly closed and
 then become invalid.
 
-`fread` performs unbuffered block input. `fwrite` sends block output through the
-same buffering core as the byte/string output functions. A zero `size` or zero
-`nmemb` returns zero without transfer. Otherwise the implementation checks that
-`size * nmemb` is representable and returns the number of complete elements
-accepted or read. EOF after a partial final input element leaves those bytes in
-the caller buffer but does not count that incomplete element. Raw read failures
-set the error indicator and publish positive `errno`; true EOF sets only the EOF
-indicator. Buffered output retries positive short raw writes whenever a flush is
-required, retains unwritten buffered bytes after a partial flush failure, and
-maps zero progress to `EIO`. The checked multiplication overflow path is a
-deterministic mini-libc extension: it reports `EINVAL`, sets the stream error
-indicator, and performs no transfer.
+`fread` consumes the same buffered input core as byte and line input. A refill
+asks the raw `read` boundary for at most 256 bytes and later calls consume cached
+bytes without another syscall until that cache is exhausted. A zero `size` or
+zero `nmemb` returns zero without transfer. Otherwise the implementation checks
+that `size * nmemb` is representable and returns the number of complete elements
+read; EOF after a partial final element leaves those bytes in the caller buffer
+but does not count that incomplete element. Raw read failures set the error
+indicator and publish positive `errno`; a true EOF sets only the EOF indicator.
+`fgets` reads through the same cursor until newline, `n - 1` bytes, EOF, or an
+error and always terminates a successful result. `ungetc(EOF, stream)` fails
+without changing stream indicators, while one non-EOF pushed byte is guaranteed;
+a second outstanding pushback is rejected deterministically with `EINVAL`.
+`fwrite` continues to send block output through the shared buffering core.
+Buffered output retries positive short raw writes whenever a flush is required,
+retains unwritten buffered bytes after a partial flush failure, and maps zero
+progress to `EIO`. The checked multiplication overflow path is a deterministic
+mini-libc extension: it reports `EINVAL`, sets the stream error indicator, and
+performs no transfer.
 
 `fflush(stream)` publishes pending buffered output for one writable stream;
 `fflush(NULL)` walks the live-stream registry and attempts every writable stream,
@@ -245,32 +255,37 @@ returning `EOF` with the first observed error if any flush fails. Successful
 flushes preserve an existing `errno`. A flush failure keeps the unwritten suffix
 in the stream buffer so a later retry can continue without duplicating the bytes
 already written. Calling `fflush` on a live read-only stream is a deterministic
-no-op extension in this milestone.
+no-op extension in this milestone; it does not discard unread input.
 
 Update streams enforce an explicit direction barrier. Output must be followed by
 `fflush` or successful positioning before a later input operation; input must be
 followed by successful positioning before output, except when the input operation
-encountered EOF. `clearerr` only clears the public EOF/error indicators and does
-not bypass these direction rules.
+encountered EOF. Buffered unread bytes and a pushed-back byte remain part of the
+logical input position and therefore keep the read-to-write positioning
+requirement active. `clearerr` only clears the public EOF/error indicators and
+does not bypass these direction rules or discard cached input.
 
 `fseek`, `ftell`, and `rewind` use the existing raw `mini_sys_lseek` boundary.
 `fseek` flushes pending output before moving the kernel offset; if that flush
-fails, no seek is issued. A successful `fseek` clears EOF and the update-stream
-direction barriers while deliberately preserving an existing stream error
-indicator. `ftell` reports the logical position as the current kernel offset plus
-pending output bytes. For append streams with pending output, it first flushes so
-the position comes from the actual `O_APPEND` result rather than a stale current
-offset. `rewind` reuses the same synchronization path, attempts a seek to zero,
-and clears the EOF/error indicators; a failure remains observable through
-`errno`.
+fails, no seek is issued. For `SEEK_CUR`, the requested logical offset is
+translated to a kernel-relative offset by subtracting unread buffered input plus
+one outstanding pushed-back byte. A successful `fseek` discards input cache and
+pushback, clears EOF and the update-stream direction barriers, and deliberately
+preserves an existing stream error indicator. A failed seek leaves cached input
+and pushback intact. `ftell` reports the logical position as the current kernel
+offset plus pending output bytes minus unread buffered/pushed-back input. For
+append streams with pending output, it first flushes so the position comes from
+the actual `O_APPEND` result rather than a stale current offset. `rewind` reuses
+the same synchronization path, attempts a seek to zero, and clears the EOF/error
+indicators; a failure remains observable through `errno`.
 
-The stream layer is single-threaded. Input is still unbuffered and there is no
-pushback/read-line layer yet. mini-libc also does not yet provide `setvbuf`,
-`vfprintf`, memory-formatting functions such as `sprintf`/`snprintf`, floating-
-point formatting, `%p`, `%n`, positional arguments, `fgetpos`/`fsetpos`,
-`tmpfile`, locking, or C11 exclusive-create `x` modes. Those capabilities must
-extend the existing FILE state machine and formatter boundaries rather than
-reintroducing descriptor-specific paths or compiler-specific variadic builtins.
+The stream layer is single-threaded and both private buffers have fixed size.
+mini-libc does not yet provide `setvbuf`, formatted input, `vfprintf`, memory-
+formatting functions such as `sprintf`/`snprintf`, floating-point formatting,
+`%p`, `%n`, positional arguments, `fgetpos`/`fsetpos`, `tmpfile`, locking, or C11
+exclusive-create `x` modes. Those capabilities must extend the existing FILE
+state machine and formatter boundaries rather than reintroducing descriptor-
+specific paths or compiler-specific variadic builtins.
 
 The allocator surface now provides `malloc`, `calloc`, `realloc`, and `free`.
 It is deliberately a small single-threaded x86-64 allocator backed only by the
@@ -289,9 +304,9 @@ A failed resize returns null, sets `ENOMEM` when allocation fails, and leaves th
 original allocation and its contents intact. `free(NULL)` is a no-op. Freed
 blocks are reused with first-fit search, split when a useful aligned remainder
 exists, and coalesced with adjacent free blocks. The allocator does not currently
-return tail space to the kernel, is not thread-safe, and must own the program
-break once it has initialized; callers must not move the break directly while
-allocator state is live. As in C, invalid-pointer and double-free calls are
+return tail space to the kernel, is not thread-safe, and must own the process
+program break once it has initialized; callers must not move the break directly
+while allocator state is live. As in C, invalid-pointer and double-free calls are
 outside the supported contract.
 
 The `errno.h` surface defines Linux `ENOENT` as 2, `EIO` as 5, `ENOMEM` as 12,
@@ -332,8 +347,12 @@ retry/recovery, `fflush(NULL)` registry behavior, update-stream direction
 barriers, owned-file create/truncate/append/reopen/read/close behavior, close
 error precedence, block-transfer partial-element semantics, buffer-full
 auto-flush, append-aware logical positions, `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
-positioning, EOF reset, and ownership/error cleanup. Formatted-output coverage
-locks the supported conversion/length/flag/width/precision matrix, signed minima,
+positioning, EOF reset, and ownership/error cleanup. Buffered-input coverage
+locks 256-byte raw refill requests, cache reuse across `fgetc`/`fread`/`fgets`,
+EOF syscall suppression, one-byte pushback precedence, `ungetc` EOF behavior,
+logical `ftell` subtraction, `SEEK_CUR` unread-input compensation, and real-file
+mixed reads across a refill boundary. Formatted-output coverage locks the
+supported conversion/length/flag/width/precision matrix, signed minima,
 zero-precision integer edge cases, malformed-format rejection, formatter write
 failure propagation, and both `printf` and `fprintf` variadic register-to-stack
 transitions. The `strtok` probe covers leading delimiter runs, delimiter changes
@@ -364,13 +383,14 @@ probes. CI additionally executes a pinned `tiny-c-compiler -> mini-libc`
 bootstrap and a pinned `tiny-c-compiler -> mini-libc -> mini-elf-toolchain`
 compile/link/runtime path, so cross-repository integration is an executable gate
 rather than a future roadmap claim. The integration program creates `0123456789`
-with buffered `fwrite`, seeks from the end, overwrites bytes with `XY`, rewinds
-and reads back `012345XY89` with `fread`, then seeks again after EOF. Its final
-status line is produced by `printf` with signed/unsigned/hexadecimal and
-`long long` arguments plus enough trailing integer arguments to cross the SysV
-variadic GP-register boundary into overflow-stack arguments. Successful shell
-capture therefore proves the `tiny-c-compiler` variadic caller, the mini-libc
-assembly entry shim, the compiler-neutral formatter, buffered normal-exit flush,
+with buffered `fwrite`, seeks from the end, overwrites bytes with `XY`, then
+repositions and mixes buffered `fgetc`, `ungetc`, `fgets`, and `fread` before
+proving EOF on the same logical cursor. Its final status line is produced by
+`printf` with signed/unsigned/hexadecimal and `long long` arguments plus enough
+trailing integer arguments to cross the SysV variadic GP-register boundary into
+overflow-stack arguments. Successful shell capture therefore proves the
+`tiny-c-compiler` caller, mini-libc buffered input/output state machines, the
+assembly formatting entry shim, compiler-neutral formatter, normal-exit flush,
 and both GNU `ld` and `mini-elf-toolchain` link/runtime paths in one executable
 gate. The harness independently verifies the final file contents.
 
@@ -384,7 +404,7 @@ src/syscall/         Linux x86-64 syscall boundary
 src/string/          memory and string primitives
 src/ctype/           C-locale character classification
 src/stdlib/          conversion, search, sorting, arithmetic, allocation, and environment utilities
-src/stdio/           inherited/owned streams, buffered/formatted output, block I/O, positioning
+src/stdio/           inherited/owned streams, buffered input/output, formatted output, block I/O, positioning
 src/errno/           errno storage boundary
 tests/               freestanding probes, differential tests, ELF checks
 examples/            freestanding sample programs
@@ -402,31 +422,33 @@ declares `atoi`, `strtol`, `strtoul`, `strtoll`, `getenv`, `bsearch`, `qsort`,
 `malloc`, `calloc`, `realloc`, and `free`, plus the `div_t`, `ldiv_t`, and
 `lldiv_t` result types; `stdio.h` provides opaque `FILE`, `stdin`, `stdout`,
 `stderr`, `fopen`, `fclose`, `fflush`, `fread`, `fwrite`, `fseek`, `ftell`,
-`rewind`, `fgetc`, `getc`, `getchar`, `fputc`, `putc`, `putchar`, `fputs`,
-`puts`, `printf`, `fprintf`, `feof`, `ferror`, `clearerr`, `SEEK_SET`, `SEEK_CUR`,
-`SEEK_END`, and `EOF`; and `errno.h` currently provides the errno lvalue contract
-plus `ENOENT`, `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
+`rewind`, `fgetc`, `getc`, `getchar`, `fgets`, `ungetc`, `fputc`, `putc`,
+`putchar`, `fputs`, `puts`, `printf`, `fprintf`, `feof`, `ferror`, `clearerr`,
+`SEEK_SET`, `SEEK_CUR`, `SEEK_END`, and `EOF`; and `errno.h` currently provides
+the errno lvalue contract plus `ENOENT`, `EIO`, `ENOMEM`, `EINVAL`, and `ERANGE`.
 
 See [`docs/abi.md`](docs/abi.md) for the exact ABI assumptions, raw syscall
 contract, normal-termination ordering, buffered stream state/lifecycle,
-formatted-output call boundary, block I/O and positioning model, allocator
-ownership rules, cross-toolchain bootstrap boundary, and current errno storage
-limitation.
+formatted-output call boundary, block I/O and logical positioning model,
+allocator ownership rules, cross-toolchain bootstrap boundary, and current errno
+storage limitation.
 
 ## Next
 
-The formatted-output phase is now the executable baseline rather than the
-roadmap target: byte and block output, buffering/flush lifecycle, positioning,
-normal-exit integration, integer/string formatting, and cross-toolchain SysV
-variadic calling have one shared executable path. The next architectural frontier
-is **buffered input plus pushback/read-line state**. A coherent first slice should
-add private read-buffer state to `FILE`, make `fgetc`/`getc`/`getchar` and `fread`
-consume the same read core, guarantee at least one byte of `ungetc` pushback, add
-`fgets`, and define logical-position/update-stream behavior when unread buffered
-bytes or pushed-back input exist. EOF/error/`clearerr` and `fseek`/`rewind`
-transitions must stay deterministic under that state machine.
+Buffered input and pushback are now part of the executable baseline rather than
+the roadmap target: byte/block/line reads, one-byte pushback, kernel-prefetch
+compensation, buffered/formatted output, positioning, and normal-exit lifecycle
+all share one private FILE state machine. The next architectural frontier is a
+**formatted input engine** built on that same logical read cursor. A coherent
+first slice should add `scanf`/`fscanf` through one shared parser, distinguish
+matching failure from input failure/EOF, and support a bounded integer/string/
+character conversion set with width and assignment suppression before expanding
+toward scansets or floating point. The private SysV variadic entry strategy can
+remain compiler-neutral because the first output arguments are pointers carried
+in INTEGER-class slots, preserving the pinned tiny-c/mini-elf executable gate.
 
-`setvbuf`, formatted input, `tmpfile`, C11 exclusive-create modes, threading/TLS,
-locale expansion, `strtoull`, floating-point formatting, `%p`/`%n`, public
+`setvbuf`, scansets, floating-point input/output, `tmpfile`, C11 exclusive-create
+modes, threading/TLS, locale expansion, `strtoull`, `%p`/`%n`, public
 `stdarg.h`/`vfprintf`, memory formatting, and allocator tuning remain separate
-follow-on slices rather than being mixed into the input-buffering milestone.
+follow-on slices rather than being mixed into the first formatted-input
+milestone.
