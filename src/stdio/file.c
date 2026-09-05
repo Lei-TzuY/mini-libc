@@ -6,10 +6,13 @@
 #include "stdio_internal.h"
 
 #define MINI_AT_FDCWD (-100)
+#define MINI_AT_REMOVEDIR 512
+#define MINI_EISDIR 21
 #define MINI_O_RDONLY 0
 #define MINI_O_WRONLY 1
 #define MINI_O_RDWR 2
 #define MINI_O_CREAT 64
+#define MINI_O_EXCL 128
 #define MINI_O_TRUNC 512
 #define MINI_O_APPEND 1024
 #define MINI_O_TMPFILE 4259840
@@ -19,6 +22,7 @@ static int parse_open_mode(const char *mode, int *flags,
 {
     int plus = 0;
     int binary = 0;
+    int exclusive = 0;
     char kind;
     const char *cursor;
 
@@ -43,10 +47,19 @@ static int parse_open_mode(const char *mode, int *flags,
                 return 0;
             }
             binary = 1;
+        } else if (*cursor == 'x') {
+            if (exclusive) {
+                return 0;
+            }
+            exclusive = 1;
         } else {
             return 0;
         }
         ++cursor;
+    }
+
+    if (exclusive && kind != 'w') {
+        return 0;
     }
 
     if (plus) {
@@ -62,6 +75,9 @@ static int parse_open_mode(const char *mode, int *flags,
 
     if (kind == 'w') {
         *flags |= MINI_O_CREAT | MINI_O_TRUNC;
+        if (exclusive) {
+            *flags |= MINI_O_EXCL;
+        }
     } else if (kind == 'a') {
         *flags |= MINI_O_CREAT | MINI_O_APPEND;
         *stream_mode |= MINI_FILE_APPEND;
@@ -233,6 +249,43 @@ FILE *tmpfile(void)
                             MINI_FILE_READABLE | MINI_FILE_WRITABLE |
                                 MINI_FILE_OWNED);
     return stream;
+}
+
+int remove(const char *filename)
+{
+    long result;
+
+    if (filename == (const char *)0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    result = mini_sys_unlinkat(MINI_AT_FDCWD, filename, 0);
+    if (result == -MINI_EISDIR) {
+        result = mini_sys_unlinkat(MINI_AT_FDCWD, filename, MINI_AT_REMOVEDIR);
+    }
+    if (result < 0) {
+        errno = (int)-result;
+        return -1;
+    }
+    return 0;
+}
+
+int rename(const char *oldname, const char *newname)
+{
+    long result;
+
+    if (oldname == (const char *)0 || newname == (const char *)0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    result = mini_sys_renameat(MINI_AT_FDCWD, oldname, MINI_AT_FDCWD, newname);
+    if (result < 0) {
+        errno = (int)-result;
+        return -1;
+    }
+    return 0;
 }
 
 int fclose(FILE *stream)
