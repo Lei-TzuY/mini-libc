@@ -2,6 +2,8 @@
 #include <mini/syscall.h>
 #include <threads.h>
 
+#include "../internal/thread_runtime.h"
+
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
 #define MINI_FUTEX_WAIT_BITSET 9
@@ -16,6 +18,9 @@
 
 extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
 extern int __mini_atomic_fetch_add_int(volatile int *value, int increment);
+extern unsigned long __mini_atomic_load_ulong(volatile unsigned long *value);
+extern unsigned long __mini_atomic_exchange_ulong(volatile unsigned long *value,
+                                                   unsigned long replacement);
 
 static int atomic_load_int(volatile int *value)
 {
@@ -34,28 +39,25 @@ static int valid_time_point(const struct timespec *time_point)
            time_point->tv_nsec < MINI_NSEC_PER_SEC;
 }
 
-static int current_tid(void)
+static unsigned long current_owner(void)
 {
-    thrd_t current = thrd_current();
-
-    if (current == (thrd_t)0 || current > (thrd_t)(unsigned int)MINI_INT_MAX) {
-        return 0;
-    }
-    return (int)(unsigned int)current;
+    return (unsigned long)__mini_thread_current_tcb();
 }
 
-static int owned_by(mtx_t *mtx, int tid)
+static int owned_by(mtx_t *mtx, unsigned long owner)
 {
     return atomic_load_int((volatile int *)&mtx->__state) != 0 &&
-           atomic_load_int((volatile int *)&mtx->__owner) == tid;
+           __mini_atomic_load_ulong((volatile unsigned long *)&mtx->__owner) ==
+               owner;
 }
 
-static int acquire_unlocked(mtx_t *mtx, int tid)
+static int acquire_unlocked(mtx_t *mtx, unsigned long owner)
 {
     if (__mini_atomic_exchange_int((volatile int *)&mtx->__state, 1) != 0) {
         return 0;
     }
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__owner, tid);
+    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
+                                       owner);
     (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 1);
     return 1;
 }
@@ -74,7 +76,7 @@ static int recurse_owned(mtx_t *mtx)
 static int lock_common(mtx_t *mtx, const struct timespec *time_point, int timed)
 {
     int saved_errno = errno;
-    int tid;
+    unsigned long owner;
 
     if (mtx == (mtx_t *)0 || !valid_type(mtx->__type) ||
         (timed && (((mtx->__type & mtx_timed) == 0) ||
@@ -83,19 +85,19 @@ static int lock_common(mtx_t *mtx, const struct timespec *time_point, int timed)
         return thrd_error;
     }
 
-    tid = current_tid();
-    if (tid == 0) {
+    owner = current_owner();
+    if (owner == 0UL) {
         errno = saved_errno;
         return thrd_error;
     }
 
-    if ((mtx->__type & mtx_recursive) != 0 && owned_by(mtx, tid)) {
+    if ((mtx->__type & mtx_recursive) != 0 && owned_by(mtx, owner)) {
         int result = recurse_owned(mtx);
 
         errno = saved_errno;
         return result;
     }
-    if ((mtx->__type & mtx_recursive) == 0 && owned_by(mtx, tid)) {
+    if ((mtx->__type & mtx_recursive) == 0 && owned_by(mtx, owner)) {
         errno = saved_errno;
         return thrd_error;
     }
@@ -103,7 +105,7 @@ static int lock_common(mtx_t *mtx, const struct timespec *time_point, int timed)
     for (;;) {
         long wait_result;
 
-        if (acquire_unlocked(mtx, tid)) {
+        if (acquire_unlocked(mtx, owner)) {
             errno = saved_errno;
             return thrd_success;
         }
@@ -125,10 +127,8 @@ static int lock_common(mtx_t *mtx, const struct timespec *time_point, int timed)
                                          (volatile int *)0, 0);
         }
 
-        if (wait_result >= 0L || wait_result == MINI_RAW_EAGAIN) {
-            continue;
-        }
-        if (wait_result == MINI_RAW_EINTR) {
+        if (wait_result >= 0L || wait_result == MINI_RAW_EAGAIN ||
+            wait_result == MINI_RAW_EINTR) {
             continue;
         }
         if (timed && wait_result == MINI_RAW_ETIMEDOUT) {
@@ -151,7 +151,8 @@ int mtx_init(mtx_t *mtx, int type)
 
     (void)__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0);
     mtx->__type = type;
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__owner, 0);
+    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
+                                       0UL);
     (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
     errno = saved_errno;
     return thrd_success;
@@ -160,29 +161,29 @@ int mtx_init(mtx_t *mtx, int type)
 int mtx_trylock(mtx_t *mtx)
 {
     int saved_errno = errno;
-    int tid;
+    unsigned long owner;
 
     if (mtx == (mtx_t *)0 || !valid_type(mtx->__type)) {
         errno = saved_errno;
         return thrd_error;
     }
-    tid = current_tid();
-    if (tid == 0) {
+    owner = current_owner();
+    if (owner == 0UL) {
         errno = saved_errno;
         return thrd_error;
     }
 
-    if ((mtx->__type & mtx_recursive) != 0 && owned_by(mtx, tid)) {
+    if ((mtx->__type & mtx_recursive) != 0 && owned_by(mtx, owner)) {
         int result = recurse_owned(mtx);
 
         errno = saved_errno;
         return result;
     }
-    if (owned_by(mtx, tid)) {
+    if (owned_by(mtx, owner)) {
         errno = saved_errno;
         return thrd_busy;
     }
-    if (acquire_unlocked(mtx, tid)) {
+    if (acquire_unlocked(mtx, owner)) {
         errno = saved_errno;
         return thrd_success;
     }
@@ -205,15 +206,15 @@ int mtx_timedlock(mtx_t *restrict mtx,
 int mtx_unlock(mtx_t *mtx)
 {
     int saved_errno = errno;
-    int tid;
+    unsigned long owner;
     int depth;
 
     if (mtx == (mtx_t *)0 || !valid_type(mtx->__type)) {
         errno = saved_errno;
         return thrd_error;
     }
-    tid = current_tid();
-    if (tid == 0 || !owned_by(mtx, tid)) {
+    owner = current_owner();
+    if (owner == 0UL || !owned_by(mtx, owner)) {
         errno = saved_errno;
         return thrd_error;
     }
@@ -234,7 +235,8 @@ int mtx_unlock(mtx_t *mtx)
     }
 
     (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__owner, 0);
+    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
+                                       0UL);
     if (__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0) == 0) {
         errno = saved_errno;
         return thrd_error;
@@ -251,7 +253,8 @@ void mtx_destroy(mtx_t *mtx)
 
     if (mtx != (mtx_t *)0) {
         (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
-        (void)__mini_atomic_exchange_int((volatile int *)&mtx->__owner, 0);
+        (void)__mini_atomic_exchange_ulong(
+            (volatile unsigned long *)&mtx->__owner, 0UL);
         (void)__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0);
         mtx->__type = mtx_plain;
     }
