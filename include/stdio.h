@@ -31,6 +31,8 @@ void rewind(FILE *stream);
 int fgetc(FILE *stream);
 int getc(FILE *stream);
 int getchar(void);
+char *fgets(char *restrict s, int n, FILE *restrict stream);
+int ungetc(int c, FILE *stream);
 int fputc(int c, FILE *stream);
 int putc(int c, FILE *stream);
 int putchar(int c);
