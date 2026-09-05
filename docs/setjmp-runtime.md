@@ -92,13 +92,15 @@ POSIX signal-mask-aware jumps. `sigsetjmp`/`siglongjmp`, signal-mask snapshots,
 and asynchronous-signal recovery remain outside the contract and belong to a
 later signal-runtime extension.
 
-The larger architectural limitation now visible across mini-libc is the
-single-threaded, process-global runtime-state model. `errno`, stdio registries and
-buffer state, callback registries, and hidden-state facilities such as `strtok`
-are not TLS-backed or synchronized. The next higher-level runtime hypothesis is
-therefore a **thread-aware state foundation** rather than another control-flow
-variant. A future implementation phase should begin only when it can provide an
-executable vertical slice—thread creation/lifecycle plus the synchronization or
-TLS machinery needed to make at least one currently process-global libc state
-correct across threads. Merely adding `<threads.h>` names or mutex type shells
-would not satisfy that promotion.
+The thread-aware state hypothesis identified by this phase is now implemented as
+a separate executable baseline: mini-libc can create/join real kernel threads,
+provides a futex-backed plain mutex, installs a per-thread runtime TCB, and uses
+that TCB to make `errno` thread-specific for mini-libc-created threads. See
+[`thread-runtime.md`](thread-runtime.md) for the exact ABI and phase limits.
+
+The remaining higher-level limitation is synchronized ownership of shared libc
+subsystems. The brk allocator, FILE/global registries, callback registries, and
+other shared process state are not automatically made thread-safe merely because
+the thread runtime exists. The next promotion therefore targets a real shared
+subsystem—starting with concurrent heap allocation—rather than another
+control-flow variant or additional `<threads.h>` shell declarations.

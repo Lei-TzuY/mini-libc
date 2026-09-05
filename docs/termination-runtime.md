@@ -9,11 +9,13 @@ normal termination
   -> normal atexit registry, LIFO
   -> flush every live writable FILE
   -> _Exit(status)
+  -> SYS_exit_group
 
 quick termination
   -> quick_exit(status)
   -> quick-exit registry, LIFO
   -> _Exit(status)
+  -> SYS_exit_group
 
 abnormal termination
   -> abort()
@@ -42,10 +44,11 @@ _Noreturn void abort(void);
 ```
 
 Both callback registries currently have a fixed capacity of 32 entries and are
-process-global, matching the single-threaded state model used elsewhere in the
-runtime. Null callback registration is rejected deterministically with `-1`.
-Capacity exhaustion also returns `-1` without disturbing previously registered
-callbacks.
+process-global. Null callback registration is rejected deterministically with
+`-1`. Capacity exhaustion also returns `-1` without disturbing previously
+registered callbacks. The thread-runtime baseline makes `errno` thread-specific,
+but these callback registries remain intentionally unsynchronized until a later
+shared-runtime-state phase.
 
 ## Normal termination
 
@@ -72,10 +75,17 @@ does not add thread-safety, reentrancy, or special async-signal-safety claims.
 
 ## Immediate termination
 
-`_Exit()` remains the minimal direct termination primitive. It performs no
-callback execution and no stdio cleanup; it issues the raw process-exit syscall.
-It is also the final primitive used by both normal and quick termination once
-their respective lifecycle work is complete.
+`_Exit()` remains the minimal direct program-termination primitive. It performs
+no callback execution and no stdio cleanup. In the thread-aware runtime it issues
+raw Linux `SYS_exit_group`, not `SYS_exit`, so every thread in the process is
+terminated. It is also the final primitive used by both normal and quick
+termination once their respective lifecycle work is complete.
+
+The distinction is now explicit in the raw syscall layer: `mini_sys_exit` maps
+to `SYS_exit` and is reserved for thread-local termination such as `thrd_exit`,
+while `mini_sys_exit_group` maps to `SYS_exit_group` and backs C process
+termination. Before real threads existed those syscalls were observationally
+equivalent for mini-libc programs; after `CLONE_THREAD` they are not.
 
 ## Abnormal termination
 
@@ -94,10 +104,11 @@ contract rather than being hidden behind a false POSIX conformance claim.
 
 ## Executable evidence
 
-The existing freestanding runtime probe now exercises all lifecycle boundaries:
+The existing freestanding runtime probe exercises the single-thread lifecycle
+boundaries:
 
 - normal return and explicit `exit()` retain reverse-order `atexit` behavior;
-- `_Exit()` still bypasses callbacks and buffering;
+- `_Exit()` bypasses callbacks and buffering;
 - `quick_exit()` runs three quick handlers in reverse order while ignoring three
   normal handlers and pending buffered stdout;
 - quick registry capacity and null-registration failure are deterministic;
@@ -106,9 +117,16 @@ The existing freestanding runtime probe now exercises all lifecycle boundaries:
   the default disposition, while normal/quick callbacks and buffered stdout stay
   invisible.
 
+The thread-runtime phase adds a separate active-child regression: a child thread
+announces readiness and waits on a futex while the main thread calls `_Exit(37)`.
+The child is armed to write `survived` after a bounded wait. The test requires
+process status 37 and empty output, proving `_Exit` uses process-wide
+`SYS_exit_group`; the old `SYS_exit` implementation would strand the sibling
+thread and expose the marker.
+
 A hosted signal harness replaces the signal syscalls and emergency `_Exit` to
 lock the exact `abort()` fallback sequence without killing the test process. The
-harness now uses mini-libc's own `setjmp`/`longjmp` implementation for that escape
+harness uses mini-libc's own `setjmp`/`longjmp` implementation for that escape
 path, so the signal and non-local-control subsystems share one context ABI rather
 than mixing mini-libc headers with host `jmp_buf` storage.
 
@@ -116,19 +134,23 @@ Pinned tiny-c compiles a dedicated termination executable. Its quick mode proves
 the independent C11 callback registry and no-flush behavior. Its abort mode
 executes a real `SIGABRT` handler that returns and still ends with signal status
 134. GNU `ld` and the pinned mini-elf-toolchain both link and run that executable,
-and host-libc-independence inspection covers the resulting binaries.
+and host-libc-independence inspection covers the resulting binaries. The thread
+runtime independently exercises `thrd_exit` through both toolchains, so the
+thread-local and process-wide raw exit paths are both executable parts of the
+current runtime.
 
 ## Phase boundary and promotion
 
 This phase completes the first C termination matrix: normal cleanup, C11 quick
 termination, direct `_Exit`, and signal-backed abnormal termination. Non-local C
-control transfer is now a separate executable baseline documented in
-`docs/setjmp-runtime.md`; termination no longer owns that roadmap gap.
+control transfer is an independent executable baseline documented in
+`docs/setjmp-runtime.md`, and `docs/thread-runtime.md` now defines the real C11
+thread lifecycle that makes the `SYS_exit`/`SYS_exit_group` distinction
+architecturally significant.
 
-The larger remaining runtime limitation is the process-global, single-threaded
-state model shared by callback registries, stdio, `errno`, and other hidden libc
-state. A future thread-aware runtime phase must introduce actual executable
-thread lifecycle plus the TLS/synchronization machinery needed to make such
-state correct across threads; adding thread API/type shells alone would not be a
-valid architectural promotion. POSIX signal-mask-aware `sigsetjmp`/`siglongjmp`
-remains a separate later signal extension rather than a termination variant.
+The remaining limitation is no longer absence of threads; it is unsynchronized
+shared runtime ownership. Callback registries, stdio global registry/buffering,
+the brk-based allocator, environment storage, and other hidden process state are
+not generally safe for concurrent mutation. The thread-runtime roadmap therefore
+promotes next to synchronized shared state, beginning with the allocator, rather
+than adding more termination variants.

@@ -23,3 +23,5 @@ setjmp_test_run: $(BUILD)/setjmp_probe
 
 setjmp_inspect: $(BUILD)/setjmp_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/setjmp_probe
+
+include mk/threads.mk
