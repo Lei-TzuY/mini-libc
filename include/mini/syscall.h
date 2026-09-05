@@ -33,5 +33,6 @@ long mini_sys_mmap(void *addr, unsigned long length, int prot, int flags,
                    int fd, long offset);
 long mini_sys_munmap(void *addr, unsigned long length);
 _Noreturn void mini_sys_exit(int status);
+_Noreturn void mini_sys_exit_group(int status);
 
 #endif
