@@ -20,17 +20,20 @@ size_t fread(void *restrict ptr, size_t size, size_t nmemb,
     unsigned char *buffer = (unsigned char *)ptr;
     size_t total;
     size_t completed;
+    size_t result;
 
+    __mini_stdio_lock();
     if (size == 0 || nmemb == 0) {
-        return 0;
+        result = 0;
+    } else if (nmemb > (size_t)-1 / size) {
+        result = mark_transfer_error(stream, EINVAL, 0, size);
+    } else {
+        total = size * nmemb;
+        completed = __mini_stdio_read(stream, buffer, total);
+        result = completed / size;
     }
-    if (nmemb > (size_t)-1 / size) {
-        return mark_transfer_error(stream, EINVAL, 0, size);
-    }
-
-    total = size * nmemb;
-    completed = __mini_stdio_read(stream, buffer, total);
-    return completed / size;
+    __mini_stdio_unlock();
+    return result;
 }
 
 size_t fwrite(const void *restrict ptr, size_t size, size_t nmemb,
@@ -39,18 +42,21 @@ size_t fwrite(const void *restrict ptr, size_t size, size_t nmemb,
     const unsigned char *buffer = (const unsigned char *)ptr;
     size_t total;
     size_t accepted;
+    size_t result;
 
+    __mini_stdio_lock();
     if (size == 0 || nmemb == 0) {
-        return 0;
+        result = 0;
+    } else if (stream == (FILE *)0 ||
+               (stream->mode & MINI_FILE_WRITABLE) == 0U) {
+        result = mark_transfer_error(stream, EINVAL, 0, size);
+    } else if (nmemb > (size_t)-1 / size) {
+        result = mark_transfer_error(stream, EINVAL, 0, size);
+    } else {
+        total = size * nmemb;
+        accepted = __mini_stdio_write(stream, buffer, total);
+        result = accepted / size;
     }
-    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
-        return mark_transfer_error(stream, EINVAL, 0, size);
-    }
-    if (nmemb > (size_t)-1 / size) {
-        return mark_transfer_error(stream, EINVAL, 0, size);
-    }
-
-    total = size * nmemb;
-    accepted = __mini_stdio_write(stream, buffer, total);
-    return accepted / size;
+    __mini_stdio_unlock();
+    return result;
 }

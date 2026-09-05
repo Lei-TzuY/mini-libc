@@ -1,10 +1,13 @@
 #include <errno.h>
 #include <mini/syscall.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <threads.h>
 
 #define CAPACITY_THREADS 18
 #define DETACHED_THREADS 8
+#define STDIO_THREADS 4
+#define STDIO_RECORDS 24
 #define MINI_FUTEX_WAIT 0
 #define MINI_FUTEX_WAKE 1
 #define WAIT_ATTEMPTS 1000
@@ -16,6 +19,11 @@ struct worker_arg {
 
 struct simple_worker_arg {
     int result;
+};
+
+struct stdio_worker_arg {
+    FILE *stream;
+    int id;
 };
 
 struct mini_timeout {
@@ -51,6 +59,19 @@ static void fill_bytes(unsigned char *ptr, unsigned long size,
     for (i = 0; i < size; ++i) {
         ptr[i] = pattern;
     }
+}
+
+static int same_text(const char *left, const char *right)
+{
+    unsigned long i = 0;
+
+    while (left[i] != '\0' && right[i] != '\0') {
+        if (left[i] != right[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return left[i] == right[i];
 }
 
 static int worker(void *opaque)
@@ -180,6 +201,97 @@ static int wait_for_detached(void)
     return 0;
 }
 
+static unsigned int stdio_record_value(int id, int record)
+{
+    return 0xc3000000U | ((unsigned int)id << 8) | (unsigned int)record;
+}
+
+static int stdio_worker(void *opaque)
+{
+    struct stdio_worker_arg *arg = (struct stdio_worker_arg *)opaque;
+    int record;
+
+    for (record = 0; record < STDIO_RECORDS; ++record) {
+        if (fprintf(arg->stream, "S%d:%02d:%08x:ABCDEFGHIJ:%d\n",
+                    arg->id, record, stdio_record_value(arg->id, record),
+                    arg->id + record) <= 0) {
+            return -40;
+        }
+    }
+    return 0;
+}
+
+static int run_stdio_stress(void)
+{
+    static unsigned char seen[STDIO_THREADS][STDIO_RECORDS];
+    static const char expected_text[] = "ABCDEFGHIJ";
+    struct stdio_worker_arg args[STDIO_THREADS];
+    thrd_t threads[STDIO_THREADS];
+    FILE *stream = tmpfile();
+    int i;
+
+    if (stream == (FILE *)0) {
+        return 0;
+    }
+
+    for (i = 0; i < STDIO_THREADS; ++i) {
+        args[i].stream = stream;
+        args[i].id = i;
+        if (thrd_create(&threads[i], stdio_worker, &args[i]) != thrd_success) {
+            (void)fclose(stream);
+            return 0;
+        }
+    }
+    for (i = 0; i < STDIO_THREADS; ++i) {
+        int result;
+
+        if (thrd_join(threads[i], &result) != thrd_success || result != 0) {
+            (void)fclose(stream);
+            return 0;
+        }
+    }
+
+    if (fflush(stream) == EOF || fseek(stream, 0L, SEEK_SET) != 0) {
+        (void)fclose(stream);
+        return 0;
+    }
+
+    for (i = 0; i < STDIO_THREADS * STDIO_RECORDS; ++i) {
+        char text[11];
+        unsigned int value;
+        int id;
+        int record;
+        int sum;
+
+        if (fscanf(stream, " S%d:%d:%x:%10[A-Z]:%d",
+                   &id, &record, &value, text, &sum) != 5 ||
+            id < 0 || id >= STDIO_THREADS || record < 0 ||
+            record >= STDIO_RECORDS || seen[id][record] ||
+            value != stdio_record_value(id, record) ||
+            !same_text(text, expected_text) || sum != id + record) {
+            (void)fclose(stream);
+            return 0;
+        }
+        seen[id][record] = 1U;
+    }
+
+    for (i = 0; i < STDIO_THREADS; ++i) {
+        int record;
+
+        for (record = 0; record < STDIO_RECORDS; ++record) {
+            if (!seen[i][record]) {
+                (void)fclose(stream);
+                return 0;
+            }
+        }
+    }
+
+    if (fclose(stream) == EOF) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     static struct worker_arg first = {1500, 51};
@@ -269,17 +381,21 @@ int main(void)
     }
     free(heap_check);
 
+    if (!run_stdio_stress()) {
+        return 13;
+    }
+
     if (thrd_create(&exit_thread, explicit_exit, (void *)0) != thrd_success ||
         thrd_join(exit_thread, &exit_result) != thrd_success ||
         exit_result != 91 || errno != EIO) {
-        return 13;
+        return 14;
     }
 
     mtx_destroy(&gate);
     mtx_destroy(&lock);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
-        return 14;
+        return 15;
     }
     return 0;
 }

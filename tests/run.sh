@@ -259,7 +259,9 @@ host_cc=${CC:-cc}
 "$host_cc" -Iinclude -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
     -fno-builtin -fno-pie -c tests/freopen_test.c -o build/freopen_test.o
 "$host_cc" -no-pie -o build/freopen_test build/freopen_test.o \
-    build/stdio_test_impl.o build/file_stream_test_impl.o build/errno.o
+    build/stdio_test_impl.o build/file_stream_test_impl.o build/errno.o \
+    build/file_sync.o build/position_test_impl.o build/stdio_write_lseek_fake.o \
+    build/stdio_lock_fake.o
 ./build/freopen_test
 
 ./build/memory_differential
