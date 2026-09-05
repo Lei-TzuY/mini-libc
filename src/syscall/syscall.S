@@ -66,6 +66,14 @@ mini_sys_rt_sigaction:
     ret
     .size mini_sys_rt_sigaction, .-mini_sys_rt_sigaction
 
+    .globl __mini_signal_restorer
+    .hidden __mini_signal_restorer
+    .type __mini_signal_restorer, @function
+__mini_signal_restorer:
+    leaq __mini_rt_sigreturn_restorer(%rip), %rax
+    ret
+    .size __mini_signal_restorer, .-__mini_signal_restorer
+
     .globl __mini_rt_sigreturn_restorer
     .hidden __mini_rt_sigreturn_restorer
     .type __mini_rt_sigreturn_restorer, @function
