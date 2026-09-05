@@ -28,6 +28,19 @@ enum mini_format_length {
     MINI_LEN_LL
 };
 
+enum mini_format_sink_kind {
+    MINI_FORMAT_SINK_FILE,
+    MINI_FORMAT_SINK_MEMORY
+};
+
+struct mini_format_sink {
+    enum mini_format_sink_kind kind;
+    FILE *stream;
+    char *buffer;
+    size_t size;
+    size_t stored;
+};
+
 struct mini_format_spec {
     int left;
     int plus;
@@ -51,6 +64,12 @@ static int invalid_stream(FILE *stream)
 }
 
 static int invalid_format(void)
+{
+    errno = EINVAL;
+    return EOF;
+}
+
+static int invalid_buffer(void)
 {
     errno = EINVAL;
     return EOF;
@@ -103,20 +122,43 @@ static int reserve_count(unsigned int *count, size_t amount)
     return 1;
 }
 
-static int emit_bytes(FILE *stream, const char *bytes, size_t length,
-                      unsigned int *count)
+static int sink_write(struct mini_format_sink *sink, const char *bytes,
+                      size_t length)
 {
-    if (!reserve_count(count, length)) {
-        return EOF;
+    size_t i;
+
+    if (sink->kind == MINI_FORMAT_SINK_FILE) {
+        if (__mini_stdio_write(sink->stream, (const unsigned char *)bytes,
+                               length) != length) {
+            return EOF;
+        }
+        return 0;
     }
-    if (__mini_stdio_write(stream, (const unsigned char *)bytes, length) != length) {
-        return EOF;
+
+    if (sink->size != 0U && sink->stored < sink->size - 1U) {
+        size_t available = (sink->size - 1U) - sink->stored;
+        size_t copied = length < available ? length : available;
+
+        for (i = 0; i < copied; ++i) {
+            sink->buffer[sink->stored + i] = bytes[i];
+        }
+        sink->stored += copied;
+        sink->buffer[sink->stored] = '\0';
     }
     return 0;
 }
 
-static int emit_repeat(FILE *stream, char byte, unsigned int amount,
-                       unsigned int *count)
+static int emit_bytes(struct mini_format_sink *sink, const char *bytes,
+                      size_t length, unsigned int *count)
+{
+    if (!reserve_count(count, length)) {
+        return EOF;
+    }
+    return sink_write(sink, bytes, length);
+}
+
+static int emit_repeat(struct mini_format_sink *sink, char byte,
+                       unsigned int amount, unsigned int *count)
 {
     char pad[MINI_FORMAT_PAD_CHUNK];
     unsigned int i;
@@ -136,7 +178,7 @@ static int emit_repeat(FILE *stream, char byte, unsigned int amount,
         if (chunk > MINI_FORMAT_PAD_CHUNK) {
             chunk = MINI_FORMAT_PAD_CHUNK;
         }
-        if (emit_bytes(stream, pad, chunk, count) == EOF) {
+        if (emit_bytes(sink, pad, chunk, count) == EOF) {
             return EOF;
         }
         amount -= chunk;
@@ -294,8 +336,9 @@ static size_t string_length_limit(const char *s, int precision_set,
     return length;
 }
 
-static int emit_string(FILE *stream, const struct mini_format_spec *spec,
-                       const char *value, unsigned int *count)
+static int emit_string(struct mini_format_sink *sink,
+                       const struct mini_format_spec *spec, const char *value,
+                       unsigned int *count)
 {
     static const char null_text[] = "(null)";
     size_t length;
@@ -309,31 +352,32 @@ static int emit_string(FILE *stream, const struct mini_format_spec *spec,
         padding = spec->width - (unsigned int)length;
     }
 
-    if (!spec->left && emit_repeat(stream, ' ', padding, count) == EOF) {
+    if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    if (emit_bytes(stream, value, length, count) == EOF) {
+    if (emit_bytes(sink, value, length, count) == EOF) {
         return EOF;
     }
-    if (spec->left && emit_repeat(stream, ' ', padding, count) == EOF) {
+    if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
     return 0;
 }
 
-static int emit_character(FILE *stream, const struct mini_format_spec *spec,
-                          int value, unsigned int *count)
+static int emit_character(struct mini_format_sink *sink,
+                          const struct mini_format_spec *spec, int value,
+                          unsigned int *count)
 {
     char byte = (char)(unsigned char)value;
     unsigned int padding = spec->width > 1U ? spec->width - 1U : 0U;
 
-    if (!spec->left && emit_repeat(stream, ' ', padding, count) == EOF) {
+    if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    if (emit_bytes(stream, &byte, 1, count) == EOF) {
+    if (emit_bytes(sink, &byte, 1, count) == EOF) {
         return EOF;
     }
-    if (spec->left && emit_repeat(stream, ' ', padding, count) == EOF) {
+    if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
     return 0;
@@ -355,7 +399,8 @@ static size_t make_digits(unsigned long long value, unsigned int base,
     return length;
 }
 
-static int emit_number(FILE *stream, const struct mini_format_spec *spec,
+static int emit_number(struct mini_format_sink *sink,
+                       const struct mini_format_spec *spec,
                        unsigned long long magnitude, int negative,
                        unsigned int base, int uppercase, int signed_conversion,
                        unsigned int *count)
@@ -413,23 +458,23 @@ static int emit_number(FILE *stream, const struct mini_format_spec *spec,
         }
     }
 
-    if (!spec->left && emit_repeat(stream, ' ', spaces, count) == EOF) {
+    if (!spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
         return EOF;
     }
     if (prefix_length != 0U &&
-        emit_bytes(stream, prefix, prefix_length, count) == EOF) {
+        emit_bytes(sink, prefix, prefix_length, count) == EOF) {
         return EOF;
     }
-    if (emit_repeat(stream, '0', zero_padding, count) == EOF ||
-        emit_repeat(stream, '0', precision_zeros, count) == EOF) {
+    if (emit_repeat(sink, '0', zero_padding, count) == EOF ||
+        emit_repeat(sink, '0', precision_zeros, count) == EOF) {
         return EOF;
     }
     for (i = digit_count; i != 0; --i) {
-        if (emit_bytes(stream, &digits[i - 1], 1, count) == EOF) {
+        if (emit_bytes(sink, &digits[i - 1], 1, count) == EOF) {
             return EOF;
         }
     }
-    if (spec->left && emit_repeat(stream, ' ', spaces, count) == EOF) {
+    if (spec->left && emit_repeat(sink, ' ', spaces, count) == EOF) {
         return EOF;
     }
     return 0;
@@ -469,7 +514,8 @@ static unsigned long long next_unsigned(struct mini_format_args *args,
     return (unsigned int)word;
 }
 
-static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
+static int emit_conversion(struct mini_format_sink *sink,
+                           const struct mini_format_spec *spec,
                            struct mini_format_args *args, unsigned int *count)
 {
     if (spec->conversion == 's') {
@@ -479,13 +525,13 @@ static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
             return invalid_format();
         }
         value = (const char *)next_word(args);
-        return emit_string(stream, spec, value, count);
+        return emit_string(sink, spec, value, count);
     }
     if (spec->conversion == 'c') {
         if (spec->length != MINI_LEN_NONE || spec->precision_set) {
             return invalid_format();
         }
-        return emit_character(stream, spec, word_to_int(next_word(args)), count);
+        return emit_character(sink, spec, word_to_int(next_word(args)), count);
     }
     if (spec->conversion == 'd' || spec->conversion == 'i') {
         long long value = next_signed(args, spec->length);
@@ -497,7 +543,7 @@ static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
         } else {
             magnitude = (unsigned long long)value;
         }
-        return emit_number(stream, spec, magnitude, negative, 10U, 0, 1, count);
+        return emit_number(sink, spec, magnitude, negative, 10U, 0, 1, count);
     }
     if (spec->conversion == 'u' || spec->conversion == 'o' ||
         spec->conversion == 'x' || spec->conversion == 'X') {
@@ -510,7 +556,7 @@ static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
         } else if (spec->conversion == 'x' || spec->conversion == 'X') {
             base = 16U;
         }
-        return emit_number(stream, spec, value, 0, base, uppercase, 0, count);
+        return emit_number(sink, spec, value, 0, base, uppercase, 0, count);
     }
     if (spec->conversion == '%') {
         char percent = '%';
@@ -518,20 +564,17 @@ static int emit_conversion(FILE *stream, const struct mini_format_spec *spec,
         if (spec->length != MINI_LEN_NONE || spec->precision_set) {
             return invalid_format();
         }
-        return emit_character(stream, spec, percent, count);
+        return emit_character(sink, spec, percent, count);
     }
     return invalid_format();
 }
 
-int __mini_format_dispatch(FILE *stream, const char *format,
+static int format_dispatch(struct mini_format_sink *sink, const char *format,
                            struct mini_format_args *args)
 {
     const char *cursor = format;
     unsigned int count = 0;
 
-    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
-        return invalid_stream(stream);
-    }
     if (format == (const char *)0 || args == (struct mini_format_args *)0) {
         return invalid_format();
     }
@@ -544,7 +587,7 @@ int __mini_format_dispatch(FILE *stream, const char *format,
             ++cursor;
         }
         if (cursor != literal &&
-            emit_bytes(stream, literal, (size_t)(cursor - literal), &count) == EOF) {
+            emit_bytes(sink, literal, (size_t)(cursor - literal), &count) == EOF) {
             return EOF;
         }
         if (*cursor == '\0') {
@@ -555,10 +598,48 @@ int __mini_format_dispatch(FILE *stream, const char *format,
         if (!parse_spec(&cursor, &spec, args)) {
             return invalid_format();
         }
-        if (emit_conversion(stream, &spec, args, &count) == EOF) {
+        if (emit_conversion(sink, &spec, args, &count) == EOF) {
             return EOF;
         }
     }
 
     return (int)count;
+}
+
+int __mini_format_dispatch(FILE *stream, const char *format,
+                           struct mini_format_args *args)
+{
+    struct mini_format_sink sink;
+
+    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_WRITABLE) == 0U) {
+        return invalid_stream(stream);
+    }
+
+    sink.kind = MINI_FORMAT_SINK_FILE;
+    sink.stream = stream;
+    sink.buffer = (char *)0;
+    sink.size = 0U;
+    sink.stored = 0U;
+    return format_dispatch(&sink, format, args);
+}
+
+int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
+                             struct mini_format_args *args)
+{
+    struct mini_format_sink sink;
+
+    if (size != 0U && buffer == (char *)0) {
+        return invalid_buffer();
+    }
+
+    sink.kind = MINI_FORMAT_SINK_MEMORY;
+    sink.stream = (FILE *)0;
+    sink.buffer = buffer;
+    sink.size = size;
+    sink.stored = 0U;
+    if (size != 0U) {
+        buffer[0] = '\0';
+    }
+
+    return format_dispatch(&sink, format, args);
 }
