@@ -1,7 +1,41 @@
 #include <errno.h>
 #include <mini/syscall.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+static int test_vfscanf(FILE *stream, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfscanf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int test_vscanf(const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vscanf(format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int test_vsscanf(const char *source, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vsscanf(source, format, ap);
+    va_end(ap);
+    return result;
+}
 
 int main(void)
 {
@@ -56,10 +90,10 @@ int main(void)
     }
 
     errno = EIO;
-    if (fscanf(stream, "%hhd %hd %ld %lld %hhu %hu %lu %llu",
-               &signed_byte, &signed_short, &signed_long, &signed_long_long,
-               &unsigned_byte, &unsigned_short, &unsigned_long,
-               &unsigned_long_long) != 8 ||
+    if (test_vfscanf(stream, "%hhd %hd %ld %lld %hhu %hu %lu %llu",
+                     &signed_byte, &signed_short, &signed_long, &signed_long_long,
+                     &unsigned_byte, &unsigned_short, &unsigned_long,
+                     &unsigned_long_long) != 8 ||
         signed_byte != (signed char)-5 || signed_short != (short)-30000 ||
         signed_long != -5000000000L || signed_long_long != -9000000000LL ||
         unsigned_byte != (unsigned char)250U ||
@@ -129,9 +163,9 @@ int main(void)
     }
 
     errno = EIO;
-    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
-               &memory_auto, &memory_oct, memory_letters, &memory_hex,
-               &memory_last) != 5 ||
+    if (test_vsscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+                     &memory_auto, &memory_oct, memory_letters, &memory_hex,
+                     &memory_last) != 5 ||
         memory_auto != 42 || memory_oct != 63 ||
         memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
         memory_letters[2] != '\0' || memory_hex != 0x89U ||
@@ -147,7 +181,7 @@ int main(void)
     }
 
     errno = ERANGE;
-    if (scanf("%d %5s %c", &stdin_value, input_word, &input_character) != 3 ||
+    if (test_vscanf("%d %5s %c", &stdin_value, input_word, &input_character) != 3 ||
         stdin_value != 41 || strcmp(input_word, "token") != 0 ||
         input_character != 'Q' || errno != ERANGE) {
         return 15;
