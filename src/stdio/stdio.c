@@ -66,45 +66,6 @@ static void ensure_storage(FILE *stream)
     }
 }
 
-int __mini_stdio_sync_input(FILE *stream)
-{
-    unsigned long max_long = (~0UL) >> 1;
-    size_t unread = 0;
-    long result;
-
-    if (!readable_stream(stream)) {
-        errno = EINVAL;
-        return EOF;
-    }
-    if (stream->read_length >= stream->read_offset) {
-        unread = stream->read_length - stream->read_offset;
-    }
-    if (stream->pushback_valid != 0U) {
-        ++unread;
-    }
-    if ((stream->state & MINI_FILE_READ_NEEDS_POSITION) == 0U && unread == 0U) {
-        return 0;
-    }
-    if (unread > (size_t)max_long) {
-        errno = EINVAL;
-        return EOF;
-    }
-
-    result = mini_sys_lseek(stream->fd, -(long)unread, SEEK_CUR);
-    if (result < 0) {
-        errno = (int)-result;
-        return EOF;
-    }
-
-    stream->read_offset = 0;
-    stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
-    stream->state &= ~(MINI_FILE_EOF | MINI_FILE_READ_NEEDS_POSITION |
-                       MINI_FILE_WRITE_NEEDS_SYNC);
-    return 0;
-}
-
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length)
 {
     size_t completed = 0;
