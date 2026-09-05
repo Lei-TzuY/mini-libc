@@ -1,6 +1,8 @@
 #include <mini/syscall.h>
 #include <stdlib.h>
 
+#include "../stdio/stdio_internal.h"
+
 #define MINI_ATEXIT_CAPACITY 32U
 
 static void (*mini_atexit_handlers[MINI_ATEXIT_CAPACITY])(void);
@@ -33,5 +35,6 @@ _Noreturn void exit(int status)
         handler();
     }
 
+    (void)__mini_stdio_flush_all();
     _Exit(status);
 }
