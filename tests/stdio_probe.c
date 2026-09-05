@@ -132,8 +132,20 @@ int main(void)
         "[    1.50][-2.5   ][+4.][-000.0]";
     static const char expected_float_special[] =
         "[    +inf][nan   ][-inf]";
+    static const char expected_scientific[] =
+        "1.25e+01|-3.1E-02|1.e+00|+0001.50e+00";
+    static const char expected_general[] =
+        "123.45|0.0001234|1.23E+04|12.00|1e+04";
+    static const char expected_hex[] =
+        "0x1.8p+0|0x1.800p+0|-0X1P-2|0x1.p+0|0x0.0000000000001p-1022|0x00000001.8p+0";
+    static const char expected_upper_special[] = "INF|INF|NAN|INF";
+    static const char expected_negative_zero_notation[] =
+        "-0.0e+00|-0|-0x0p+0";
+    static const char expected_vnotation[] =
+        "1.25e+01|0.0001234|0x1.8p+0";
     static const char expected_vfile[] =
-        "vf:1:2:3:4:5|vp:1:2:3:4:5:6|pf:1.5|vpf:2.5|vff:1:2:3:4:5:6:7:8:9";
+        "vf:1:2:3:4:5|vp:1:2:3:4:5:6|pf:1.5|vpf:2.5|vff:1:2:3:4:5:6:7:8:9"
+        "|ve:1.25e+01|vg:0.0001234|va:0x1.8p+0";
     char memory[128];
     char float_memory[128];
     char truncated[8];
@@ -372,6 +384,56 @@ int main(void)
         return 81;
     }
 
+    result = snprintf(float_memory, sizeof(float_memory),
+                      "%.2e|%.1E|%#.0e|%+012.2e",
+                      12.5, -0.03125, 1.0, 1.5);
+    if (result != (int)(sizeof(expected_scientific) - 1U) ||
+        !same_string(float_memory, expected_scientific) || errno != ERANGE) {
+        return 87;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory),
+                      "%.6g|%.4g|%.3G|%#.4g|%.4g",
+                      123.45, 0.0001234, 12345.0, 12.0, 9999.5);
+    if (result != (int)(sizeof(expected_general) - 1U) ||
+        !same_string(float_memory, expected_general) || errno != ERANGE) {
+        return 88;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory),
+                      "%a|%.3a|%A|%#.0a|%a|%015.1a",
+                      1.5, 1.5, -0.25, 1.0,
+                      double_from_bits(1ULL), 1.5);
+    if (result != (int)(sizeof(expected_hex) - 1U) ||
+        !same_string(float_memory, expected_hex) || errno != ERANGE) {
+        return 89;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory), "%F|%E|%G|%A",
+                      double_from_bits(0x7ff0000000000000ULL),
+                      double_from_bits(0x7ff0000000000000ULL),
+                      double_from_bits(0x7ff8000000000000ULL),
+                      double_from_bits(0x7ff0000000000000ULL));
+    if (result != (int)(sizeof(expected_upper_special) - 1U) ||
+        !same_string(float_memory, expected_upper_special) || errno != ERANGE) {
+        return 90;
+    }
+
+    result = snprintf(float_memory, sizeof(float_memory), "%.1e|%g|%a",
+                      -0.0, -0.0, -0.0);
+    if (result != (int)(sizeof(expected_negative_zero_notation) - 1U) ||
+        !same_string(float_memory, expected_negative_zero_notation) ||
+        errno != ERANGE) {
+        return 91;
+    }
+
+    result = probe_vsnprintf(float_memory, sizeof(float_memory),
+                             "%.2e|%.4g|%a", 12.5, 0.0001234, 1.5);
+    if (result != (int)(sizeof(expected_vnotation) - 1U) ||
+        !same_string(float_memory, expected_vnotation) || errno != ERANGE) {
+        return 92;
+    }
+
     errno = ERANGE;
     if (snprintf(float_memory, sizeof(float_memory), "%.10f", 1.0) != EOF ||
         errno != EINVAL) {
@@ -381,6 +443,21 @@ int main(void)
     if (snprintf(float_memory, sizeof(float_memory), "%f",
                  18446744073709551616.0) != EOF || errno != EINVAL) {
         return 83;
+    }
+    errno = ERANGE;
+    if (snprintf(float_memory, sizeof(float_memory), "%.10e", 1.0) != EOF ||
+        errno != EINVAL) {
+        return 93;
+    }
+    errno = ERANGE;
+    if (snprintf(float_memory, sizeof(float_memory), "%.10g", 1.0) != EOF ||
+        errno != EINVAL) {
+        return 94;
+    }
+    errno = ERANGE;
+    if (snprintf(float_memory, sizeof(float_memory), "%.14a", 1.0) != EOF ||
+        errno != EINVAL) {
+        return 95;
     }
     errno = ERANGE;
 
@@ -419,6 +496,13 @@ int main(void)
     if (result != 22 || errno != ERANGE || ferror(stream)) {
         fclose(stream);
         return 86;
+    }
+    result = probe_vfprintf(stream, "|ve:%.2e|vg:%.4g|va:%a",
+                            12.5, 0.0001234, 1.5);
+    if (result != (int)(sizeof("|ve:1.25e+01|vg:0.0001234|va:0x1.8p+0") - 1U) ||
+        errno != ERANGE || ferror(stream)) {
+        fclose(stream);
+        return 96;
     }
     if (fflush(stream) == EOF) {
         fclose(stream);
