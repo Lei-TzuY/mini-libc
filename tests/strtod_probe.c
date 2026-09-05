@@ -29,6 +29,32 @@ static unsigned int float_bits(float value)
     return bits;
 }
 
+static double double_from_bits(unsigned long long bits)
+{
+    double value;
+    unsigned char *out = (unsigned char *)&value;
+    const unsigned char *in = (const unsigned char *)&bits;
+    unsigned int i;
+
+    for (i = 0U; i < 8U; ++i) {
+        out[i] = in[i];
+    }
+    return value;
+}
+
+static int same_string(const char *left, const char *right)
+{
+    unsigned int i = 0U;
+
+    while (left[i] != '\0' && right[i] != '\0') {
+        if (left[i] != right[i]) {
+            return 0;
+        }
+        ++i;
+    }
+    return left[i] == right[i];
+}
+
 static int is_double_infinity(double value, int negative)
 {
     unsigned long long bits = double_bits(value);
@@ -65,12 +91,14 @@ int main(void)
     static const char malformed_hex[] = "0xg";
     static const char malformed_nan[] = "nan(tagX";
     static const char ok[] = "strtod-ok\n";
+    char format_buffer[256];
     char *end;
     double value;
     double first;
     double second;
     double third;
     float single;
+    int formatted;
 
     errno = EIO;
     value = strtod("  -1.5e2tail", &end);
@@ -171,9 +199,55 @@ int main(void)
         return 20;
     }
 
+    errno = EIO;
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "e=[%e][%.2E][%+012.2e]",
+                         1.5, -125.0, 1.5);
+    if (formatted !=
+            (int)(sizeof("e=[1.500000e+00][-1.25E+02][+0001.50e+00]") - 1U) ||
+        !same_string(format_buffer,
+                     "e=[1.500000e+00][-1.25E+02][+0001.50e+00]") ||
+        errno != EIO) {
+        return 21;
+    }
+
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "g=[%g][%g][%#.5g][%G]",
+                         123.0, 0.0000123, 12.0, 10000000.0);
+    if (formatted !=
+            (int)(sizeof("g=[123][1.23e-05][12.000][1E+07]") - 1U) ||
+        !same_string(format_buffer,
+                     "g=[123][1.23e-05][12.000][1E+07]") ||
+        errno != EIO) {
+        return 22;
+    }
+
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "a=[%a][%.3A][%a][%.0a][%#12.0a]",
+                         1.5, 1.5, double_from_bits(1ULL), 1.5, 1.0);
+    if (formatted !=
+            (int)(sizeof("a=[0x1.8p+0][0X1.800P+0][0x0.0000000000001p-1022][0x2p+0][     0x1.p+0]") - 1U) ||
+        !same_string(format_buffer,
+                     "a=[0x1.8p+0][0X1.800P+0][0x0.0000000000001p-1022][0x2p+0][     0x1.p+0]") ||
+        errno != EIO) {
+        return 23;
+    }
+
+    formatted = snprintf(format_buffer, sizeof(format_buffer),
+                         "s=[%F][%E][%G][%A]",
+                         double_from_bits(0x7ff0000000000000ULL),
+                         double_from_bits(0x7ff8000000000001ULL),
+                         double_from_bits(0xfff0000000000000ULL),
+                         double_from_bits(0x7ff8000000000001ULL));
+    if (formatted != (int)(sizeof("s=[INF][NAN][-INF][NAN]") - 1U) ||
+        !same_string(format_buffer, "s=[INF][NAN][-INF][NAN]") ||
+        errno != EIO) {
+        return 24;
+    }
+
     if (mini_sys_write(1, ok, sizeof(ok) - 1U) !=
         (long)(sizeof(ok) - 1U)) {
-        return 21;
+        return 25;
     }
     return 0;
 }
