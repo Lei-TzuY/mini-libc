@@ -45,7 +45,8 @@ int main(int argc, char **argv)
     if (stream == (FILE *)0) {
         return 8;
     }
-    if (fputc('C', stream) != 'C' || fclose(stream) != 0) {
+    if (fseek(stream, 0L, SEEK_SET) != 0 || fputc('C', stream) != 'C' ||
+        ftell(stream) != 3L || fclose(stream) != 0) {
         return 9;
     }
 

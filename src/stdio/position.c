@@ -19,6 +19,10 @@ int fseek(FILE *stream, long offset, int whence)
         errno = EINVAL;
         return -1;
     }
+    if ((stream->mode & MINI_FILE_WRITABLE) != 0U &&
+        __mini_stdio_flush_buffer(stream) == EOF) {
+        return -1;
+    }
 
     result = mini_sys_lseek(stream->fd, offset, whence);
     if (result < 0) {
@@ -26,16 +30,23 @@ int fseek(FILE *stream, long offset, int whence)
         return -1;
     }
 
-    stream->state &= ~MINI_FILE_EOF;
+    stream->state &= ~(MINI_FILE_EOF | MINI_FILE_READ_NEEDS_POSITION |
+                       MINI_FILE_WRITE_NEEDS_SYNC);
     return 0;
 }
 
 long ftell(FILE *stream)
 {
+    unsigned long max_long = (~0UL) >> 1;
     long result;
 
     if (!valid_stream(stream)) {
         errno = EINVAL;
+        return -1L;
+    }
+
+    if ((stream->mode & MINI_FILE_APPEND) != 0U && stream->write_length != 0U &&
+        __mini_stdio_flush_buffer(stream) == EOF) {
         return -1L;
     }
 
@@ -44,21 +55,17 @@ long ftell(FILE *stream)
         errno = (int)-result;
         return -1L;
     }
-    return result;
+    if ((unsigned long)result > max_long - (unsigned long)stream->write_length) {
+        errno = EINVAL;
+        return -1L;
+    }
+    return result + (long)stream->write_length;
 }
 
 void rewind(FILE *stream)
 {
-    long result;
-
-    if (!valid_stream(stream)) {
-        errno = EINVAL;
-        return;
-    }
-
-    stream->state &= ~(MINI_FILE_EOF | MINI_FILE_ERROR);
-    result = mini_sys_lseek(stream->fd, 0L, SEEK_SET);
-    if (result < 0) {
-        errno = (int)-result;
+    (void)fseek(stream, 0L, SEEK_SET);
+    if (stream != (FILE *)0) {
+        stream->state &= ~(MINI_FILE_EOF | MINI_FILE_ERROR);
     }
 }

@@ -46,6 +46,10 @@ check_termination_case return-exit 23 CBA
 check_termination_case call-exit 24 CBA
 check_termination_case quick-exit 25 ''
 check_termination_case capacity 26 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+check_termination_case buffered-return 27 AB
+check_termination_case buffered-call 28 AB
+check_termination_case buffered-quick 29 ''
+check_termination_case buffered-flush-quick 30 A
 
 syscall_output="$(./build/syscall_probe)"
 if [ "$syscall_output" != "syscall-ok" ]; then
@@ -218,4 +222,4 @@ rm -f "$block_io_path"
 ./build/stdio_write_test
 ./build/stdio_block_test
 
-echo "runtime/termination, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block stdio, positioning, compiler-neutrality, and differential probes passed"
+echo "runtime/termination/buffered-exit, syscall, memory, string, strtok, strerror, ctype, bsearch, atoi, errno, strtol, strtoul, allocator, calloc, realloc, getenv, inherited/owned/block stdio, positioning, compiler-neutrality, and differential probes passed"

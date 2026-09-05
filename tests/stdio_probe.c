@@ -60,12 +60,16 @@ int main(void)
         return 10;
     }
 
+    if (fflush(stdout) == EOF || errno != ERANGE || ferror(stdout)) {
+        return 11;
+    }
+
     {
         static const char marker[] = "stdio-ok";
         long written = mini_sys_write(1, marker, sizeof(marker) - 1);
 
         if (written != (long)(sizeof(marker) - 1)) {
-            return 11;
+            return 12;
         }
     }
 

@@ -20,6 +20,7 @@ extern FILE *__mini_stderr;
 
 FILE *fopen(const char *restrict filename, const char *restrict mode);
 int fclose(FILE *stream);
+int fflush(FILE *stream);
 size_t fread(void *restrict ptr, size_t size, size_t nmemb,
              FILE *restrict stream);
 size_t fwrite(const void *restrict ptr, size_t size, size_t nmemb,

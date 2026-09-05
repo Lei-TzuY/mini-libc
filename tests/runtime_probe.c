@@ -1,4 +1,5 @@
 #include <mini/syscall.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 static int equals(const char *left, const char *right)
@@ -37,6 +38,13 @@ static void marker_x(void)
     write_marker('X');
 }
 
+static void buffered_b(void)
+{
+    if (fputc('B', stdout) != 'B') {
+        _Exit(94);
+    }
+}
+
 static void register_three(void)
 {
     if (atexit(marker_a) != 0 || atexit(marker_b) != 0 || atexit(marker_c) != 0) {
@@ -73,6 +81,34 @@ static int run_termination_probe(const char *mode)
             _Exit(93);
         }
         return 26;
+    }
+
+    if (equals(mode, "buffered-return")) {
+        if (atexit(buffered_b) != 0 || fputc('A', stdout) != 'A') {
+            _Exit(95);
+        }
+        return 27;
+    }
+
+    if (equals(mode, "buffered-call")) {
+        if (atexit(buffered_b) != 0 || fputc('A', stdout) != 'A') {
+            _Exit(96);
+        }
+        exit(28);
+    }
+
+    if (equals(mode, "buffered-quick")) {
+        if (fputc('A', stdout) != 'A') {
+            _Exit(97);
+        }
+        _Exit(29);
+    }
+
+    if (equals(mode, "buffered-flush-quick")) {
+        if (fputc('A', stdout) != 'A' || fflush(stdout) == EOF) {
+            _Exit(98);
+        }
+        _Exit(30);
     }
 
     return -1;
