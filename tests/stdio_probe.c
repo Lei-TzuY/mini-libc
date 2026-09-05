@@ -134,7 +134,7 @@ int main(void)
         "[    +inf][nan   ][-inf]";
     static const char expected_vfile[] =
         "vf:1:2:3:4:5|vp:1:2:3:4:5:6|pf:1.5|vpf:2.5|vff:1:2:3:4:5:6:7:8:9";
-    char memory[64];
+    char memory[128];
     char float_memory[128];
     char truncated[8];
     char one[1];
