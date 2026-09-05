@@ -139,10 +139,11 @@ int main(void)
     reset_io();
     errno = ERANGE;
     if (setvbuf(stdout, full, _IOFBF, sizeof(full)) != 0 || errno != ERANGE ||
-        fputs("abc", stdout) == EOF || write_calls != 0 ||
-        full[0] != 'a' || full[1] != 'b' || full[2] != 'c' ||
-        fputc('d', stdout) != 'd' || write_calls != 1 ||
-        last_write_count != 4 || !output_is("abcd", 4)) {
+        fputs("abcd", stdout) == EOF || write_calls != 0 ||
+        full[0] != 'a' || full[3] != 'd' ||
+        fputc('e', stdout) != 'e' || write_calls != 1 ||
+        last_write_count != 4 || !output_is("abcd", 4) ||
+        fflush(stdout) != 0 || write_calls != 2 || !output_is("abcde", 5)) {
         return 1;
     }
 
