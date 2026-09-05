@@ -202,50 +202,6 @@ int __mini_stdio_flush_all(void)
     return 0;
 }
 
-int fgetc(FILE *stream)
-{
-    unsigned char byte;
-    long result;
-
-    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
-        return mark_error(stream, EINVAL);
-    }
-    if ((stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U) {
-        return mark_error(stream, EINVAL);
-    }
-    if ((stream->state & MINI_FILE_EOF) != 0U) {
-        return EOF;
-    }
-
-    result = mini_sys_read(stream->fd, &byte, 1);
-    if (result < 0) {
-        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
-        return mark_error(stream, (int)-result);
-    }
-    if (result == 0) {
-        stream->state |= MINI_FILE_EOF;
-        stream->state &= ~MINI_FILE_READ_NEEDS_POSITION;
-        return EOF;
-    }
-    if (result != 1) {
-        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
-        return mark_error(stream, EIO);
-    }
-
-    stream->state |= MINI_FILE_READ_NEEDS_POSITION;
-    return (int)byte;
-}
-
-int getc(FILE *stream)
-{
-    return fgetc(stream);
-}
-
-int getchar(void)
-{
-    return fgetc(stdin);
-}
-
 int fputc(int c, FILE *stream)
 {
     unsigned char byte = (unsigned char)c;
