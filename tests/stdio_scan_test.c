@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -6,6 +7,39 @@ static const unsigned char input[] =
     "1 2 3 4 5 6 word Q % skip 12X 0x2a 077 ff abcXYZ42_tail! @ ]-";
 static size_t input_offset;
 static size_t read_calls;
+
+static int test_vscanf(const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vscanf(format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int test_vfscanf(FILE *stream, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfscanf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int test_vsscanf(const char *source, const char *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vsscanf(source, format, ap);
+    va_end(ap);
+    return result;
+}
 
 long mini_test_read(int fd, void *buf, unsigned long count)
 {
@@ -66,16 +100,16 @@ int main(void)
     size_t calls_before_memory;
 
     errno = ERANGE;
-    if (scanf("%d %d %d %d %d %d",
-              &values[0], &values[1], &values[2], &values[3], &values[4],
-              &values[5]) != 6 ||
+    if (test_vscanf("%d %d %d %d %d %d",
+                    &values[0], &values[1], &values[2], &values[3], &values[4],
+                    &values[5]) != 6 ||
         values[0] != 1 || values[1] != 2 || values[2] != 3 ||
         values[3] != 4 || values[4] != 5 || values[5] != 6 ||
         errno != ERANGE || read_calls != 1) {
         return 1;
     }
 
-    if (scanf(" %4s %c %% %*s", word, &character) != 2 ||
+    if (test_vfscanf(stdin, " %4s %c %% %*s", word, &character) != 2 ||
         word[0] != 'w' || word[1] != 'o' || word[2] != 'r' ||
         word[3] != 'd' || word[4] != '\0' || character != 'Q' ||
         read_calls != 1) {
@@ -111,9 +145,9 @@ int main(void)
 
     calls_before_memory = read_calls;
     errno = EIO;
-    if (sscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
-               &memory_auto, &memory_oct, memory_letters, &memory_hex,
-               &memory_last) != 5 ||
+    if (test_vsscanf("0x2a 077 AB 89 7", "%i %i %2[A-Z] %x %d",
+                     &memory_auto, &memory_oct, memory_letters, &memory_hex,
+                     &memory_last) != 5 ||
         memory_auto != 42 || memory_oct != 63 ||
         memory_letters[0] != 'A' || memory_letters[1] != 'B' ||
         memory_letters[2] != '\0' || memory_hex != 0x89U ||
