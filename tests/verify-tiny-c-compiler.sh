@@ -22,9 +22,10 @@ done
 "$CC" -fno-pie -c src/syscall/syscall.S -o "$OUT/syscall.o"
 "$CC" -fno-pie -c src/stdio/format_entry.S -o "$OUT/format_entry.o"
 "$CC" -fno-pie -c src/stdio/scan_entry.S -o "$OUT/scan_entry.o"
+"$CC" -fno-pie -c src/control/setjmp.S -o "$OUT/setjmp.o"
 "$CC" -fno-pie -c src/crt/crt0.S -o "$OUT/crt0.o"
 "$AR" rcs "$OUT/libc.a" $objects "$OUT/syscall.o" "$OUT/format_entry.o" \
-    "$OUT/scan_entry.o"
+    "$OUT/scan_entry.o" "$OUT/setjmp.o"
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
@@ -38,6 +39,8 @@ done
     -o "$OUT/time.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_termination_integration.c \
     -o "$OUT/termination.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_setjmp_integration.c \
+    -o "$OUT/setjmp-test.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -52,6 +55,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/termination" \
         "$OUT/termination.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/setjmp-test" \
+        "$OUT/setjmp-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -66,6 +71,8 @@ else
         "$OUT/time.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/termination" \
         "$OUT/termination.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/setjmp-test" \
+        "$OUT/setjmp-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -143,6 +150,12 @@ if [ "$time_output" != "tiny-time-ok" ]; then
     exit 1
 fi
 
+setjmp_output=$("$OUT/setjmp-test")
+if [ "$setjmp_output" != "tiny-setjmp-ok" ]; then
+    echo "unexpected tiny-c setjmp output: $setjmp_output" >&2
+    exit 1
+fi
+
 set +e
 termination_quick_output=$("$OUT/termination" quick)
 termination_quick_status=$?
@@ -167,5 +180,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
 ./tests/verify-no-host-libc.sh "$OUT/time"
 ./tests/verify-no-host-libc.sh "$OUT/termination"
+./tests/verify-no-host-libc.sh "$OUT/setjmp-test"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"

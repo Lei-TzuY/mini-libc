@@ -107,7 +107,10 @@ The existing freestanding runtime probe now exercises all lifecycle boundaries:
   invisible.
 
 A hosted signal harness replaces the signal syscalls and emergency `_Exit` to
-lock the exact `abort()` fallback sequence without killing the test process.
+lock the exact `abort()` fallback sequence without killing the test process. The
+harness now uses mini-libc's own `setjmp`/`longjmp` implementation for that escape
+path, so the signal and non-local-control subsystems share one context ABI rather
+than mixing mini-libc headers with host `jmp_buf` storage.
 
 Pinned tiny-c compiles a dedicated termination executable. Its quick mode proves
 the independent C11 callback registry and no-flush behavior. Its abort mode
@@ -118,14 +121,14 @@ and host-libc-independence inspection covers the resulting binaries.
 ## Phase boundary and promotion
 
 This phase completes the first C termination matrix: normal cleanup, C11 quick
-termination, direct `_Exit`, and signal-backed abnormal termination. It does not
-add POSIX process APIs, signal masks, threads, cancellation, or unwind semantics.
+termination, direct `_Exit`, and signal-backed abnormal termination. Non-local C
+control transfer is now a separate executable baseline documented in
+`docs/setjmp-runtime.md`; termination no longer owns that roadmap gap.
 
-The next architectural promotion is non-local C control transfer rather than
-more termination variants. `<setjmp.h>` can add a compact x86-64 SysV execution
-context that saves callee-saved registers plus stack/program-counter state and
-restores it through `longjmp`. Acceptance should include the mandated
-`longjmp(env, 0) -> setjmp returns 1` rule, nested recovery, preservation of
-callee-saved register state, no heap/syscall dependency, and pinned
-tiny-c/mini-elf execution. POSIX signal-mask-aware `sigsetjmp`/`siglongjmp` is a
-separate later frontier.
+The larger remaining runtime limitation is the process-global, single-threaded
+state model shared by callback registries, stdio, `errno`, and other hidden libc
+state. A future thread-aware runtime phase must introduce actual executable
+thread lifecycle plus the TLS/synchronization machinery needed to make such
+state correct across threads; adding thread API/type shells alone would not be a
+valid architectural promotion. POSIX signal-mask-aware `sigsetjmp`/`siglongjmp`
+remains a separate later signal extension rather than a termination variant.
