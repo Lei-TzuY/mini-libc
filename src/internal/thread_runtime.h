@@ -12,7 +12,17 @@ struct mini_thread_tcb {
     unsigned int tss_generations[MINI_TSS_MAX_KEYS];
 };
 
-void __mini_thread_runtime_init_main(void);
+struct mini_thread_context {
+    struct mini_thread_tcb *tcb;
+    void *mapping;
+    unsigned long mapping_size;
+};
+
+void __mini_thread_runtime_init_main(char **envp);
+int __mini_thread_context_init(struct mini_thread_context *context,
+                               struct mini_thread_tcb *fallback,
+                               void *control);
+int __mini_thread_context_destroy(struct mini_thread_context *context);
 struct mini_thread_tcb *__mini_thread_current_tcb(void);
 void __mini_errno_set_provider(int *(*provider)(void));
 void __mini_tss_run_destructors(void);
