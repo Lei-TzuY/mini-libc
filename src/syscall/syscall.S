@@ -32,6 +32,14 @@ mini_sys_lseek:
     ret
     .size mini_sys_lseek, .-mini_sys_lseek
 
+    .globl mini_sys_sched_yield
+    .type mini_sys_sched_yield, @function
+mini_sys_sched_yield:
+    movl $24, %eax
+    syscall
+    ret
+    .size mini_sys_sched_yield, .-mini_sys_sched_yield
+
     .globl mini_sys_nanosleep
     .type mini_sys_nanosleep, @function
 mini_sys_nanosleep:
