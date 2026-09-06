@@ -93,18 +93,18 @@ int __mini_thread_tls_discover(long *initial_stack)
         }
     }
     if (aux_index == MINI_AUXV_LIMIT || phdr_address == 0UL ||
-        phent != sizeof(struct mini_elf64_phdr) || phnum > MINI_PHDR_LIMIT) {
+        phent != sizeof(struct mini_elf64_phdr) || phnum > MINI_PHDR_LIMIT ||
+        (phnum != 0UL && phdr_address > ~0UL - phnum * phent)) {
         return 0;
     }
 
     {
         unsigned long index;
-        const unsigned char *phdr_bytes =
-            (const unsigned char *)phdr_address;
 
         for (index = 0UL; index < phnum; ++index) {
+            unsigned long phdr_value = phdr_address + index * phent;
             const struct mini_elf64_phdr *phdr =
-                (const struct mini_elf64_phdr *)(phdr_bytes + index * phent);
+                (const struct mini_elf64_phdr *)phdr_value;
             unsigned long alignment;
             unsigned long block_size;
 
@@ -139,7 +139,7 @@ int __mini_thread_tls_discover(long *initial_stack)
 
 int __mini_thread_tls_prepare(struct mini_thread_tcb *tcb)
 {
-    unsigned char *thread_pointer;
+    unsigned long thread_pointer;
     unsigned char *block;
     unsigned long index;
 
@@ -150,12 +150,12 @@ int __mini_thread_tls_prepare(struct mini_thread_tcb *tcb)
         return 1;
     }
 
-    thread_pointer = (unsigned char *)tcb;
-    if (((unsigned long)thread_pointer &
-         (mini_tls_template.alignment - 1UL)) != 0UL) {
+    thread_pointer = (unsigned long)tcb;
+    if ((thread_pointer & (mini_tls_template.alignment - 1UL)) != 0UL ||
+        thread_pointer < mini_tls_template.block_size) {
         return 0;
     }
-    block = thread_pointer - mini_tls_template.block_size;
+    block = (unsigned char *)(thread_pointer - mini_tls_template.block_size);
     for (index = 0UL; index < mini_tls_template.block_size; ++index) {
         block[index] = 0U;
     }
