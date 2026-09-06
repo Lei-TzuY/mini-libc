@@ -55,7 +55,7 @@ int main(void)
     struct test_elf64_phdr phdr;
     struct test_thread_state state;
     unsigned long stack[11];
-    unsigned char *thread_pointer;
+    unsigned long thread_pointer;
     unsigned char *block;
     unsigned long i;
 
@@ -101,12 +101,12 @@ int main(void)
         return 5;
     }
 
-    thread_pointer = (unsigned char *)&state.tcb;
-    if ((unsigned long)(thread_pointer - state.compiler_tls) !=
+    thread_pointer = (unsigned long)&state.tcb;
+    if (thread_pointer - (unsigned long)state.compiler_tls !=
         MINI_COMPILER_TLS_CAPACITY) {
         return 6;
     }
-    block = thread_pointer - 8UL;
+    block = (unsigned char *)(thread_pointer - 8UL);
     for (i = 0UL; i < sizeof(template_bytes); ++i) {
         if (block[i] != template_bytes[i]) {
             return 7;
