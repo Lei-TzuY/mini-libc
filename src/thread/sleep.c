@@ -34,3 +34,11 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining)
     }
     return MINI_THRD_SLEEP_ERROR;
 }
+
+void thrd_yield(void)
+{
+    int saved_errno = errno;
+
+    (void)mini_sys_sched_yield();
+    errno = saved_errno;
+}
