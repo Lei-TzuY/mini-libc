@@ -22,7 +22,10 @@ void __mini_thread_runtime_init_main(char **envp);
 int __mini_thread_context_init(struct mini_thread_context *context,
                                struct mini_thread_tcb *fallback,
                                void *control);
-int __mini_thread_context_destroy(struct mini_thread_context *context);
+void *__mini_thread_prepare_clone_tls(void *stack_top,
+                                      struct mini_thread_tcb *fallback,
+                                      void *control,
+                                      struct mini_thread_tcb **actual_tcb);
 struct mini_thread_tcb *__mini_thread_current_tcb(void);
 void __mini_errno_set_provider(int *(*provider)(void));
 void __mini_tss_run_destructors(void);
