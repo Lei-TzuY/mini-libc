@@ -3,6 +3,8 @@
 
 #include <time.h>
 
+#define thread_local _Thread_local
+
 typedef unsigned long thrd_t;
 typedef int (*thrd_start_t)(void *);
 typedef unsigned int tss_t;
@@ -48,6 +50,7 @@ int thrd_join(thrd_t thr, int *res);
 thrd_t thrd_current(void);
 int thrd_equal(thrd_t lhs, thrd_t rhs);
 int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
+void thrd_yield(void);
 _Noreturn void thrd_exit(int res);
 
 int tss_create(tss_t *key, tss_dtor_t dtor);
