@@ -9,6 +9,8 @@
 #define MINI_MAP_PRIVATE 2
 #define MINI_MAP_ANONYMOUS 32
 #define MINI_TCB_ALIGNMENT 8UL
+#define MINI_STACK_ALIGNMENT 16UL
+#define MINI_THREAD_STACK_SIZE (1024UL * 1024UL)
 
 #define MINI_AT_NULL 0UL
 #define MINI_AT_PHDR 3UL
@@ -80,6 +82,11 @@ static int align_up(unsigned long value, unsigned long alignment,
     return 1;
 }
 
+static unsigned long align_down(unsigned long value, unsigned long alignment)
+{
+    return value & ~(alignment - 1UL);
+}
+
 static void initialize_tcb(struct mini_thread_tcb *tcb, void *control)
 {
     unsigned int index;
@@ -91,6 +98,18 @@ static void initialize_tcb(struct mini_thread_tcb *tcb, void *control)
     for (index = 0U; index < MINI_TSS_MAX_KEYS; ++index) {
         tcb->tss_values[index] = (void *)0;
         tcb->tss_generations[index] = 0U;
+    }
+}
+
+static void initialize_tls_bytes(unsigned long tls_start)
+{
+    unsigned long index;
+
+    for (index = 0UL; index < mini_tls_template.block_size; ++index) {
+        ((unsigned char *)tls_start)[index] = 0U;
+    }
+    for (index = 0UL; index < mini_tls_template.file_size; ++index) {
+        ((unsigned char *)tls_start)[index] = mini_tls_template.image[index];
     }
 }
 
@@ -175,7 +194,6 @@ int __mini_thread_context_init(struct mini_thread_context *context,
     unsigned long minimum_tp;
     unsigned long tp;
     unsigned long tls_start;
-    unsigned long index;
     long mapping;
     struct mini_thread_tcb *tcb;
 
@@ -206,21 +224,14 @@ int __mini_thread_context_init(struct mini_thread_context *context,
     if (add_overflow((unsigned long)mapping, reserve, &mapping_end) ||
         add_overflow((unsigned long)mapping, mini_tls_template.block_size,
                      &minimum_tp) ||
-        !align_up(minimum_tp, alignment, &tp) ||
-        tp > mapping_end ||
+        !align_up(minimum_tp, alignment, &tp) || tp > mapping_end ||
         (unsigned long)sizeof(struct mini_thread_tcb) > mapping_end - tp) {
         (void)mini_sys_munmap((void *)mapping, reserve);
         return 0;
     }
 
     tls_start = tp - mini_tls_template.block_size;
-    for (index = 0UL; index < mini_tls_template.block_size; ++index) {
-        ((unsigned char *)tls_start)[index] = 0U;
-    }
-    for (index = 0UL; index < mini_tls_template.file_size; ++index) {
-        ((unsigned char *)tls_start)[index] = mini_tls_template.image[index];
-    }
-
+    initialize_tls_bytes(tls_start);
     tcb = (struct mini_thread_tcb *)tp;
     initialize_tcb(tcb, control);
     context->tcb = tcb;
@@ -229,21 +240,56 @@ int __mini_thread_context_init(struct mini_thread_context *context,
     return 1;
 }
 
-int __mini_thread_context_destroy(struct mini_thread_context *context)
+void *__mini_thread_prepare_clone_tls(void *stack_top,
+                                      struct mini_thread_tcb *fallback,
+                                      void *control,
+                                      struct mini_thread_tcb **actual_tcb)
 {
-    long result;
+    unsigned long alignment;
+    unsigned long high = (unsigned long)stack_top;
+    unsigned long tp;
+    unsigned long tls_start;
+    unsigned long child_stack_top;
+    unsigned long reserved;
+    struct mini_thread_tcb *tcb;
 
-    if (context->mapping == (void *)0) {
-        return 1;
+    if (actual_tcb == (struct mini_thread_tcb **)0) {
+        return (void *)0;
     }
-    result = mini_sys_munmap(context->mapping, context->mapping_size);
-    if (raw_failed(result)) {
-        return 0;
+    if (!mini_tls_template.present) {
+        initialize_tcb(fallback, control);
+        *actual_tcb = fallback;
+        return stack_top;
     }
-    context->mapping = (void *)0;
-    context->mapping_size = 0UL;
-    context->tcb = (struct mini_thread_tcb *)0;
-    return 1;
+
+    alignment = mini_tls_template.alignment;
+    if (alignment < MINI_TCB_ALIGNMENT) {
+        alignment = MINI_TCB_ALIGNMENT;
+    }
+    if (high < (unsigned long)sizeof(struct mini_thread_tcb)) {
+        return (void *)0;
+    }
+    tp = align_down(high - (unsigned long)sizeof(struct mini_thread_tcb),
+                    alignment);
+    if (tp < mini_tls_template.block_size) {
+        return (void *)0;
+    }
+    tls_start = tp - mini_tls_template.block_size;
+    child_stack_top = align_down(tls_start, MINI_STACK_ALIGNMENT);
+    if (child_stack_top > high || high - child_stack_top > MINI_THREAD_STACK_SIZE - 16UL) {
+        return (void *)0;
+    }
+    reserved = high - child_stack_top;
+    if (reserved < mini_tls_template.block_size +
+                       (unsigned long)sizeof(struct mini_thread_tcb)) {
+        return (void *)0;
+    }
+
+    initialize_tls_bytes(tls_start);
+    tcb = (struct mini_thread_tcb *)tp;
+    initialize_tcb(tcb, control);
+    *actual_tcb = tcb;
+    return (void *)child_stack_top;
 }
 
 void __mini_thread_runtime_init_main(char **envp)
