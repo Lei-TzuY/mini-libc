@@ -22,6 +22,15 @@ __mini_clone_thread:
     testq %rax, %rax
     jne .Lmini_clone_parent
 
+    movq %fs:0, %rdi
+    call __mini_thread_tls_prepare
+    testl %eax, %eax
+    jne .Lmini_tls_ready
+    movl $127, %edi
+    call mini_sys_exit
+    ud2
+
+.Lmini_tls_ready:
     movq (%rsp), %rdi
     call __mini_thread_run
     ud2
