@@ -35,6 +35,7 @@ jobs:
           MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
         run: |
           ./tests/verify-tiny-c-compiler.sh
+          sh ./tests/verify-tiny-fenv.sh
           sh ./tests/verify-tls-integration.sh
 
   mini-toolchain-bootstrap:
@@ -64,4 +65,5 @@ jobs:
           OUT: build/mini-toolchain-integration
         run: |
           ./tests/verify-tiny-c-compiler.sh
+          sh ./tests/verify-tiny-fenv.sh
           sh ./tests/verify-tls-integration.sh
