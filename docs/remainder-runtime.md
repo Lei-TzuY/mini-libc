@@ -129,16 +129,15 @@ reuse already-established math primitives.
 
 ## Next frontier
 
-The remainder/classification checkpoint closes the major ordinary real-math
-surface identified after the hyperbolic phase. The next promotion should move
-up a level rather than grow another batch of remainder vectors.
+The error-function layer identified by this checkpoint has now been implemented
+as the next independent special-function object. The strongest remaining
+special-function promotion is the gamma family rather than more remainder or
+error-function vectors.
 
-The highest-value remaining real-math frontier is a coherent special-function
-layer. A good next vertical slice is the error-function family (`erf`/`erfc`
-and float variants) with piecewise small/central/tail approximations, explicit
-NaN/infinity/signed-zero semantics, controlled host differential bounds, and
-pinned tiny-c/mini-elf execution. That can then provide a clean numerical and
-verification base before taking on the more demanding gamma family.
+A coherent next slice should implement `tgamma`/`lgamma` and binary32 variants
+on one shared approximation/reflection substrate, define poles, negative-input
+reflection, sign and range behavior explicitly, and add controlled host
+differential plus pinned tiny-c/mini-elf execution.
 
 Long-double support, `<fenv.h>`, complex arithmetic, and globally
 correctly-rounded transcendental claims remain separate architectural phases.
