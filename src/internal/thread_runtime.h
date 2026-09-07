@@ -9,7 +9,7 @@ struct mini_thread_tcb {
     struct mini_thread_tcb *self;
     void *control;
     int errno_value;
-    unsigned int stdio_lock_depth;
+    unsigned int reserved;
     void *tss_values[MINI_TSS_MAX_KEYS];
     unsigned int tss_generations[MINI_TSS_MAX_KEYS];
 };
