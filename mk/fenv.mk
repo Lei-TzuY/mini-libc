@@ -76,7 +76,9 @@ fenv_test_run: $(BUILD)/fenv_probe $(BUILD)/fenv_interop $(BUILD)/fenv_rounding_
 	@test "$$($(BUILD)/fenv_probe)" = "fenv-ok" || { echo "unexpected fenv probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/fenv_interop)" = "fenv-interop-ok" || { echo "unexpected fenv interop output" >&2; exit 1; }
 	@test "$$($(BUILD)/fenv_rounding_interop)" = "fenv-rounding-interop-ok" || { echo "unexpected fenv rounding interop output" >&2; exit 1; }
-	@test "$$($(BUILD)/fenv_explog_probe)" = "fenv-explog-ok" || { echo "unexpected fenv explog probe output" >&2; exit 1; }
+	@output=$$($(BUILD)/fenv_explog_probe); status=$$?; \
+		test $$status -eq 0 -a "$$output" = "fenv-explog-ok" || { \
+			echo "unexpected fenv explog probe: status=$$status output='$$output'" >&2; exit 1; }
 	@test "$$($(BUILD)/fenv_explog_interop)" = "fenv-explog-interop-ok" || { echo "unexpected fenv explog interop output" >&2; exit 1; }
 
 fenv_inspect: $(BUILD)/fenv_probe $(BUILD)/fenv_explog_probe
