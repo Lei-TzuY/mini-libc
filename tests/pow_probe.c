@@ -132,9 +132,14 @@ int main(void)
     if ((fbits(fresult) & 0x7f800000U) != 0x7f800000U || errno != ERANGE) {
         return 13;
     }
+    errno = 78;
+    fresult = powf(-2.0f, 0.5f);
+    if (fresult == fresult || errno != EDOM) {
+        return 14;
+    }
 
     if (mini_sys_write(1, "pow-ok\n", 7) != 7) {
-        return 14;
+        return 15;
     }
     return 0;
 }
