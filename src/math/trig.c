@@ -4,6 +4,8 @@
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
 #define MINI_DOUBLE_EXP  0x7ff0000000000000ULL
 #define MINI_DOUBLE_FRAC 0x000fffffffffffffULL
+#define MINI_FLOAT_EXP   0x7f800000U
+#define MINI_FLOAT_FRAC  0x007fffffU
 
 #define MINI_TRIG_BOUND 1048576.0
 #define MINI_INV_PIO2 6.36619772367581382433e-01
@@ -32,10 +34,27 @@ static double double_from_bits(unsigned long long bits)
     return convert.value;
 }
 
+static unsigned int float_bits(float value)
+{
+    union {
+        float value;
+        unsigned int bits;
+    } convert;
+
+    convert.value = value;
+    return convert.bits;
+}
+
 static int double_is_nan(unsigned long long bits)
 {
     return (bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP &&
            (bits & MINI_DOUBLE_FRAC) != 0ULL;
+}
+
+static int float_is_nan(unsigned int bits)
+{
+    return (bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP &&
+           (bits & MINI_FLOAT_FRAC) != 0U;
 }
 
 static double invalid_trig(void)
@@ -196,15 +215,24 @@ double tan(double x)
 
 float sinf(float x)
 {
+    if (float_is_nan(float_bits(x))) {
+        return x;
+    }
     return (float)sin((double)x);
 }
 
 float cosf(float x)
 {
+    if (float_is_nan(float_bits(x))) {
+        return x;
+    }
     return (float)cos((double)x);
 }
 
 float tanf(float x)
 {
+    if (float_is_nan(float_bits(x))) {
+        return x;
+    }
     return (float)tan((double)x);
 }
