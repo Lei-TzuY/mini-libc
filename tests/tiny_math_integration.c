@@ -227,8 +227,35 @@ int main(void)
         return 38;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 95;
+    if (!close_double(tgamma(0.5), 1.77245385090551602730, 5.0e-13) ||
+        !close_double(tgamma(-0.5), -3.54490770181103205460, 5.0e-13) ||
+        !close_double(lgamma(5.0), 3.17805383034794561965, 5.0e-13) ||
+        errno != 95) {
         return 39;
+    }
+    if (!close_float(tgammaf(5.0f), 24.0f, 4.0e-5f) ||
+        !close_float(lgammaf(-0.5f), 1.2655121f, 4.0e-5f)) {
+        return 40;
+    }
+    errno = 96;
+    bad = tgamma(-2.0);
+    if (bad == bad || errno != EDOM) {
+        return 41;
+    }
+    errno = 97;
+    bad = tgamma(172.0);
+    if (!(bad > 1.0e308) || errno != ERANGE) {
+        return 42;
+    }
+    errno = 98;
+    bad = lgamma(-2.0);
+    if (!(bad > 1.0e308) || errno != ERANGE) {
+        return 43;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 44;
     }
     return 0;
 }
