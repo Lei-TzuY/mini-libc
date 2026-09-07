@@ -38,4 +38,5 @@ signal_inspect: $(BUILD)/signal_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/signal_probe
 
 include mk/calendar.mk
+include mk/math.mk
 include mk/setjmp.mk
