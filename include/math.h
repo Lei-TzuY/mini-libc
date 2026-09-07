@@ -37,6 +37,8 @@ double exp(double x);
 float expf(float x);
 double log(double x);
 float logf(float x);
+double pow(double x, double y);
+float powf(float x, float y);
 
 double sqrt(double x);
 float sqrtf(float x);
