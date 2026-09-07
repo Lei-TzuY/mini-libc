@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -51,6 +52,24 @@ static int double_is_nan(unsigned long long bits)
 {
     return (bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP &&
            (bits & MINI_DOUBLE_FRAC) != 0ULL;
+}
+
+static void raise_range(int exception)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(exception | FE_INEXACT);
+}
+
+static void raise_domain(void)
+{
+    errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
+}
+
+static void raise_pole(void)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(FE_DIVBYZERO);
 }
 
 static struct mini_integer_info classify_integer(double value)
@@ -145,9 +164,10 @@ static double finish_finite(double result, int negative)
     result = apply_sign(result, negative);
     bits = double_bits(result);
     magnitude = bits & ~MINI_DOUBLE_SIGN;
-    if ((magnitude & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP ||
-        (magnitude & MINI_DOUBLE_EXP) == 0ULL) {
-        errno = ERANGE;
+    if ((magnitude & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP) {
+        raise_range(FE_OVERFLOW);
+    } else if ((magnitude & MINI_DOUBLE_EXP) == 0ULL) {
+        raise_range(FE_UNDERFLOW);
     }
     return result;
 }
@@ -197,7 +217,7 @@ double pow(double x, double y)
         if (y > 0.0) {
             return apply_sign(0.0, negative_result);
         }
-        errno = ERANGE;
+        raise_pole();
         return apply_sign(double_from_bits(MINI_DOUBLE_EXP), negative_result);
     }
 
@@ -212,7 +232,7 @@ double pow(double x, double y)
 
     if ((xbits & MINI_DOUBLE_SIGN) != 0ULL) {
         if (!yint.is_integer) {
-            errno = EDOM;
+            raise_domain();
             return double_from_bits(0x7ff8000000000000ULL);
         }
         negative_result = yint.odd;
@@ -271,10 +291,13 @@ float powf(float x, float y)
 
     if ((xbits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
         (ybits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP && xmag != 0U &&
-        (((result_mag & MINI_FLOAT_EXP) == MINI_FLOAT_EXP &&
-          (result_mag & MINI_FLOAT_FRAC) == 0U) ||
-         (result_mag & MINI_FLOAT_EXP) == 0U)) {
-        errno = ERANGE;
+        ((result_mag & MINI_FLOAT_EXP) == MINI_FLOAT_EXP &&
+         (result_mag & MINI_FLOAT_FRAC) == 0U)) {
+        raise_range(FE_OVERFLOW);
+    } else if ((xbits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
+               (ybits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP && xmag != 0U &&
+               (result_mag & MINI_FLOAT_EXP) == 0U) {
+        raise_range(FE_UNDERFLOW);
     }
     return result;
 }
