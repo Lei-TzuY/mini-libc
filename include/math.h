@@ -47,6 +47,15 @@ float cosf(float x);
 double tan(double x);
 float tanf(float x);
 
+double atan(double x);
+float atanf(float x);
+double atan2(double y, double x);
+float atan2f(float y, float x);
+double asin(double x);
+float asinf(float x);
+double acos(double x);
+float acosf(float x);
+
 double sqrt(double x);
 float sqrtf(float x);
 
