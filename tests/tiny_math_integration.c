@@ -209,8 +209,26 @@ int main(void)
         return 34;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 92;
+    if (!close_double(erf(1.0), 0.84270079294971486934, 5.0e-13) ||
+        !close_double(erfc(2.0), 0.00467773498104726584, 5.0e-15) || errno != 92) {
         return 35;
+    }
+    if (!close_float(erff(0.5f), 0.5204999f, 2.0e-7f) ||
+        !close_float(erfcf(2.0f), 0.004677735f, 2.0e-8f)) {
+        return 36;
+    }
+    errno = 93;
+    if (erfc(30.0) != 0.0 || errno != ERANGE) {
+        return 37;
+    }
+    errno = 94;
+    if (erfc(-30.0) != 2.0 || errno != 94) {
+        return 38;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 39;
     }
     return 0;
 }
