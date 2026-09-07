@@ -178,8 +178,9 @@ destructor passes close the C11 thread-lifecycle phase. Both the `once_flag`
 state machine and the TSS registry serializer have now converged on the proven
 C11 atomic abstraction; more once/TSS state variants are not the next priority.
 
-Compiler-native C11 TLS interoperability and `thrd_yield` have since shipped in
-the later compiler-TLS phase. Allocator ownership and thread registry/reaper
-serialization have converged in the same private-lock phase as TSS. The only
-remaining private assembly synchronization boundary is the specialized recursive
-stdio serializer; `docs/atomics.md` is authoritative for that next promotion.
+Compiler-native C11 TLS interoperability and `thrd_yield` shipped in the later
+compiler-TLS phase. Allocator ownership, thread registry/reaper serialization,
+and the recursive stdio serializer have now converged on the same C11
+atomic/futex boundary as TSS. `src/internal/atomic.S` has been deleted; no
+private scalar synchronization assembly boundary remains. `docs/atomics.md` is
+authoritative for the completed convergence phase.

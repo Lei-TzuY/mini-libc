@@ -168,12 +168,13 @@ that same pinned toolchain path.
 Typed ownership, recursive depth, absolute timed acquisition, wrong-owner
 unlock detection, and their cross-toolchain evidence close the mutex-type phase.
 The state/owner/depth implementation has now also converged on the public C11
-atomic abstraction; the migrated mutex host target no longer links the private
+atomic abstraction; the migrated mutex host target no longer links a private
 atomic assembly object.
 
-The generic private runtime serializers have since converged as well: allocator
-metadata, thread registry/reaper state, and the TSS registry now use the shared
-private C11 `atomic_int` + futex abstraction described in `docs/atomics.md`.
-The only remaining private assembly synchronization boundary is the specialized
-recursive stdio serializer. Its TLS recursion contract should be migrated as a
-separate phase before `src/internal/atomic.S` is deleted.
+The generic private runtime serializers and the specialized recursive stdio
+serializer have now converged as well. Allocator metadata, thread
+registry/reaper state, the TSS registry, and stdio serialization all use the
+C11 atomic/futex boundary described in `docs/atomics.md`; the old
+`src/internal/atomic.S` synchronization object has been deleted. Further mutex
+work should therefore require a new mutex capability rather than another
+private-serializer migration.
