@@ -1,7 +1,7 @@
 # Trigonometric runtime ABI and phase status
 
 mini-libc now has a bounded executable real trigonometric runtime for x86-64
-binary32 and binary64. The public surface is:
+binary32 and binary64. The public forward-trigonometric surface is:
 
 ```c
 double sin(double x);
@@ -12,10 +12,14 @@ double tan(double x);
 float tanf(float x);
 ```
 
+The inverse layer is documented separately in `docs/inverse-trig-runtime.md` and
+adds `atan`/`atan2`/`asin`/`acos` plus their binary32 variants.
+
 The implementation is freestanding, links no host libm, and uses no compiler
-math builtins. All six entry points share one binary64 argument-reduction layer
-and one pair of reduced sine/cosine polynomial kernels. The float entry points
-reuse that numerical core after preserving binary32 NaN payloads explicitly.
+math builtins. All six forward entry points share one binary64 argument-reduction
+layer and one pair of reduced sine/cosine polynomial kernels. The float entry
+points reuse that numerical core after preserving binary32 NaN payloads
+explicitly.
 
 ## Bounded range reduction
 
@@ -41,9 +45,11 @@ quadrant. `tan` deliberately consumes the same reconstructed sine/cosine pair an
 returns their quotient instead of growing a third independent range reducer or
 polynomial subsystem.
 
-This architecture gives the three functions one argument-reduction truth source
-and one special-value policy. It also keeps later inverse-trigonometric work
-independent of the forward-trig reducer rather than coupling unrelated kernels.
+This architecture gives the three forward functions one argument-reduction truth
+source and one special-value policy. The inverse-trigonometric layer remains
+independent of this large-angle reducer: it owns a separate bounded atan kernel
+and quadrant engine rather than coupling inverse functions to the forward
+polynomials.
 
 The current implementation is numerically bounded, not correctly rounded.
 Controlled host-libm differential tests cover representative positive and
@@ -98,15 +104,15 @@ only host GCC/Clang builds.
 
 ## Phase boundary and promotion
 
-The forward-trigonometric phase is complete at this bounded contract. It does not
-include a full large-argument Payne-Hanek reducer, long-double variants, complex
-math, or global correctly-rounded guarantees. Those are not implied by the
-presence of the six public functions.
+The bounded forward-trigonometric phase is complete, and the inverse layer is
+now implemented as a separate shared angular subsystem. Together they provide
+executable binary32/binary64 forward and inverse real trigonometric coverage,
+without implying a full large-argument Payne-Hanek reducer, long-double
+variants, complex math, floating-environment control, or global correctly-rounded
+guarantees.
 
-The strongest next coherent math promotion is an inverse-trigonometric layer:
-`atan`/`atan2` as the shared angular kernel and quadrant engine, followed by
-`asin`/`acos` using that kernel together with the existing square-root runtime.
-That phase should explicitly cover signed zero, infinities, NaNs, domain
-boundaries at `|x| = 1`, all `atan2` quadrants, binary32 variants, controlled
-host-libm numerical tolerances, freestanding probes, and pinned tiny-c/mini-elf
-execution. It should not be split into wrapper-only micro-PRs.
+Future math work should now promote beyond wrapper-level trigonometric breadth.
+The strongest candidates are a shared hyperbolic layer reusing the existing
+`exp`/`log`/`sqrt` substrate, or a coherent remainder/classification subsystem.
+A fresh live repository audit should select between those architectural gaps
+before another implementation slice is opened.
