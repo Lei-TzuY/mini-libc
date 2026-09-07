@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -53,6 +54,29 @@ static int double_is_nan(unsigned long long bits)
            (bits & MINI_DOUBLE_FRAC) != 0ULL;
 }
 
+static void raise_range(int exception)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(exception | FE_INEXACT);
+}
+
+static void raise_domain(void)
+{
+    errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
+}
+
+static void raise_pole(void)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(FE_DIVBYZERO);
+}
+
+static void raise_inexact(void)
+{
+    (void)feraiseexcept(FE_INEXACT);
+}
+
 static double exp_reduced(double r)
 {
     double p = 1.60590438368216145994e-10;
@@ -92,11 +116,11 @@ double exp(double x)
         return x;
     }
     if (x > MINI_EXP_OVERFLOW) {
-        errno = ERANGE;
+        raise_range(FE_OVERFLOW);
         return double_from_bits(MINI_DOUBLE_EXP);
     }
     if (x < MINI_EXP_UNDERFLOW_ZERO) {
-        errno = ERANGE;
+        raise_range(FE_UNDERFLOW);
         return 0.0;
     }
 
@@ -111,9 +135,11 @@ double exp(double x)
     bits = double_bits(scaled);
 
     if ((bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP) {
-        errno = ERANGE;
+        raise_range(FE_OVERFLOW);
     } else if ((bits & MINI_DOUBLE_EXP) == 0ULL) {
-        errno = ERANGE;
+        raise_range(FE_UNDERFLOW);
+    } else if (x != 0.0) {
+        raise_inexact();
     }
     return scaled;
 }
@@ -140,9 +166,10 @@ float expf(float x)
     wide = exp((double)x);
     result = (float)wide;
     result_bits = float_bits(result);
-    if ((result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP ||
-        (result_bits & MINI_FLOAT_EXP) == 0U) {
-        errno = ERANGE;
+    if ((result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP) {
+        raise_range(FE_OVERFLOW);
+    } else if ((result_bits & MINI_FLOAT_EXP) == 0U && x != 0.0f) {
+        raise_range(FE_UNDERFLOW);
     }
     return result;
 }
@@ -168,17 +195,18 @@ double log(double x)
     unsigned long long magnitude = bits & ~MINI_DOUBLE_SIGN;
     double m;
     double reduced;
+    double result;
     int exponent;
 
     if (double_is_nan(bits)) {
         return x;
     }
     if (magnitude == 0ULL) {
-        errno = ERANGE;
+        raise_pole();
         return double_from_bits(MINI_DOUBLE_SIGN | MINI_DOUBLE_EXP);
     }
     if ((bits & MINI_DOUBLE_SIGN) != 0ULL) {
-        errno = EDOM;
+        raise_domain();
         return double_from_bits(0x7ff8000000000000ULL);
     }
     if (magnitude == MINI_DOUBLE_EXP) {
@@ -191,8 +219,12 @@ double log(double x)
         --exponent;
     }
     reduced = log_reduced(m);
-    return reduced + (double)exponent * MINI_LN2_HI +
-           (double)exponent * MINI_LN2_LO;
+    result = reduced + (double)exponent * MINI_LN2_HI +
+             (double)exponent * MINI_LN2_LO;
+    if (x != 1.0) {
+        raise_inexact();
+    }
+    return result;
 }
 
 float logf(float x)
