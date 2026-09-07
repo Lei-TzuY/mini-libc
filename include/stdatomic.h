@@ -8,6 +8,7 @@
  * so the fallback below mirrors its documented scalar atomic builtins.
  */
 #if defined(__GNUC__) || defined(__clang__)
+#pragma GCC system_header
 #include_next <stdatomic.h>
 #else
 
