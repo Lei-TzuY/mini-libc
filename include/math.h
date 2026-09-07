@@ -2,6 +2,7 @@
 #define MINI_LIBC_MATH_H
 
 #define MATH_ERRNO 1
+#define MATH_ERRECEPT 2
 #define MATH_ERREXCEPT 2
 #define math_errhandling MATH_ERRNO
 
@@ -60,6 +61,14 @@ double ceil(double x);
 float ceilf(float x);
 double round(double x);
 float roundf(float x);
+double rint(double x);
+float rintf(float x);
+double nearbyint(double x);
+float nearbyintf(float x);
+long lrint(double x);
+long lrintf(float x);
+long long llrint(double x);
+long long llrintf(float x);
 
 double frexp(double x, int *exp);
 float frexpf(float x, int *exp);
