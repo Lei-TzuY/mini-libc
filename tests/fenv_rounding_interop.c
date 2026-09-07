@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #define MINI_FE_INVALID 0x01
+#define MINI_FE_OVERFLOW 0x08
 #define MINI_FE_INEXACT 0x20
 #define MINI_FE_TONEAREST 0x0000
 #define MINI_FE_DOWNWARD 0x0400
@@ -40,8 +41,8 @@ int main(void)
 {
     fenv_t saved;
 
-    if (FE_INVALID != MINI_FE_INVALID || FE_INEXACT != MINI_FE_INEXACT ||
-        FE_TONEAREST != MINI_FE_TONEAREST ||
+    if (FE_INVALID != MINI_FE_INVALID || FE_OVERFLOW != MINI_FE_OVERFLOW ||
+        FE_INEXACT != MINI_FE_INEXACT || FE_TONEAREST != MINI_FE_TONEAREST ||
         FE_DOWNWARD != MINI_FE_DOWNWARD || FE_UPWARD != MINI_FE_UPWARD ||
         FE_TOWARDZERO != MINI_FE_TOWARDZERO) {
         return 1;
@@ -57,11 +58,11 @@ int main(void)
         return 3;
     }
 
-    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
-        feraiseexcept(FE_OVERFLOW) != 0 ||
+    if (mini_test_feclearexcept(MINI_FE_INEXACT | MINI_FE_OVERFLOW) != 0 ||
+        mini_test_feraiseexcept(MINI_FE_OVERFLOW) != 0 ||
         mini_test_nearbyint(1.25) != 2.0 ||
         mini_test_nearbyintf(-1.25f) != -1.0f ||
-        fetestexcept(FE_ALL_EXCEPT) != FE_OVERFLOW) {
+        fetestexcept(FE_INEXACT | FE_OVERFLOW) != FE_OVERFLOW) {
         return 4;
     }
 
