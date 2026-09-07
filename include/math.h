@@ -118,6 +118,11 @@ float erff(float x);
 double erfc(double x);
 float erfcf(float x);
 
+double tgamma(double x);
+float tgammaf(float x);
+double lgamma(double x);
+float lgammaf(float x);
+
 double sqrt(double x);
 float sqrtf(float x);
 
