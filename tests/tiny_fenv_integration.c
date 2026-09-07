@@ -15,6 +15,11 @@ static double divide_volatile(volatile double *left, volatile double *right)
     return *left / *right;
 }
 
+static int has_flags(int flags)
+{
+    return (fetestexcept(flags) & flags) == flags;
+}
+
 int main(void)
 {
     fenv_t saved;
@@ -139,11 +144,86 @@ int main(void)
         return 24;
     }
 
-    if (fesetenv(&saved) != 0) {
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 25;
     }
-    if (puts("tiny-fenv-ok") == EOF) {
+    errno = 71;
+    if (pow(2.0, 3.0) != 8.0 || fetestexcept(FE_ALL_EXCEPT) != 0 ||
+        errno != 71) {
         return 26;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 27;
+    }
+    errno = 71;
+    value = pow(2.0, 0.5);
+    if (!(value > 1.41 && value < 1.42) || errno != 71 ||
+        !has_flags(FE_INEXACT)) {
+        return 28;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 29;
+    }
+    errno = 71;
+    value = pow(-2.0, 0.5);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 30;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 31;
+    }
+    errno = 71;
+    value = pow(0.0, -3.0);
+    if (!isinf(value) || signbit(value) || errno != ERANGE ||
+        !has_flags(FE_DIVBYZERO)) {
+        return 32;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 33;
+    }
+    errno = 71;
+    value = pow(2.0, 1024.0);
+    if (!isinf(value) || signbit(value) || errno != ERANGE ||
+        !has_flags(FE_OVERFLOW | FE_INEXACT)) {
+        return 34;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 35;
+    }
+    errno = 71;
+    if (pow(2.0, -1075.0) != 0.0 || errno != ERANGE ||
+        !has_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 36;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 37;
+    }
+    errno = 71;
+    if (!isinf(powf(2.0f, 128.0f)) || errno != ERANGE ||
+        !has_flags(FE_OVERFLOW | FE_INEXACT)) {
+        return 38;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 39;
+    }
+    errno = 71;
+    if (powf(2.0f, -150.0f) != 0.0f || errno != ERANGE ||
+        !has_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 40;
+    }
+
+    if (fesetenv(&saved) != 0) {
+        return 41;
+    }
+    if (puts("tiny-fenv-ok") == EOF) {
+        return 42;
     }
     return 0;
 }
