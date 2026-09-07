@@ -65,7 +65,7 @@ int main(void)
     static const float inverse_f[] = {
         -0.9f, -0.5f, -0.25f, 0.25f, 0.5f, 0.9f
     };
-    unsigned int i;
+    size_t i;
 
     for (i = 0; i < sizeof(forward) / sizeof(forward[0]); ++i) {
         double x = forward[i];
