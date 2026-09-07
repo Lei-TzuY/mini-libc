@@ -115,6 +115,9 @@ double exp(double x)
         }
         return x;
     }
+    if (magnitude == 0ULL) {
+        return 1.0;
+    }
     if (x > MINI_EXP_OVERFLOW) {
         raise_range(FE_OVERFLOW);
         return double_from_bits(MINI_DOUBLE_EXP);
