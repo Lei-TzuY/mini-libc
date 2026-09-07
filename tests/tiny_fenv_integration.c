@@ -88,11 +88,62 @@ int main(void)
         return 14;
     }
 
-    if (fesetenv(&saved) != 0) {
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 15;
     }
-    if (puts("tiny-fenv-ok") == EOF) {
+    errno = 71;
+    value = exp(1000.0);
+    if (!isinf(value) || signbit(value) || errno != ERANGE ||
+        (fetestexcept(FE_OVERFLOW | FE_INEXACT) &
+         (FE_OVERFLOW | FE_INEXACT)) != (FE_OVERFLOW | FE_INEXACT)) {
         return 16;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 17;
+    }
+    errno = 71;
+    if (exp(-1000.0) != 0.0 || errno != ERANGE ||
+        (fetestexcept(FE_UNDERFLOW | FE_INEXACT) &
+         (FE_UNDERFLOW | FE_INEXACT)) != (FE_UNDERFLOW | FE_INEXACT)) {
+        return 18;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 19;
+    }
+    errno = 71;
+    value = log(0.0);
+    if (!isinf(value) || !signbit(value) || errno != ERANGE ||
+        (fetestexcept(FE_DIVBYZERO) & FE_DIVBYZERO) == 0) {
+        return 20;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 21;
+    }
+    errno = 71;
+    value = log(-1.0);
+    if (!isnan(value) || errno != EDOM ||
+        (fetestexcept(FE_INVALID) & FE_INVALID) == 0) {
+        return 22;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 23;
+    }
+    errno = 71;
+    value = log(2.0);
+    if (!(value > 0.69 && value < 0.70) || errno != 71 ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0) {
+        return 24;
+    }
+
+    if (fesetenv(&saved) != 0) {
+        return 25;
+    }
+    if (puts("tiny-fenv-ok") == EOF) {
+        return 26;
     }
     return 0;
 }
