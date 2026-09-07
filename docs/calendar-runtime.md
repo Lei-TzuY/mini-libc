@@ -103,7 +103,10 @@ The C locale has no alternate digits or era, so `E`/`O` modifiers use the same
 representation as their unmodified conversion. An unsupported/trailing
 conversion returns zero with `EINVAL`. A destination that is too small returns
 zero without changing `errno` and remains NUL-terminated when its size is
-nonzero. Calendar text formatting is bounded to years 0000 through 9999.
+nonzero. Calendar text formatting is bounded to years 0000 through 9999. If an
+otherwise in-range calendar date belongs to an ISO week-year outside that text
+range, `%G`/`%g` return zero with `EINVAL` rather than wrapping the ISO year into
+an unsigned decimal representation.
 
 ## Executable evidence
 
@@ -118,6 +121,7 @@ and adds deterministic calendar evidence for:
 - C-locale names, day-of-year, Sunday/Monday week numbers, ISO week/year, UTC
   zone text, and composite `strftime` forms;
 - small-buffer and unsupported-format behavior;
+- bounded ISO week-year rejection when `%G`/`%g` would leave 0000 through 9999;
 - out-of-range `time_t` rejection when `tm_year` cannot represent the result;
 - distinct `gmtime`/`asctime` static-result addresses across a real C11 worker,
   while the main thread's TLS values remain unchanged.
