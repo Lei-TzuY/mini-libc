@@ -1,9 +1,10 @@
 # Real math runtime ABI and phase status
 
 mini-libc now has an executable `<math.h>` baseline for x86-64 binary32 and
-binary64 real operations, a shared decomposition/scaling layer, and a bounded
-exponential/logarithmic runtime built directly on that layer. The implementation
-does not link the host libm and does not use compiler math builtins.
+binary64 real operations, a shared decomposition/scaling layer, and bounded
+exponential, logarithmic, and power runtimes built directly on those layers. The
+implementation does not link the host libm and does not use compiler math
+builtins.
 
 The public surface is:
 
@@ -40,6 +41,8 @@ double exp(double x);
 float expf(float x);
 double log(double x);
 float logf(float x);
+double pow(double x, double y);
+float powf(float x, float y);
 
 double sqrt(double x);
 float sqrtf(float x);
@@ -139,6 +142,48 @@ tolerances. The current polynomial/series choices are intended to provide useful
 near-machine-precision binary64 behavior across the tested range, but no global
 ULP guarantee is claimed.
 
+## Power composition
+
+`pow` first classifies the exponent from its binary64 representation instead of
+converting arbitrary inputs through a signed integer type. That classification
+answers whether the exponent is integral, whether an integral exponent is odd,
+and whether its magnitude fits in an `unsigned long long`. The odd/even result
+remains well-defined even above the exact odd-integer range: once binary64 spacing
+exceeds one, every representable integral value is necessarily even.
+
+Integral exponents whose magnitude fits in `unsigned long long` use
+exponentiation by squaring. A negative integral exponent first reciprocates the
+positive base magnitude and then executes the same logarithmic-time power loop.
+Negative finite bases are accepted only for integral exponents; the final sign is
+restored from the exponent parity. This keeps common integer powers independent
+of the approximation error in `log`/`exp` and avoids linear-time iteration for
+large integral exponents.
+
+Positive-base nonintegral powers, and integral exponents too large for the fast
+path, reuse the existing exponential/logarithmic layer as
+`exp(y * log(|x|))`. The special-value matrix is handled before that composition:
+zero exponents and the standard unit-base identities return one, signed zero and
+signed infinity preserve a negative result only for odd integral exponents, and
+infinite exponents are selected from `|x|` relative to one. NaNs pass through
+except for the standard zero-exponent and unit-base identities.
+
+A negative finite base with a nonintegral exponent returns a quiet NaN and sets
+`EDOM`. A finite zero base raised to a negative finite exponent returns signed or
+positive infinity as selected by odd-integer parity and sets `ERANGE`. For finite
+nonzero inputs, a result that overflows to infinity or lands in the binary64
+subnormal/zero range is treated as a range result and sets `ERANGE`. Successful
+normal results preserve an existing errno value.
+
+`powf` reuses the binary64 core and narrows to binary32. It preserves domain NaNs
+from the double core rather than reclassifying them as range failures. A finite
+binary32 input pair that narrows to infinity, subnormal, or zero is a binary32
+range result and sets `ERANGE`.
+
+This is a bounded numerical power implementation, not a correctly-rounded `pow`
+claim. Integer fast paths still accumulate ordinary binary floating-point
+multiplication rounding, while nonintegral powers inherit the documented
+`exp`/`log` approximation envelope.
+
 ## Square root boundary
 
 `sqrt` and `sqrtf` use dedicated x86-64 SSE helpers (`sqrtsd` and `sqrtss`) for
@@ -172,41 +217,47 @@ behavior.
 The freestanding `explog_probe` independently locks known `exp`/`log` values,
 normal errno preservation, infinity/NaN behavior, binary64 overflow and
 underflow, logarithm domain/range errors, minimum-subnormal logarithms, and the
-binary32 narrowing range contract. Both freestanding probes are checked by
-`make inspect` for host CRT/libc/libm independence.
+binary32 narrowing range contract. The separate freestanding `pow_probe` locks
+exact integer powers, positive noninteger composition, negative-base parity,
+signed zero/infinity/NaN identities, domain errors, double range failures, float
+narrowing, and preservation of a `powf` domain error across NaN narrowing. All
+three freestanding probes are checked by `make inspect` for host CRT/libc/libm
+independence.
 
 The hosted `math_differential` continues to compare the exact/bit-oriented math
 objects against a controlled host-libm corpus. The separate
 `explog_differential` compiles production `explog.c` and `decompose.c` under
 renamed symbols, then compares `exp`/`log` across wide normal dynamic ranges and
-the float variants across representative binary32 inputs. The exponential checks
-use explicit relative/absolute tolerances, and logarithm checks use an explicit
-absolute floor plus relative tolerance; this is numerical evidence, not a
-bit-exact conformance claim. Mini-libc-specific errno paths are asserted against
-mini-libc's own errno storage.
+the float variants across representative binary32 inputs. `pow_differential`
+compiles production `pow.c` together with the renamed `exp`/`log` and
+scaling/decomposition layers, then compares representative positive noninteger,
+positive and negative integral, reciprocal, and binary32 cases against host
+libm. These numerical checks use explicit relative/absolute tolerances; they are
+not bit-exact conformance claims. Mini-libc-specific errno paths are asserted
+against mini-libc's own errno storage.
 
 Pinned tiny-c compiles every production math C object and
-`tests/tiny_math_integration.c`. The integration now executes `exp`, `log`,
-`expf`, and `logf` alongside decomposition/scaling, transforms, hardware-backed
-square roots, and range/domain error paths. Both GNU `ld` and the pinned
-mini-elf-toolchain link and run the same executable.
+`tests/tiny_math_integration.c`. The integration executes `pow`, `powf`, `exp`,
+`log`, `expf`, and `logf` alongside decomposition/scaling, transforms,
+hardware-backed square roots, and range/domain error paths. Both GNU `ld` and
+the pinned mini-elf-toolchain link and run the same executable.
 
 ## Phase boundary and promotion
 
 This is still a bounded real-math runtime, not a complete C libm. The current
-phase does not expose `pow`, trigonometric functions, remainder families,
+phase does not expose trigonometric functions, remainder families,
 classification macros, `<fenv.h>`, complex math, or long-double variants. No
 performance or globally correctly-rounded claim is made beyond the exact
 hardware `sqrt` result, the explicitly tested bit-level operations, and the
-stated numerical tolerances for `exp`/`log`.
+stated numerical tolerances for `exp`, `log`, and `pow`.
 
-The exponential/logarithmic phase is now complete, so the next math frontier
-should consume it rather than farm more wrappers. The strongest promotion target
-is `pow`/`powf`: it should combine exact integer-exponent fast paths with the
-shared `exp(y * log(x))` machinery for positive noninteger bases, while defining
-negative-base integer detection, zero/infinity/NaN matrices, domain/range errno
-behavior, and controlled numerical tolerances. That slice must continue through
-freestanding probes, host differential coverage, pinned tiny-c, and mini-elf
-execution. A fresh repository-wide audit may still select another larger
-standard-runtime subsystem if it provides more integration value at that
-checkpoint.
+The power-composition phase is now complete. The strongest next math promotion
+is a shared trigonometric range-reduction layer feeding `sin`/`cos`/`tan` and
+their binary32 variants, rather than farming more wrappers around the existing
+functions. That phase should define a bounded `pi/2` reduction contract,
+quadrant reconstruction, shared polynomial kernels, signed-zero/infinity/NaN
+domain behavior, and controlled numerical tolerances across representative
+ordinary and larger arguments. It must continue through freestanding probes,
+host differential coverage, pinned tiny-c, and mini-elf execution. A fresh
+repository-wide audit may still select another larger standard-runtime subsystem
+if it provides more integration value at that checkpoint.
