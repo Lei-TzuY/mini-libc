@@ -103,8 +103,23 @@ int main(void)
         return 16;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 81;
+    if (pow(-2.0, 9.0) != -512.0 || pow(2.0, -10.0) != 0.0009765625 ||
+        errno != 81) {
         return 17;
+    }
+    if (!close_double(pow(9.0, 0.5), 3.0, 2.0e-12) ||
+        !close_float(powf(5.0f, 1.25f), 7.476744f, 5.0e-6f)) {
+        return 18;
+    }
+    errno = 82;
+    bad = pow(-2.0, 0.5);
+    if (bad == bad || errno != EDOM) {
+        return 19;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 20;
     }
     return 0;
 }
