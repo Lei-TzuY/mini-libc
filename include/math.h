@@ -2,7 +2,6 @@
 #define MINI_LIBC_MATH_H
 
 #define MATH_ERRNO 1
-#define MATH_ERRECEPT 2
 #define MATH_ERREXCEPT 2
 #define math_errhandling MATH_ERRNO
 
