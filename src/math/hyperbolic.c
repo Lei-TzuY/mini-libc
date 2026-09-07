@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -71,6 +72,20 @@ static double signed_infinity(unsigned long long sign)
 static double quiet_nan(void)
 {
     return double_from_bits(0x7ff8000000000000ULL);
+}
+
+static double domain_nan(void)
+{
+    errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
+    return quiet_nan();
+}
+
+static double pole_infinity(unsigned long long sign)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(FE_DIVBYZERO);
+    return signed_infinity(sign);
 }
 
 static double sinh_small(double x)
@@ -265,8 +280,7 @@ double acosh(double x)
         return x;
     }
     if ((bits & MINI_DOUBLE_SIGN) != 0ULL || x < 1.0) {
-        errno = EDOM;
-        return quiet_nan();
+        return domain_nan();
     }
     if (x == 1.0) {
         return 0.0;
@@ -293,12 +307,10 @@ double atanh(double x)
 
     magnitude = absolute_double(bits);
     if (magnitude > 1.0) {
-        errno = EDOM;
-        return quiet_nan();
+        return domain_nan();
     }
     if (magnitude == 1.0) {
-        errno = ERANGE;
-        return signed_infinity(bits);
+        return pole_infinity(bits);
     }
     if (magnitude <= 0.25) {
         return atanh_small(x);
