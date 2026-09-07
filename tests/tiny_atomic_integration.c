@@ -54,10 +54,7 @@ int main(void)
         return 1;
     }
     expected = 15;
-    if (!atomic_compare_exchange_strong_explicit(&value, &expected, 31,
-                                                  memory_order_acq_rel,
-                                                  memory_order_acquire) ||
-        atomic_load(&value) != 31) {
+    if (!atomic_compare_exchange_strong_explicit(&value, &expected, 31, memory_order_acq_rel, memory_order_acquire) || atomic_load(&value) != 31) {
         return 2;
     }
     expected = 4;
@@ -71,9 +68,7 @@ int main(void)
         return 4;
     }
     expected_pointer = values + 4;
-    if (!atomic_compare_exchange_strong(&cursor, &expected_pointer,
-                                         values + 7) ||
-        atomic_load(&cursor) != values + 7) {
+    if (!atomic_compare_exchange_strong(&cursor, &expected_pointer, values + 7) || atomic_load(&cursor) != values + 7) {
         return 5;
     }
 
@@ -81,8 +76,7 @@ int main(void)
         return 6;
     }
     expected_double = 2.5;
-    if (!atomic_compare_exchange_strong(&floating, &expected_double, 4.5) ||
-        atomic_load(&floating) != 4.5) {
+    if (!atomic_compare_exchange_strong(&floating, &expected_double, 4.5) || atomic_load(&floating) != 4.5) {
         return 7;
     }
 
