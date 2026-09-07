@@ -7,7 +7,7 @@ the mutex roadmap paragraph in `docs/timed-blocking.md`.
 
 ## Public surface
 
-`<threads.h>` now exposes the mutex type bits:
+`<threads.h>` exposes the mutex type bits:
 
 ```c
 enum {
@@ -20,7 +20,7 @@ enum {
 `mtx_recursive | mtx_timed` is a supported combined type. Any other type bits
 are rejected by `mtx_init` with `thrd_error`.
 
-The public API adds:
+The public API includes:
 
 ```c
 int mtx_timedlock(mtx_t *restrict mtx,
@@ -28,7 +28,7 @@ int mtx_timedlock(mtx_t *restrict mtx,
 ```
 
 The existing `mtx_init`, `mtx_lock`, `mtx_trylock`, `mtx_unlock`, and
-`mtx_destroy` calls now operate on typed mutex state.
+`mtx_destroy` calls operate on typed mutex state.
 
 ## State and ownership
 
@@ -40,21 +40,30 @@ implementation in the archive.
 
 A mutex records:
 
-- one 32-bit held/free state word used by the futex boundary;
+- one lock-free C11 `atomic_int` held/free state word used by the futex boundary;
 - the initialized type mask;
-- an owner identity token;
-- the recursive acquisition depth.
+- an `atomic_ulong` owner identity token;
+- an `atomic_int` recursive acquisition depth.
 
 The owner token is the current mini-libc TCB pointer obtained through the
 existing `%fs:0` accessor. Acquiring an uncontended mutex therefore does not add
-a `gettid` syscall to the fast path. Pointer-sized owner loads/exchanges use
-private x86-64 atomic helpers; state/depth retain the existing 32-bit exchange
-and fetch-add primitives.
+a `gettid` syscall to the fast path. The state, owner, and depth fields now use
+the same public C11 atomic abstraction proven by `docs/atomics.md` instead of
+private x86-64 load/exchange/fetch-add entry points.
+
+The supported x86-64 profile has compile-time ABI guards requiring the atomic
+integer and unsigned-long representations to retain the previous futex/owner
+word sizes and requiring `mtx_t` to remain 24 bytes. The kernel futex boundary
+therefore continues to observe the same 32-bit state word.
 
 Final unlock clears depth and owner before publishing state zero and waking one
 futex waiter. A caller that does not own the mutex receives `thrd_error` and
 does not mutate the held state. This gives wrong-thread unlock a deterministic
 mini-libc contract instead of silently releasing another thread's mutex.
+
+The convergence phase deliberately keeps default sequentially consistent C11
+operations. The previous exchange/xadd helpers were already conservative atomic
+operations; memory-order weakening is not mixed into this migration.
 
 ## Plain and recursive acquisition
 
@@ -107,9 +116,11 @@ channel.
 
 ## Condition-variable boundary
 
-The condition-variable implementation from the preceding phase is intentionally
-unchanged here. Its release/wait/reacquire protocol continues to call public
-`mtx_unlock` and `mtx_lock`.
+The condition-variable implementation continues to use the public mutex
+release/wait/reacquire protocol, but its sequence state now uses the same C11
+atomic abstraction. Signal/broadcast atomically advance the lock-free sequence
+word before issuing `FUTEX_WAKE`, and waiters atomically snapshot that sequence
+before releasing the mutex and entering `FUTEX_WAIT`.
 
 This phase does not claim special semantics for calling `cnd_wait` or
 `cnd_timedwait` while a recursive mutex is held at depth greater than one.
@@ -148,22 +159,21 @@ out in the kernel. The probe is included in host-libc-independence inspection.
 The pinned tiny-c integration performs the same public recursive, wrong-owner,
 expired-deadline, and real future-timeout behavior through code emitted by the
 pinned compiler. That executable is linked and run with both GNU `ld` and the
-pinned mini-elf-toolchain.
+pinned mini-elf-toolchain. The atomic-convergence candidate additionally proves
+that the public `_Atomic` object representation compiles and executes through
+that same pinned toolchain path.
 
 ## Phase boundary and promotion
 
 Typed ownership, recursive depth, absolute timed acquisition, wrong-owner
 unlock detection, and their cross-toolchain evidence close the mutex-type phase.
-Additional mutex-result variants remain out of scope.
+The state/owner/depth implementation has now also converged on the public C11
+atomic abstraction; the migrated mutex host target no longer links the private
+atomic assembly object.
 
-The next thread-lifecycle phase named here has now shipped: `once_flag` /
-`call_once`, thread-specific storage, generation-safe key reuse, and destructor
-execution on normal and explicit thread exit are documented in
-`docs/once-tss.md`.
-
-With both synchronization and TSS lifecycle in place, the next larger thread
-architecture frontier is compiler-native C11 TLS interoperability: reconciling
-compiler-emitted `_Thread_local` objects with mini-libc's `%fs`-based TCB on main
-and cloned threads, then exposing the standard `thread_local` surface. The small
-remaining `thrd_yield` scheduler primitive belongs in that conformance closure
-rather than as another mutex-focused phase.
+The remaining synchronization-convergence frontier is private runtime locking:
+allocator metadata, thread registry/reaper state, the TSS registry, and the
+specialized recursive stdio serializer still retain the private atomic assembly
+boundary. Those paths should be migrated only while preserving their separate
+lifetime, futex, and recursion invariants; `docs/atomics.md` is authoritative for
+that promotion.

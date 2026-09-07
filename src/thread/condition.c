@@ -13,9 +13,6 @@
 #define MINI_WAKE_ALL 0x7fffffff
 #define MINI_NSEC_PER_SEC 1000000000L
 
-extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
-extern int __mini_atomic_fetch_add_int(volatile int *value, int increment);
-
 static int raw_failed(long value)
 {
     return value < 0L && value >= -4095L;
@@ -36,7 +33,7 @@ int cnd_init(cnd_t *cond)
         errno = saved_errno;
         return thrd_error;
     }
-    (void)__mini_atomic_exchange_int((volatile int *)&cond->__sequence, 0);
+    atomic_init(&cond->__sequence, 0);
     errno = saved_errno;
     return thrd_success;
 }
@@ -51,7 +48,7 @@ static int wake_waiters(cnd_t *cond, int count)
         return thrd_error;
     }
 
-    (void)__mini_atomic_fetch_add_int((volatile int *)&cond->__sequence, 1);
+    (void)atomic_fetch_add(&cond->__sequence, 1);
     result = mini_sys_futex((volatile int *)&cond->__sequence, MINI_FUTEX_WAKE,
                             count, (const void *)0, (volatile int *)0, 0);
     errno = saved_errno;
@@ -82,8 +79,7 @@ static int wait_common(cnd_t *cond, mtx_t *mtx,
         return thrd_error;
     }
 
-    expected = __mini_atomic_fetch_add_int(
-        (volatile int *)&cond->__sequence, 0);
+    expected = atomic_load(&cond->__sequence);
     if (mtx_unlock(mtx) != thrd_success) {
         errno = saved_errno;
         return thrd_error;
@@ -140,6 +136,6 @@ int cnd_timedwait(cnd_t *restrict cond, mtx_t *restrict mtx,
 void cnd_destroy(cnd_t *cond)
 {
     if (cond != (cnd_t *)0) {
-        (void)__mini_atomic_exchange_int((volatile int *)&cond->__sequence, 0);
+        atomic_store(&cond->__sequence, 0);
     }
 }

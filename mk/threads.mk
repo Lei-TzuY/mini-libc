@@ -13,10 +13,10 @@ test: thread_test_run
 $(BUILD)/atomic.o: src/internal/atomic.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/condition.o: src/thread/condition.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/condition.o: src/thread/condition.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/mutex.o: src/thread/mutex.c src/internal/thread_runtime.h include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/mutex.o: src/thread/mutex.c src/internal/thread_runtime.h include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sleep.o: src/thread/sleep.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
@@ -25,7 +25,7 @@ $(BUILD)/sleep.o: src/thread/sleep.c include/threads.h include/time.h include/er
 $(BUILD)/yield.o: src/thread/yield.c include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/once.o: src/thread/once.c include/threads.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/once.o: src/thread/once.c include/threads.h include/stdatomic.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/tss.o: src/thread/tss.c src/internal/thread_runtime.h include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
@@ -43,37 +43,37 @@ $(BUILD)/lifecycle.o: src/thread/lifecycle.c src/internal/thread_runtime.h inclu
 $(BUILD)/thread_entry.o: src/thread/thread_entry.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/thread_probe.o: tests/thread_probe.c include/threads.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/thread_probe.o: tests/thread_probe.c include/threads.h include/stdatomic.h include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_probe: $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/thread_exit_group_probe.o: tests/thread_exit_group_probe.c include/threads.h include/stdlib.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/thread_exit_group_probe.o: tests/thread_exit_group_probe.c include/threads.h include/stdatomic.h include/stdlib.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_exit_group_probe: $(BUILD)/thread_exit_group_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/thread_exit_group_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/condition_probe.o: tests/condition_probe.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/condition_probe.o: tests/condition_probe.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/condition_probe: $(BUILD)/condition_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/condition_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/mutex_probe.o: tests/mutex_probe.c include/threads.h include/time.h include/errno.h include/stdio.h | $(BUILD)
+$(BUILD)/mutex_probe.o: tests/mutex_probe.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/stdio.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/mutex_probe: $(BUILD)/mutex_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/mutex_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/once_tss_probe.o: tests/once_tss_probe.c include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/once_tss_probe.o: tests/once_tss_probe.c include/threads.h include/stdatomic.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/once_tss_probe: $(BUILD)/once_tss_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/once_tss_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/tls_probe.o: tests/tls_probe.c include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/tls_probe.o: tests/tls_probe.c include/threads.h include/stdatomic.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/tls_probe: $(BUILD)/tls_probe.o $(CRT0) $(LIBC)
@@ -85,34 +85,34 @@ $(BUILD)/atomic_probe.o: tests/atomic_probe.c include/stdatomic.h include/thread
 $(BUILD)/atomic_probe: $(BUILD)/atomic_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/atomic_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/condition_test_impl.o: src/thread/condition.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/condition_test_impl.o: src/thread/condition.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(CONDITION_RENAMES) -c $< -o $@
 
 $(BUILD)/sleep_test_impl.o: src/thread/sleep.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(SLEEP_RENAMES) -c $< -o $@
 
-$(BUILD)/condition_test.o: tests/condition_test.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/condition_test.o: tests/condition_test.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/condition_test: $(BUILD)/condition_test.o $(BUILD)/condition_test_impl.o $(BUILD)/sleep_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-$(BUILD)/mutex_test_impl.o: src/thread/mutex.c src/internal/thread_runtime.h include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/mutex_test_impl.o: src/thread/mutex.c src/internal/thread_runtime.h include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/mutex_test.o: tests/mutex_test.c include/threads.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/mutex_test.o: tests/mutex_test.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/mutex_test: $(BUILD)/mutex_test.o $(BUILD)/mutex_test_impl.o $(BUILD)/atomic.o $(BUILD)/errno.o
+$(BUILD)/mutex_test: $(BUILD)/mutex_test.o $(BUILD)/mutex_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-$(BUILD)/once_test_impl.o: src/thread/once.c include/threads.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/once_test_impl.o: src/thread/once.c include/threads.h include/stdatomic.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/tss_test_impl.o: src/thread/tss.c src/internal/thread_runtime.h include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/once_tss_test.o: tests/once_tss_test.c include/threads.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/once_tss_test.o: tests/once_tss_test.c include/threads.h include/stdatomic.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/once_tss_test: $(BUILD)/once_tss_test.o $(BUILD)/once_test_impl.o $(BUILD)/tss_test_impl.o $(BUILD)/errno.o
