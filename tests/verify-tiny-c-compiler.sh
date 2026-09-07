@@ -207,6 +207,24 @@ if [ "$atomic_output" != "tiny-atomics-ok" ]; then
 fi
 
 set +e
+termination_registry_output=$(timeout 5s "$OUT/termination" registry)
+termination_registry_status=$?
+set -e
+if [ "$termination_registry_status" -ne 0 ] || [ "$termination_registry_output" != R ]; then
+    echo "unexpected tiny-c termination registry: status=$termination_registry_status output='$termination_registry_output'" >&2
+    exit 1
+fi
+
+set +e
+termination_last_thread_output=$(timeout 5s "$OUT/termination" last-thread)
+termination_last_thread_status=$?
+set -e
+if [ "$termination_last_thread_status" -ne 0 ] || [ "$termination_last_thread_output" != BH ]; then
+    echo "unexpected tiny-c last-thread termination: status=$termination_last_thread_status output='$termination_last_thread_output'" >&2
+    exit 1
+fi
+
+set +e
 termination_quick_output=$("$OUT/termination" quick)
 termination_quick_status=$?
 set -e

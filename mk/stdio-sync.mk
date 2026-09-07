@@ -1,7 +1,7 @@
 STDIO_LOCK_RENAMES := -Dmini_sys_futex=mini_test_futex
 
 $(LIBC): $(BUILD)/stdio_lock.o $(BUILD)/file_sync.o $(BUILD)/position_sync.o $(BUILD)/format_sync.o $(BUILD)/scan_sync.o
-all: $(BUILD)/stdio_thread_probe
+all: $(BUILD)/stdio_thread_probe $(BUILD)/termination_thread_probe
 test: stdio_sync_test_run
 inspect: stdio_sync_inspect
 
@@ -48,9 +48,18 @@ $(BUILD)/stdio_thread_probe.o: tests/stdio_thread_probe.c include/stdio.h includ
 $(BUILD)/stdio_thread_probe: $(BUILD)/stdio_thread_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/stdio_thread_probe.o $(CRT0) $(LIBC)
 
-stdio_sync_test_run: $(BUILD)/stdio_thread_probe $(BUILD)/stdio_lock_test
+$(BUILD)/termination_thread_probe.o: tests/termination_thread_probe.c include/mini/syscall.h include/stdatomic.h include/stdio.h include/stdlib.h include/threads.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/termination_thread_probe: $(BUILD)/termination_thread_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/termination_thread_probe.o $(CRT0) $(LIBC)
+
+stdio_sync_test_run: $(BUILD)/stdio_thread_probe $(BUILD)/termination_thread_probe $(BUILD)/stdio_lock_test
 	@test "$$($(BUILD)/stdio_thread_probe)" = "stdio-thread-ok"
+	@test "$$(timeout 5s $(BUILD)/termination_thread_probe normal-registry)" = "normal-registry-ok"
+	@test "$$(timeout 5s $(BUILD)/termination_thread_probe quick-registry)" = "quick-registry-ok"
+	@test "$$(timeout 5s $(BUILD)/termination_thread_probe last-thread)" = "BH"
 	@$(BUILD)/stdio_lock_test
 
-stdio_sync_inspect: $(BUILD)/stdio_thread_probe
-	./tests/verify-no-host-libc.sh $(BUILD)/stdio_thread_probe
+stdio_sync_inspect: $(BUILD)/stdio_thread_probe $(BUILD)/termination_thread_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/stdio_thread_probe $(BUILD)/termination_thread_probe
