@@ -159,8 +159,36 @@ int main(void)
         return 26;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 87;
+    if (!close_double(sinh(1.0), 1.17520119364380145688, 5.0e-13) ||
+        !close_double(cosh(1.0), 1.54308063481524377848, 5.0e-13) ||
+        !close_double(tanh(1.0), 0.76159415595576488812, 5.0e-13) ||
+        !close_double(asinh(1.0), 0.88137358701954302523, 5.0e-13) ||
+        !close_double(acosh(2.0), 1.31695789692481670863, 5.0e-13) ||
+        !close_double(atanh(0.5), 0.54930614433405484570, 5.0e-13) || errno != 87) {
         return 27;
+    }
+    if (!close_float(sinhf(1.0f), 1.1752012f, 4.0e-6f) ||
+        !close_float(coshf(1.0f), 1.5430807f, 4.0e-6f) ||
+        !close_float(tanhf(1.0f), 0.7615942f, 4.0e-6f) ||
+        !close_float(asinhf(1.0f), 0.8813736f, 4.0e-6f) ||
+        !close_float(acoshf(2.0f), 1.3169579f, 4.0e-6f) ||
+        !close_float(atanhf(0.5f), 0.54930615f, 4.0e-6f)) {
+        return 28;
+    }
+    errno = 88;
+    bad = acosh(0.5);
+    if (bad == bad || errno != EDOM) {
+        return 29;
+    }
+    errno = 89;
+    bad = atanh(1.0);
+    if (!(bad > 1.0e308) || errno != ERANGE) {
+        return 30;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 31;
     }
     return 0;
 }
