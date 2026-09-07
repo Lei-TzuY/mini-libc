@@ -2,23 +2,17 @@
 #include <mini/syscall.h>
 #include <threads.h>
 
+#include "../src/internal/thread_runtime.h"
+
 #define TEST_FUTEX_WAIT 0
 #define TEST_FUTEX_WAKE 1
 #define TEST_FUTEX_WAIT_BITSET 9
 #define TEST_FUTEX_CLOCK_REALTIME 256
-#define TEST_FUTEX_BITSET_MATCH_ANY (-1)
 #define TEST_RAW_EINTR (-4L)
 #define TEST_RAW_EAGAIN (-11L)
 #define TEST_RAW_EINVAL (-22L)
 #define TEST_RAW_ETIMEDOUT (-110L)
 #define TEST_INT_MAX ((int)(~0U >> 1))
-
-struct mini_thread_tcb {
-    struct mini_thread_tcb *self;
-    void *control;
-    int errno_value;
-    unsigned int reserved;
-};
 
 static struct mini_thread_tcb fake_tcbs[3];
 static unsigned int current_tcb;
