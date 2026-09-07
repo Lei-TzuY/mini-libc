@@ -143,7 +143,7 @@ $(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl
 $(BUILD)/remainder_differential.o: tests/remainder_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/remainder_differential: $(BUILD)/remainder_differential.o $(BUILD)/math_classify.o $(BUILD)/math_remainder_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_diff_impl.o $(BUILD)/errno.o
+$(BUILD)/remainder_differential: $(BUILD)/remainder_differential.o $(BUILD)/math_classify.o $(BUILD)/math_remainder_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
 $(BUILD)/explog_differential.o: tests/explog_differential.c | $(BUILD)
