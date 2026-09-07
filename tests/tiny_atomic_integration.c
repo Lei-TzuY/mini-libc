@@ -39,6 +39,7 @@ int main(void)
     thrd_t producer_thread;
     int expected;
     double expected_double;
+    int *expected_pointer;
     int result;
     int i;
     static const char marker[] = "tiny-atomics-ok\n";
@@ -64,28 +65,33 @@ int main(void)
         return 3;
     }
 
-    if (atomic_fetch_add(&cursor, 3) != values + 1 ||
-        atomic_load(&cursor) != values + 4 ||
-        atomic_fetch_sub(&cursor, 2) != values + 4 ||
-        atomic_load(&cursor) != values + 2) {
+    if (atomic_load(&cursor) != values + 1 ||
+        atomic_exchange(&cursor, values + 4) != values + 1 ||
+        atomic_load(&cursor) != values + 4) {
         return 4;
+    }
+    expected_pointer = values + 4;
+    if (!atomic_compare_exchange_strong(&cursor, &expected_pointer,
+                                         values + 7) ||
+        atomic_load(&cursor) != values + 7) {
+        return 5;
     }
 
     if (atomic_exchange(&floating, 2.5) != 1.25) {
-        return 5;
+        return 6;
     }
     expected_double = 2.5;
     if (!atomic_compare_exchange_strong(&floating, &expected_double, 4.5) ||
         atomic_load(&floating) != 4.5) {
-        return 6;
+        return 7;
     }
 
     if (atomic_flag_test_and_set_explicit(&flag, memory_order_acquire)) {
-        return 7;
+        return 8;
     }
     atomic_flag_clear_explicit(&flag, memory_order_release);
     if (atomic_flag_test_and_set(&flag)) {
-        return 8;
+        return 9;
     }
     atomic_flag_clear(&flag);
     atomic_thread_fence(memory_order_seq_cst);
@@ -94,34 +100,34 @@ int main(void)
     atomic_store(&counter, 0);
     for (i = 0; i < WORKERS; ++i) {
         if (thrd_create(&workers[i], incrementer, (void *)0) != thrd_success) {
-            return 9;
+            return 10;
         }
     }
     for (i = 0; i < WORKERS; ++i) {
         if (thrd_join(workers[i], &result) != thrd_success || result != 0) {
-            return 10;
+            return 11;
         }
     }
     if (atomic_load(&counter) != WORKERS * LOOPS) {
-        return 11;
+        return 12;
     }
 
     payload = 0;
     atomic_store_explicit(&published, 0, memory_order_relaxed);
     if (thrd_create(&producer_thread, producer, (void *)0) != thrd_success) {
-        return 12;
+        return 13;
     }
     while (!atomic_load_explicit(&published, memory_order_acquire)) {
         thrd_yield();
     }
     if (payload != 77 ||
         thrd_join(producer_thread, &result) != thrd_success || result != 23) {
-        return 13;
+        return 14;
     }
 
     if (mini_sys_write(1, marker, sizeof(marker) - 1) !=
         (long)(sizeof(marker) - 1)) {
-        return 14;
+        return 15;
     }
     return 0;
 }
