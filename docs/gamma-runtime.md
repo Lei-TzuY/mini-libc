@@ -70,8 +70,11 @@ infinity, a subnormal, or zero is a binary32 range result and sets `ERANGE`.
 NaN payload handling is performed before widening so public float special-value
 behavior remains deterministic.
 
-No floating exception flags are claimed. `math_errhandling` remains
-`MATH_ERRNO`, and `<fenv.h>` is not yet part of the runtime.
+No floating exception flags are claimed by the Gamma functions themselves.
+The runtime now provides the independent `<fenv.h>` foundation, but
+`math_errhandling` remains `MATH_ERRNO` and this Gamma phase does not yet promise
+to raise `FE_INVALID`, `FE_OVERFLOW`, `FE_UNDERFLOW`, or `FE_INEXACT` alongside
+its existing errno behavior.
 
 ## Archive boundary
 
@@ -113,13 +116,14 @@ families on top of the existing real-math substrate. Farming additional Gamma
 vectors or a `signgam` compatibility global would not be the strongest next
 architectural step.
 
-The next high-value promotion is a floating-environment foundation: a bounded
-x86-64 `<fenv.h>` runtime should expose rounding-mode state and floating
-exception-status operations coherently across the SSE/MXCSR and x87 environment,
-with executable GCC, Clang, pinned tiny-c, and mini-elf evidence. That substrate
-would make later `rint`/`nearbyint`, exception-aware `math_errhandling`, and
-rounding-sensitive numerical work honest rather than simulated in isolated math
-functions.
+The x86-64 floating-environment foundation is now implemented as a separate
+runtime layer. The next high-value promotion is therefore to connect
+rounding-sensitive math to that environment: `rint`/`nearbyint` and their
+binary32 variants should honor the active rounding mode, followed by the
+`lrint`/`llrint` conversion families with explicit invalid/range behavior and
+cross-toolchain executable evidence. Broad `MATH_ERREXCEPT` claims should wait
+until the relevant math families actually publish tested floating exception
+status.
 
 Long-double math, complex arithmetic, locale-sensitive numerical behavior, and
 globally correctly-rounded transcendental guarantees remain separate phases.
