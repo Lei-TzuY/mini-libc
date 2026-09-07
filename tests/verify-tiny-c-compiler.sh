@@ -24,10 +24,11 @@ done
 "$CC" -fno-pie -c src/stdio/scan_entry.S -o "$OUT/scan_entry.o"
 "$CC" -fno-pie -c src/control/setjmp.S -o "$OUT/setjmp.o"
 "$CC" -fno-pie -c src/thread/thread_entry.S -o "$OUT/thread-entry.o"
+"$CC" -fno-pie -c src/math/sqrt.S -o "$OUT/math-sqrt.o"
 "$CC" -fno-pie -c src/crt/crt0.S -o "$OUT/crt0.o"
 "$AR" rcs "$OUT/libc.a" $objects "$OUT/syscall.o" \
     "$OUT/format_entry.o" "$OUT/scan_entry.o" "$OUT/setjmp.o" \
-    "$OUT/thread-entry.o"
+    "$OUT/thread-entry.o" "$OUT/math-sqrt.o"
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
@@ -51,6 +52,8 @@ done
     -o "$OUT/mutex.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_atomic_integration.c \
     -o "$OUT/atomic-test.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_math_integration.c \
+    -o "$OUT/math-test.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -75,6 +78,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/atomic-test" \
         "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/math-test" \
+        "$OUT/math-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -99,6 +104,8 @@ else
         "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/atomic-test" \
         "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/math-test" \
+        "$OUT/math-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -206,6 +213,12 @@ if [ "$atomic_output" != "tiny-atomics-ok" ]; then
     exit 1
 fi
 
+math_output=$("$OUT/math-test")
+if [ "$math_output" != "tiny-math-ok" ]; then
+    echo "unexpected tiny-c math output: $math_output" >&2
+    exit 1
+fi
+
 set +e
 termination_registry_output=$(timeout 5s "$OUT/termination" registry)
 termination_registry_status=$?
@@ -253,5 +266,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/condition"
 ./tests/verify-no-host-libc.sh "$OUT/mutex"
 ./tests/verify-no-host-libc.sh "$OUT/atomic-test"
+./tests/verify-no-host-libc.sh "$OUT/math-test"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
