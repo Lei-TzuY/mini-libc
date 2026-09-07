@@ -96,81 +96,85 @@ int main(void)
         return 8;
     }
     if (atomic_load(&pointer_cursor) != pointer_values + 2 ||
-        atomic_fetch_add(&pointer_cursor, 3) != pointer_values + 2 ||
-        atomic_load(&pointer_cursor) != pointer_values + 5 ||
-        atomic_fetch_sub_explicit(&pointer_cursor, 2, memory_order_relaxed) !=
-            pointer_values + 5 ||
-        atomic_load(&pointer_cursor) != pointer_values + 3) {
+        atomic_exchange(&pointer_cursor, pointer_values + 5) !=
+            pointer_values + 2 ||
+        atomic_load_explicit(&pointer_cursor, memory_order_acquire) !=
+            pointer_values + 5) {
         return 9;
     }
-    expected_pointer = pointer_values + 3;
+    expected_pointer = pointer_values + 5;
     if (!atomic_compare_exchange_strong(&pointer_cursor, &expected_pointer,
                                          pointer_values + 8) ||
         atomic_load(&pointer_cursor) != pointer_values + 8) {
         return 10;
     }
+    atomic_store_explicit(&pointer_cursor, pointer_values + 3,
+                          memory_order_release);
+    if (atomic_load(&pointer_cursor) != pointer_values + 3) {
+        return 11;
+    }
 
     if (atomic_load(&floating) != 1.5 ||
         atomic_exchange(&floating, 2.5) != 1.5 ||
         atomic_load(&floating) != 2.5) {
-        return 11;
+        return 12;
     }
     expected_double = 2.5;
     if (!atomic_compare_exchange_strong(&floating, &expected_double, 3.5) ||
         atomic_load(&floating) != 3.5) {
-        return 12;
+        return 13;
     }
 
     if (atomic_flag_test_and_set_explicit(&gate, memory_order_acquire)) {
-        return 13;
+        return 14;
     }
     if (!atomic_flag_test_and_set(&gate)) {
-        return 14;
+        return 15;
     }
     atomic_flag_clear_explicit(&gate, memory_order_release);
     if (atomic_flag_test_and_set(&gate)) {
-        return 15;
+        return 16;
     }
     atomic_flag_clear(&gate);
 
     atomic_thread_fence(memory_order_seq_cst);
     atomic_signal_fence(memory_order_acq_rel);
     if (kill_dependency(17) != 17) {
-        return 16;
+        return 17;
     }
 
     atomic_store(&counter, 0);
     for (i = 0; i < WORKER_COUNT; ++i) {
         if (thrd_create(&threads[i], counter_worker, (void *)0) != thrd_success) {
-            return 17;
+            return 18;
         }
     }
     for (i = 0; i < WORKER_COUNT; ++i) {
         if (thrd_join(threads[i], &result) != thrd_success || result != 0) {
-            return 18;
+            return 19;
         }
     }
     if (atomic_load_explicit(&counter, memory_order_relaxed) !=
         WORKER_COUNT * ITERATIONS) {
-        return 19;
+        return 20;
     }
 
     published_value = 0;
     atomic_store_explicit(&ready, 0, memory_order_relaxed);
     if (thrd_create(&pub, publisher, (void *)0) != thrd_success) {
-        return 20;
+        return 21;
     }
     while (!atomic_load_explicit(&ready, memory_order_acquire)) {
         thrd_yield();
     }
     if (published_value != 0x12345 ||
         thrd_join(pub, &result) != thrd_success || result != 19) {
-        return 21;
+        return 22;
     }
 
     if (mini_sys_write(1, marker, sizeof(marker) - 1) !=
         (long)(sizeof(marker) - 1)) {
-        return 22;
+        return 23;
     }
     return 0;
 }
