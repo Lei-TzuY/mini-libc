@@ -2,10 +2,8 @@
 #include <mini/syscall.h>
 #include <threads.h>
 
+#include "../internal/futex_lock.h"
 #include "../internal/thread_runtime.h"
-
-#define MINI_FUTEX_WAIT 0
-#define MINI_FUTEX_WAKE 1
 
 #define MINI_TSS_INDEX_BITS 5U
 #define MINI_TSS_INDEX_MASK ((1U << MINI_TSS_INDEX_BITS) - 1U)
@@ -18,24 +16,16 @@ struct mini_tss_key_slot {
 };
 
 static struct mini_tss_key_slot mini_tss_keys[MINI_TSS_MAX_KEYS];
-static volatile int mini_tss_registry_lock_word;
-
-extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
+static struct mini_futex_lock mini_tss_registry_lock_word = MINI_FUTEX_LOCK_INIT;
 
 static void tss_lock(void)
 {
-    while (__mini_atomic_exchange_int(&mini_tss_registry_lock_word, 1) != 0) {
-        (void)mini_sys_futex(&mini_tss_registry_lock_word, MINI_FUTEX_WAIT, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_acquire(&mini_tss_registry_lock_word);
 }
 
 static void tss_unlock(void)
 {
-    if (__mini_atomic_exchange_int(&mini_tss_registry_lock_word, 0) != 0) {
-        (void)mini_sys_futex(&mini_tss_registry_lock_word, MINI_FUTEX_WAKE, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_release(&mini_tss_registry_lock_word);
 }
 
 static int decode_key(tss_t key, unsigned int *index,
