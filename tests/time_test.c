@@ -215,5 +215,25 @@ int main(void)
         return 21;
     }
 
+    value.tm_sec = 0;
+    value.tm_min = 0;
+    value.tm_hour = 0;
+    value.tm_mday = 1;
+    value.tm_mon = 0;
+    value.tm_year = -1900;
+    value.tm_wday = 6;
+    value.tm_yday = 0;
+    value.tm_isdst = 0;
+    errno = EIO;
+    if (strftime(buffer, sizeof(buffer), "%G", &value) != 0U ||
+        errno != EINVAL || fake_calls != 0U) {
+        return 22;
+    }
+    errno = EIO;
+    if (strftime(buffer, sizeof(buffer), "%g", &value) != 0U ||
+        errno != EINVAL || fake_calls != 0U) {
+        return 23;
+    }
+
     return 0;
 }
