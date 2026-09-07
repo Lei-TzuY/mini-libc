@@ -405,10 +405,18 @@ static void writer_format_code(struct mini_time_writer *writer, char code,
     case 'Y': writer_unsigned(writer, (unsigned int)year, 4U, '0'); break;
     case 'g':
         iso_week_fields(timeptr, &iso_year, &iso_week);
+        if (iso_year < 0 || iso_year > 9999) {
+            writer->failed = 2;
+            break;
+        }
         writer_unsigned(writer, (unsigned int)(iso_year % 100), 2U, '0');
         break;
     case 'G':
         iso_week_fields(timeptr, &iso_year, &iso_week);
+        if (iso_year < 0 || iso_year > 9999) {
+            writer->failed = 2;
+            break;
+        }
         writer_unsigned(writer, (unsigned int)iso_year, 4U, '0');
         break;
     case 'z': writer_text(writer, "+0000"); break;
