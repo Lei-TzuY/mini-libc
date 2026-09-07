@@ -2,6 +2,7 @@
 #define MINI_LIBC_MATH_H
 
 #define MATH_ERRNO 1
+#define MATH_ERRECEPT 2
 #define MATH_ERREXCEPT 2
 #define math_errhandling MATH_ERRNO
 
@@ -37,6 +38,8 @@ double exp(double x);
 float expf(float x);
 double log(double x);
 float logf(float x);
+double pow(double x, double y);
+float powf(float x, float y);
 
 double sqrt(double x);
 float sqrtf(float x);
