@@ -17,7 +17,8 @@ FENV_MATH_RENAMES := -Drint=mini_test_rint -Drintf=mini_test_rintf \
                      -Dllrint=mini_test_llrint -Dllrintf=mini_test_llrintf
 
 $(LIBC): $(BUILD)/fenv.o $(BUILD)/fenv_asm.o $(BUILD)/math_fenv_rounding.o
-all: $(BUILD)/fenv_probe $(BUILD)/fenv_interop $(BUILD)/fenv_rounding_interop
+all: $(BUILD)/fenv_probe $(BUILD)/fenv_interop $(BUILD)/fenv_rounding_interop \
+     $(BUILD)/fenv_explog_probe $(BUILD)/fenv_explog_interop
 inspect: fenv_inspect
 test: fenv_test_run
 
@@ -38,11 +39,20 @@ $(BUILD)/fenv_probe.o: tests/fenv_probe.c include/fenv.h include/math.h include/
 $(BUILD)/fenv_probe: $(BUILD)/fenv_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/fenv_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/fenv_explog_probe.o: tests/fenv_explog_probe.c include/fenv.h include/math.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/fenv_explog_probe: $(BUILD)/fenv_explog_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/fenv_explog_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/fenv_test_impl.o: src/fenv/fenv.c include/fenv.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(FENV_RENAMES) -c $< -o $@
 
 $(BUILD)/fenv_rounding_test_impl.o: src/math/fenv_rounding.c include/math.h include/fenv.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(FENV_RENAMES) $(FENV_MATH_RENAMES) -c $< -o $@
+
+$(BUILD)/fenv_explog_test_impl.o: src/math/explog.c include/math.h include/fenv.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) $(FENV_RENAMES) -c $< -o $@
 
 $(BUILD)/fenv_interop.o: tests/fenv_interop.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
@@ -56,10 +66,19 @@ $(BUILD)/fenv_rounding_interop.o: tests/fenv_rounding_interop.c | $(BUILD)
 $(BUILD)/fenv_rounding_interop: $(BUILD)/fenv_rounding_interop.o $(BUILD)/fenv_rounding_test_impl.o $(BUILD)/fenv_test_impl.o $(BUILD)/fenv_asm.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
-fenv_test_run: $(BUILD)/fenv_probe $(BUILD)/fenv_interop $(BUILD)/fenv_rounding_interop
+$(BUILD)/fenv_explog_interop.o: tests/fenv_explog_interop.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/fenv_explog_interop: $(BUILD)/fenv_explog_interop.o $(BUILD)/fenv_explog_test_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/fenv_test_impl.o $(BUILD)/fenv_asm.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
+
+fenv_test_run: $(BUILD)/fenv_probe $(BUILD)/fenv_interop $(BUILD)/fenv_rounding_interop $(BUILD)/fenv_explog_probe $(BUILD)/fenv_explog_interop
 	@test "$$($(BUILD)/fenv_probe)" = "fenv-ok" || { echo "unexpected fenv probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/fenv_interop)" = "fenv-interop-ok" || { echo "unexpected fenv interop output" >&2; exit 1; }
 	@test "$$($(BUILD)/fenv_rounding_interop)" = "fenv-rounding-interop-ok" || { echo "unexpected fenv rounding interop output" >&2; exit 1; }
+	@test "$$($(BUILD)/fenv_explog_probe)" = "fenv-explog-ok" || { echo "unexpected fenv explog probe output" >&2; exit 1; }
+	@test "$$($(BUILD)/fenv_explog_interop)" = "fenv-explog-interop-ok" || { echo "unexpected fenv explog interop output" >&2; exit 1; }
 
-fenv_inspect: $(BUILD)/fenv_probe
+fenv_inspect: $(BUILD)/fenv_probe $(BUILD)/fenv_explog_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/fenv_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/fenv_explog_probe
