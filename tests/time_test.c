@@ -28,11 +28,33 @@ static void reset_fake(long result, time_t sec, long nsec)
     fake_calls = 0U;
 }
 
+static int same_string(const char *lhs, const char *rhs)
+{
+    while (*lhs == *rhs) {
+        if (*lhs == '\0') {
+            return 1;
+        }
+        ++lhs;
+        ++rhs;
+    }
+    return 0;
+}
+
 int main(void)
 {
+    static const char expected_calendar[] =
+        "Tue Tuesday Feb February 2000-02-29 00:00:00 060 2 09 09 2000-W09-2 +0000 UTC";
     const long max_long = (long)((~0UL) >> 1);
     time_t stored;
+    time_t stamp;
+    time_t leap = 951782400L;
+    time_t epoch = 0L;
+    time_t negative = -1L;
     struct timespec ts;
+    struct tm *broken;
+    struct tm value;
+    char buffer[160];
+    char small[5];
     clock_t ticks;
     double span;
 
@@ -120,6 +142,77 @@ int main(void)
     span = difftime((time_t)max_long, (time_t)(-max_long - 1L));
     if (!(span > 0.0)) {
         return 13;
+    }
+
+    reset_fake(0, 999, 999L);
+    errno = EIO;
+    broken = gmtime(&epoch);
+    if (broken == (struct tm *)0 || broken->tm_year != 70 ||
+        broken->tm_mon != 0 || broken->tm_mday != 1 ||
+        broken->tm_wday != 4 || broken->tm_yday != 0 ||
+        errno != EIO || fake_calls != 0U) {
+        return 14;
+    }
+    broken = gmtime(&negative);
+    if (broken == (struct tm *)0 || broken->tm_year != 69 ||
+        broken->tm_mon != 11 || broken->tm_mday != 31 ||
+        broken->tm_hour != 23 || broken->tm_min != 59 ||
+        broken->tm_sec != 59 || broken->tm_wday != 3 ||
+        broken->tm_yday != 364 || fake_calls != 0U) {
+        return 15;
+    }
+
+    broken = localtime(&leap);
+    if (broken == (struct tm *)0 || broken->tm_year != 100 ||
+        broken->tm_mon != 1 || broken->tm_mday != 29 ||
+        broken->tm_wday != 2 || broken->tm_yday != 59 ||
+        broken->tm_isdst != 0 || fake_calls != 0U || errno != EIO) {
+        return 16;
+    }
+    value = *broken;
+    if (!same_string(asctime(&value), "Tue Feb 29 00:00:00 2000\n") ||
+        !same_string(ctime(&leap), "Tue Feb 29 00:00:00 2000\n") ||
+        fake_calls != 0U || errno != EIO) {
+        return 17;
+    }
+    if (strftime(buffer, sizeof(buffer),
+                 "%a %A %b %B %F %T %j %w %U %W %G-W%V-%u %z %Z",
+                 &value) != sizeof(expected_calendar) - 1U ||
+        !same_string(buffer, expected_calendar) || fake_calls != 0U ||
+        errno != EIO) {
+        return 18;
+    }
+
+    value.tm_sec = 70;
+    value.tm_min = 59;
+    value.tm_hour = 23;
+    value.tm_mday = 31;
+    value.tm_mon = 11;
+    value.tm_year = 99;
+    value.tm_wday = 0;
+    value.tm_yday = 0;
+    value.tm_isdst = 1;
+    stamp = mktime(&value);
+    if (stamp != 946684810L || value.tm_year != 100 || value.tm_mon != 0 ||
+        value.tm_mday != 1 || value.tm_hour != 0 || value.tm_min != 0 ||
+        value.tm_sec != 10 || value.tm_wday != 6 || value.tm_yday != 0 ||
+        value.tm_isdst != 0 || fake_calls != 0U || errno != EIO) {
+        return 19;
+    }
+
+    small[0] = 'Q';
+    small[1] = 'Q';
+    small[2] = 'Q';
+    small[3] = 'Q';
+    small[4] = 'Q';
+    if (strftime(small, sizeof(small), "%F", &value) != 0U ||
+        small[4] != '\0' || fake_calls != 0U || errno != EIO) {
+        return 20;
+    }
+    errno = EIO;
+    if (strftime(buffer, sizeof(buffer), "%q", &value) != 0U ||
+        errno != EINVAL || fake_calls != 0U) {
+        return 21;
     }
 
     return 0;
