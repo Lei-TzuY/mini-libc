@@ -136,12 +136,11 @@ int feholdexcept(fenv_t *envp)
         return -1;
     }
     __mini_fenv_read(envp);
-    held = *envp;
     held.__x87_control =
-        (unsigned short)(held.__x87_control | MINI_X87_EXCEPTION_MASK);
+        (unsigned short)(envp->__x87_control | MINI_X87_EXCEPTION_MASK);
     held.__x87_exceptions = 0U;
     held.__mxcsr =
-        (held.__mxcsr | MINI_MXCSR_MASK_BITS) & ~MINI_MXCSR_EXCEPTION_MASK;
+        (envp->__mxcsr | MINI_MXCSR_MASK_BITS) & ~MINI_MXCSR_EXCEPTION_MASK;
     __mini_fenv_write(&held);
     return 0;
 }
