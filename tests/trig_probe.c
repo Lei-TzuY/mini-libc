@@ -35,6 +35,17 @@ static unsigned int fbits(float value)
     return convert.bits;
 }
 
+static float ffrom(unsigned int bits)
+{
+    union {
+        float value;
+        unsigned int bits;
+    } convert;
+
+    convert.bits = bits;
+    return convert.value;
+}
+
 static int close_double(double actual, double expected, double tolerance)
 {
     double difference = actual - expected;
@@ -60,6 +71,7 @@ int main(void)
     double inf = dfrom(0x7ff0000000000000ULL);
     double nan_value = dfrom(0x7ff8000000000042ULL);
     double result;
+    float fnan = ffrom(0x7fc01234U);
     float fresult;
 
     if (dbits(sin(-0.0)) != 0x8000000000000000ULL ||
@@ -110,30 +122,37 @@ int main(void)
     }
 
     errno = 73;
-    result = sin(inf);
-    if (result == result || errno != EDOM) {
+    if (fbits(sinf(fnan)) != 0x7fc01234U || errno != 73 ||
+        fbits(cosf(fnan)) != 0x7fc01234U || errno != 73 ||
+        fbits(tanf(fnan)) != 0x7fc01234U || errno != 73) {
         return 9;
     }
+
     errno = 74;
-    result = cos(1048577.0);
+    result = sin(inf);
     if (result == result || errno != EDOM) {
         return 10;
     }
     errno = 75;
-    result = tan(-1048577.0);
+    result = cos(1048577.0);
     if (result == result || errno != EDOM) {
         return 11;
     }
-
     errno = 76;
-    fresult = sinf(2000000.0f);
-    if (fresult == fresult || errno != EDOM ||
-        (fbits(fresult) & 0x7f800000U) != 0x7f800000U) {
+    result = tan(-1048577.0);
+    if (result == result || errno != EDOM) {
         return 12;
     }
 
-    if (mini_sys_write(1, "trig-ok\n", 8) != 8) {
+    errno = 77;
+    fresult = sinf(2000000.0f);
+    if (fresult == fresult || errno != EDOM ||
+        (fbits(fresult) & 0x7f800000U) != 0x7f800000U) {
         return 13;
+    }
+
+    if (mini_sys_write(1, "trig-ok\n", 8) != 8) {
+        return 14;
     }
     return 0;
 }
