@@ -1,6 +1,7 @@
 #ifndef MINI_LIBC_THREADS_H
 #define MINI_LIBC_THREADS_H
 
+#include <stdatomic.h>
 #include <time.h>
 
 #ifndef thread_local
@@ -13,22 +14,33 @@ typedef unsigned int tss_t;
 typedef void (*tss_dtor_t)(void *);
 
 typedef struct {
-    int __state;
+    atomic_int __state;
 } once_flag;
 
-#define ONCE_FLAG_INIT {0}
+#define ONCE_FLAG_INIT {ATOMIC_VAR_INIT(0)}
 #define TSS_DTOR_ITERATIONS 4
 
 typedef struct {
-    int __state;
+    atomic_int __state;
     int __type;
-    unsigned long __owner;
-    int __depth;
+    atomic_ulong __owner;
+    atomic_int __depth;
 } mtx_t;
 
 typedef struct {
-    int __sequence;
+    atomic_int __sequence;
 } cnd_t;
+
+_Static_assert(sizeof(atomic_int) == sizeof(int),
+               "C11 atomic int must preserve futex word size");
+_Static_assert(sizeof(atomic_ulong) == sizeof(unsigned long),
+               "C11 atomic ulong must preserve owner word size");
+_Static_assert(sizeof(once_flag) == sizeof(int),
+               "once_flag ABI must remain one futex word");
+_Static_assert(sizeof(cnd_t) == sizeof(int),
+               "cnd_t ABI must remain one futex word");
+_Static_assert(sizeof(mtx_t) == 24,
+               "mtx_t ABI must remain stable on x86-64");
 
 enum {
     thrd_success = 0,
