@@ -1,7 +1,19 @@
 #include <errno.h>
 #include <math.h>
 
+#define MINI_DOUBLE_SIGN 0x8000000000000000ULL
 #define MINI_REMQUO_MASK 0x7fU
+
+static unsigned long long double_bits(double value)
+{
+    union {
+        double value;
+        unsigned long long bits;
+    } convert;
+
+    convert.value = value;
+    return convert.bits;
+}
 
 static double double_from_bits(unsigned long long bits)
 {
@@ -23,6 +35,11 @@ static float float_from_bits(unsigned int bits)
 
     convert.bits = bits;
     return convert.value;
+}
+
+static double absolute_double(double value)
+{
+    return double_from_bits(double_bits(value) & ~MINI_DOUBLE_SIGN);
 }
 
 struct mini_reduction {
@@ -84,13 +101,13 @@ static int remainder_domain(double x, double y)
 
 static double signed_zero_like(double x)
 {
-    return copysign(0.0, x);
+    return double_from_bits(double_bits(x) & MINI_DOUBLE_SIGN);
 }
 
 static double fmod_finite(double x, double y)
 {
-    double ax = fabs(x);
-    double ay = fabs(y);
+    double ax = absolute_double(x);
+    double ay = absolute_double(y);
     struct mini_reduction reduction;
     double result;
 
@@ -114,8 +131,8 @@ static double fmod_finite(double x, double y)
 
 static double remainder_finite(double x, double y, int *quotient_out)
 {
-    double ax = fabs(x);
-    double ay = fabs(y);
+    double ax = absolute_double(x);
+    double ay = absolute_double(y);
     double result;
     unsigned int quotient;
     int quotient_negative = signbit(x) != signbit(y);
