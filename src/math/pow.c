@@ -244,6 +244,7 @@ float powf(float x, float y)
     double wide;
     float result;
     unsigned int result_bits;
+    unsigned int result_mag;
 
     if ((ybits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP &&
         (ybits & MINI_FLOAT_FRAC) != 0U) {
@@ -266,12 +267,13 @@ float powf(float x, float y)
     wide = pow((double)x, (double)y);
     result = (float)wide;
     result_bits = float_bits(result);
+    result_mag = result_bits & 0x7fffffffU;
 
     if ((xbits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
-        (ybits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
-        xmag != 0U &&
-        ((result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP ||
-         (result_bits & MINI_FLOAT_EXP) == 0U)) {
+        (ybits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP && xmag != 0U &&
+        (((result_mag & MINI_FLOAT_EXP) == MINI_FLOAT_EXP &&
+          (result_mag & MINI_FLOAT_FRAC) == 0U) ||
+         (result_mag & MINI_FLOAT_EXP) == 0U)) {
         errno = ERANGE;
     }
     return result;
