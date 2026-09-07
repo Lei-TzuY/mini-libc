@@ -29,6 +29,7 @@ int main(void)
     double integral;
     float fintegral;
     int exponent;
+    int quotient;
 
     if (fabs(-3.5) != 3.5 || fabsf(-2.25f) != 2.25f) {
         return 1;
@@ -187,8 +188,29 @@ int main(void)
         return 30;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 90;
+    if (fpclassify(scalbnf(1.0f, -149)) != FP_SUBNORMAL ||
+        fpclassify(1.0) != FP_NORMAL || !isfinite(1.0f) || isfinite(bad) ||
+        !signbit(-0.0) || !isless(1.0f, 2.0) || errno != 90) {
         return 31;
+    }
+    errno = 91;
+    if (fmod(13.0, 4.0) != 1.0 || fmod(scalbn(1.0, 900), 3.0) != 1.0 ||
+        remainder(6.0, 4.0) != -2.0 || errno != 91) {
+        return 32;
+    }
+    quotient = 99;
+    if (remquo(30.0, 4.0, &quotient) != -2.0 || quotient != 8) {
+        return 33;
+    }
+    quotient = 99;
+    if (remquof(-30.0f, -4.0f, &quotient) != 2.0f || quotient != 8 ||
+        fmodf(13.0f, 4.0f) != 1.0f || remainderf(6.0f, 4.0f) != -2.0f) {
+        return 34;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 35;
     }
     return 0;
 }

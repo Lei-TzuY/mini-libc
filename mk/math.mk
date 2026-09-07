@@ -10,6 +10,9 @@ MATH_RENAMES := -Dfabs=mini_test_fabs -Dfabsf=mini_test_fabsf \
                 -Dldexp=mini_test_ldexp -Dldexpf=mini_test_ldexpf \
                 -Dscalbn=mini_test_scalbn -Dscalbnf=mini_test_scalbnf \
                 -Dmodf=mini_test_modf -Dmodff=mini_test_modff \
+                -Dfmod=mini_test_fmod -Dfmodf=mini_test_fmodf \
+                -Dremainder=mini_test_remainder -Dremainderf=mini_test_remainderf \
+                -Dremquo=mini_test_remquo -Dremquof=mini_test_remquof \
                 -Dexp=mini_test_exp -Dexpf=mini_test_expf \
                 -Dlog=mini_test_log -Dlogf=mini_test_logf \
                 -Dpow=mini_test_pow -Dpowf=mini_test_powf \
@@ -28,8 +31,8 @@ MATH_RENAMES := -Dfabs=mini_test_fabs -Dfabsf=mini_test_fabsf \
                 -Datanh=mini_test_atanh -Datanhf=mini_test_atanhf \
                 -Dsqrt=mini_test_sqrt -Dsqrtf=mini_test_sqrtf
 
-$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_explog.o $(BUILD)/math_pow.o $(BUILD)/math_trig.o $(BUILD)/math_inverse_trig.o $(BUILD)/math_hyperbolic.o $(BUILD)/math_sqrt.o
-all: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/explog_probe $(BUILD)/explog_differential $(BUILD)/pow_probe $(BUILD)/pow_differential $(BUILD)/trig_probe $(BUILD)/trig_differential $(BUILD)/inverse_trig_probe $(BUILD)/inverse_trig_differential $(BUILD)/hyperbolic_probe $(BUILD)/hyperbolic_differential
+$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_classify.o $(BUILD)/math_remainder.o $(BUILD)/math_explog.o $(BUILD)/math_pow.o $(BUILD)/math_trig.o $(BUILD)/math_inverse_trig.o $(BUILD)/math_hyperbolic.o $(BUILD)/math_sqrt.o
+all: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/remainder_probe $(BUILD)/remainder_differential $(BUILD)/explog_probe $(BUILD)/explog_differential $(BUILD)/pow_probe $(BUILD)/pow_differential $(BUILD)/trig_probe $(BUILD)/trig_differential $(BUILD)/inverse_trig_probe $(BUILD)/inverse_trig_differential $(BUILD)/hyperbolic_probe $(BUILD)/hyperbolic_differential
 inspect: math_inspect
 test: math_test_run
 
@@ -39,6 +42,12 @@ $(BUILD)/math.o: src/math/math.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_decompose.o: src/math/decompose.c include/math.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/math_classify.o: src/math/classify.c include/math.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/math_remainder.o: src/math/remainder.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_explog.o: src/math/explog.c include/math.h include/errno.h | $(BUILD)
@@ -64,6 +73,12 @@ $(BUILD)/math_probe.o: tests/math_probe.c include/math.h include/errno.h include
 
 $(BUILD)/math_probe: $(BUILD)/math_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/math_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/remainder_probe.o: tests/remainder_probe.c include/math.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/remainder_probe: $(BUILD)/remainder_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/remainder_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/explog_probe.o: tests/explog_probe.c include/math.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
@@ -101,6 +116,9 @@ $(BUILD)/math_diff_impl.o: src/math/math.c include/math.h include/errno.h | $(BU
 $(BUILD)/math_decompose_diff_impl.o: src/math/decompose.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
 
+$(BUILD)/math_remainder_diff_impl.o: src/math/remainder.c include/math.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
+
 $(BUILD)/math_explog_diff_impl.o: src/math/explog.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
 
@@ -120,6 +138,12 @@ $(BUILD)/math_differential.o: tests/math_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
 $(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
+
+$(BUILD)/remainder_differential.o: tests/remainder_differential.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
+
+$(BUILD)/remainder_differential: $(BUILD)/remainder_differential.o $(BUILD)/math_classify.o $(BUILD)/math_remainder_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
 $(BUILD)/explog_differential.o: tests/explog_differential.c | $(BUILD)
@@ -152,22 +176,25 @@ $(BUILD)/hyperbolic_differential.o: tests/hyperbolic_differential.c | $(BUILD)
 $(BUILD)/hyperbolic_differential: $(BUILD)/hyperbolic_differential.o $(BUILD)/math_hyperbolic_diff_impl.o $(BUILD)/math_explog_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
-math_test_run: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/explog_probe $(BUILD)/explog_differential $(BUILD)/pow_probe $(BUILD)/pow_differential $(BUILD)/trig_probe $(BUILD)/trig_differential $(BUILD)/inverse_trig_probe $(BUILD)/inverse_trig_differential $(BUILD)/hyperbolic_probe $(BUILD)/hyperbolic_differential
+math_test_run: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/remainder_probe $(BUILD)/remainder_differential $(BUILD)/explog_probe $(BUILD)/explog_differential $(BUILD)/pow_probe $(BUILD)/pow_differential $(BUILD)/trig_probe $(BUILD)/trig_differential $(BUILD)/inverse_trig_probe $(BUILD)/inverse_trig_differential $(BUILD)/hyperbolic_probe $(BUILD)/hyperbolic_differential
 	@test "$$($(BUILD)/math_probe)" = "math-ok" || { echo "unexpected math probe output" >&2; exit 1; }
+	@test "$$($(BUILD)/remainder_probe)" = "remainder-ok" || { echo "unexpected remainder probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/explog_probe)" = "explog-ok" || { echo "unexpected exp/log probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/pow_probe)" = "pow-ok" || { echo "unexpected pow probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/trig_probe)" = "trig-ok" || { echo "unexpected trig probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/inverse_trig_probe)" = "inverse-trig-ok" || { echo "unexpected inverse trig probe output" >&2; exit 1; }
 	@test "$$($(BUILD)/hyperbolic_probe)" = "hyperbolic-ok" || { echo "unexpected hyperbolic probe output" >&2; exit 1; }
 	$(BUILD)/math_differential
+	$(BUILD)/remainder_differential
 	$(BUILD)/explog_differential
 	$(BUILD)/pow_differential
 	$(BUILD)/trig_differential
 	$(BUILD)/inverse_trig_differential
 	$(BUILD)/hyperbolic_differential
 
-math_inspect: $(BUILD)/math_probe $(BUILD)/explog_probe $(BUILD)/pow_probe $(BUILD)/trig_probe $(BUILD)/inverse_trig_probe $(BUILD)/hyperbolic_probe
+math_inspect: $(BUILD)/math_probe $(BUILD)/remainder_probe $(BUILD)/explog_probe $(BUILD)/pow_probe $(BUILD)/trig_probe $(BUILD)/inverse_trig_probe $(BUILD)/hyperbolic_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/math_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/remainder_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/explog_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/pow_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/trig_probe
