@@ -39,4 +39,5 @@ signal_inspect: $(BUILD)/signal_probe
 
 include mk/calendar.mk
 include mk/math.mk
+include mk/math-special.mk
 include mk/setjmp.mk
