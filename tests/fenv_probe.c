@@ -1,6 +1,10 @@
 #include <errno.h>
 #include <fenv.h>
+#include <math.h>
 #include <mini/syscall.h>
+
+#define MINI_LONG_MIN (-9223372036854775807L - 1L)
+#define MINI_LLONG_MIN (-9223372036854775807LL - 1LL)
 
 static double add_volatile(volatile double *left, volatile double *right)
 {
@@ -10,6 +14,17 @@ static double add_volatile(volatile double *left, volatile double *right)
 static double divide_volatile(volatile double *left, volatile double *right)
 {
     return *left / *right;
+}
+
+static double quiet_nan(void)
+{
+    union {
+        unsigned long long bits;
+        double value;
+    } convert;
+
+    convert.bits = 0x7ff8000000000000ULL;
+    return convert.value;
 }
 
 int main(void)
@@ -110,11 +125,90 @@ int main(void)
         return 18;
     }
 
-    if (fesetenv(&original) != 0 || errno != 71) {
+    if (fesetenv(FE_DFL_ENV) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_TONEAREST) != 0) {
         return 19;
     }
-    if (mini_sys_write(1, "fenv-ok\n", 8) != 8) {
+    errno = 71;
+    if (rint(2.5) != 2.0 || rint(3.5) != 4.0 || rintf(-2.5f) != -2.0f ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0 || errno != 71) {
         return 20;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_UPWARD) != 0 ||
+        rint(1.25) != 2.0 || rintf(-1.25f) != -1.0f ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0) {
+        return 21;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_DOWNWARD) != 0 ||
+        feraiseexcept(FE_OVERFLOW) != 0 ||
+        nearbyint(-1.25) != -2.0 || nearbyintf(1.75f) != 1.0f ||
+        fetestexcept(FE_ALL_EXCEPT) != FE_OVERFLOW) {
+        return 22;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_TOWARDZERO) != 0 ||
+        rint(-1.75) != -1.0 || rintf(1.75f) != 1.0f ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0) {
+        return 23;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_TONEAREST) != 0) {
+        return 24;
+    }
+    errno = 71;
+    if (lrint(2.5) != 2L || llrint(3.5) != 4LL || lrintf(-2.5f) != -2L ||
+        llrintf(1.5f) != 2LL ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0 || errno != 71) {
+        return 25;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_DOWNWARD) != 0 ||
+        llrint(-1.2) != -2LL ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0) {
+        return 26;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_UPWARD) != 0 || lrint(1.2) != 2L ||
+        (fetestexcept(FE_INEXACT) & FE_INEXACT) == 0) {
+        return 27;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        fesetround(FE_TONEAREST) != 0) {
+        return 28;
+    }
+    errno = 71;
+    if (lrint(9223372036854775808.0) != MINI_LONG_MIN || errno != ERANGE ||
+        (fetestexcept(FE_INVALID) & FE_INVALID) == 0) {
+        return 29;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 30;
+    }
+    errno = 71;
+    if (llrint(quiet_nan()) != MINI_LLONG_MIN || errno != EDOM ||
+        (fetestexcept(FE_INVALID) & FE_INVALID) == 0) {
+        return 31;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 || rint(4.0) != 4.0 ||
+        fetestexcept(FE_INEXACT) != 0) {
+        return 32;
+    }
+
+    if (fesetenv(&original) != 0) {
+        return 33;
+    }
+    if (mini_sys_write(1, "fenv-ok\n", 8) != 8) {
+        return 34;
     }
     return 0;
 }

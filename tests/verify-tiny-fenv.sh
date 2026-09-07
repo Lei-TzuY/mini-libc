@@ -14,7 +14,9 @@ if [ ! -f "$OUT/libc.a" ] || [ ! -f "$OUT/crt0.o" ]; then
 fi
 
 "$CC" -fno-pie -c src/fenv/fenv_asm.S -o "$OUT/fenv-asm.o"
-"$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/fenv_rounding.c \
+    -o "$OUT/fenv-rounding.o"
+"$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_integration.c \
     -o "$OUT/fenv-test.o"
 

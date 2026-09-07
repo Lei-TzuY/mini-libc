@@ -60,6 +60,14 @@ double ceil(double x);
 float ceilf(float x);
 double round(double x);
 float roundf(float x);
+double rint(double x);
+float rintf(float x);
+double nearbyint(double x);
+float nearbyintf(float x);
+long lrint(double x);
+long lrintf(float x);
+long long llrint(double x);
+long long llrintf(float x);
 
 double frexp(double x, int *exp);
 float frexpf(float x, int *exp);
