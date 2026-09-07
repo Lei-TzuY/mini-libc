@@ -2,19 +2,12 @@
 #include <mini/syscall.h>
 #include <threads.h>
 
+#include "../src/internal/thread_runtime.h"
+
 #define TEST_TSS_KEYS 32U
 #define TEST_FUTEX_WAIT 0
 #define TEST_FUTEX_WAKE 1
 #define TEST_RAW_EINVAL (-22L)
-
-struct mini_thread_tcb {
-    struct mini_thread_tcb *self;
-    void *control;
-    int errno_value;
-    unsigned int reserved;
-    void *tss_values[TEST_TSS_KEYS];
-    unsigned int tss_generations[TEST_TSS_KEYS];
-};
 
 static struct mini_thread_tcb fake_tcbs[2];
 static unsigned int current_tcb;
