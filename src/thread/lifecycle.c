@@ -62,6 +62,7 @@ struct mini_futex_timeout {
 static struct mini_thread_control *mini_thread_controls;
 static struct mini_futex_lock mini_thread_registry_lock_word =
     MINI_FUTEX_LOCK_INIT;
+static atomic_uint mini_user_thread_count = ATOMIC_VAR_INIT(1U);
 static volatile int mini_reaper_event;
 static int mini_reaper_started;
 static struct mini_thread_control mini_reaper_control;
@@ -324,11 +325,13 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
     insert_control_locked(control);
     registry_unlock();
 
+    (void)atomic_fetch_add(&mini_user_thread_count, 1U);
     stack_top = (char *)control->stack + control->stack_size;
     clone_result = __mini_clone_thread(control, stack_top,
                                        MINI_THREAD_CLONE_FLAGS,
                                        &control->clear_tid, &control->tcb);
     if (raw_failed(clone_result)) {
+        (void)atomic_fetch_sub(&mini_user_thread_count, 1U);
         registry_lock();
         remove_control_locked(control);
         registry_unlock();
@@ -362,6 +365,7 @@ _Noreturn void thrd_exit(int res)
 {
     struct mini_thread_tcb *tcb;
     struct mini_thread_control *control;
+    unsigned int previous_count;
 
     __mini_tss_run_destructors();
     tcb = __mini_thread_current_tcb();
@@ -369,6 +373,14 @@ _Noreturn void thrd_exit(int res)
 
     if (control != (struct mini_thread_control *)0) {
         control->result = res;
+    }
+    if (control == &mini_reaper_control) {
+        mini_sys_exit(0);
+    }
+
+    previous_count = atomic_fetch_sub(&mini_user_thread_count, 1U);
+    if (previous_count == 1U) {
+        exit(EXIT_SUCCESS);
     }
     mini_sys_exit(0);
 }
