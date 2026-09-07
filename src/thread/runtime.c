@@ -27,7 +27,6 @@ struct mini_elf_program_header {
 static struct mini_thread_tcb mini_main_tcb;
 static const unsigned char *mini_tls_template;
 static unsigned long mini_tls_file_size;
-static unsigned long mini_tls_memory_size;
 static unsigned long mini_tls_block_size;
 static unsigned long mini_tls_alignment = 1UL;
 
@@ -155,7 +154,6 @@ static void configure_native_tls(long *initial_stack)
 
         mini_tls_template = (const unsigned char *)template_address;
         mini_tls_file_size = header->file_size;
-        mini_tls_memory_size = header->memory_size;
         mini_tls_block_size = block_size;
         mini_tls_alignment = alignment;
         return;
