@@ -84,13 +84,16 @@ mini-elf-toolchain.
 
 ## Next frontier
 
-The error-function checkpoint establishes the first dedicated special-function
-layer on top of the real-math substrate. The next high-value promotion is the
-gamma family rather than more error-function vectors: `tgamma`/`lgamma` and
-binary32 variants should share one approximation/reflection substrate, define
-pole/sign/range behavior explicitly, and include controlled host differential
-plus pinned tiny-c/mini-elf execution.
+The error-function checkpoint established the first dedicated special-function
+layer. The following Gamma promotion now lives beside it as an independent
+archive member with shared Lanczos/reflection semantics; see
+`docs/gamma-runtime.md` for that current checkpoint.
 
-Long-double special functions, `<fenv.h>`, complex arithmetic, and globally
-correctly-rounded transcendental guarantees remain separate architectural
-phases.
+With both error-function and Gamma families executable, the next architectural
+gap is no longer another isolated special-function wrapper. The strongest
+promotion is a floating-environment foundation (`<fenv.h>`) that exposes
+rounding-mode and exception-status state coherently across x86-64 SSE/MXCSR and
+x87, enabling later rounding-sensitive math behavior to be verified honestly.
+
+Long-double special functions, complex arithmetic, and globally
+correctly-rounded transcendental guarantees remain separate phases.
