@@ -95,6 +95,38 @@ int __mini_fpclassifyf(float x)
     return FP_NORMAL;
 }
 
+int __mini_math_predicate(double x, int operation)
+{
+    int classification = __mini_fpclassify(x);
+
+    if (operation == 0) {
+        return classification != FP_INFINITE && classification != FP_NAN;
+    }
+    if (operation == 1) {
+        return classification == FP_INFINITE;
+    }
+    if (operation == 2) {
+        return classification == FP_NAN;
+    }
+    return classification == FP_NORMAL;
+}
+
+int __mini_math_predicatef(float x, int operation)
+{
+    int classification = __mini_fpclassifyf(x);
+
+    if (operation == 0) {
+        return classification != FP_INFINITE && classification != FP_NAN;
+    }
+    if (operation == 1) {
+        return classification == FP_INFINITE;
+    }
+    if (operation == 2) {
+        return classification == FP_NAN;
+    }
+    return classification == FP_NORMAL;
+}
+
 int __mini_signbit(double x)
 {
     return (double_bits(x) & MINI_DOUBLE_SIGN) != 0ULL;
@@ -288,6 +320,9 @@ static double remainder_finite(double x, double y, int *quotient_out)
 
 double fmod(double x, double y)
 {
+    int saved_errno;
+    double result;
+
     if (isnan(x)) {
         return x;
     }
@@ -301,11 +336,17 @@ double fmod(double x, double y)
     if (isinf(y) || x == 0.0) {
         return x;
     }
-    return fmod_finite(x, y);
+    saved_errno = errno;
+    result = fmod_finite(x, y);
+    errno = saved_errno;
+    return result;
 }
 
 float fmodf(float x, float y)
 {
+    int saved_errno;
+    float result;
+
     if (isnan(x)) {
         return x;
     }
@@ -319,11 +360,17 @@ float fmodf(float x, float y)
     if (isinf(y) || x == 0.0f) {
         return x;
     }
-    return (float)fmod_finite((double)x, (double)y);
+    saved_errno = errno;
+    result = (float)fmod_finite((double)x, (double)y);
+    errno = saved_errno;
+    return result;
 }
 
 double remainder(double x, double y)
 {
+    int saved_errno;
+    double result;
+
     if (isnan(x)) {
         return x;
     }
@@ -337,11 +384,17 @@ double remainder(double x, double y)
     if (isinf(y) || x == 0.0) {
         return x;
     }
-    return remainder_finite(x, y, 0);
+    saved_errno = errno;
+    result = remainder_finite(x, y, 0);
+    errno = saved_errno;
+    return result;
 }
 
 float remainderf(float x, float y)
 {
+    int saved_errno;
+    float result;
+
     if (isnan(x)) {
         return x;
     }
@@ -355,11 +408,17 @@ float remainderf(float x, float y)
     if (isinf(y) || x == 0.0f) {
         return x;
     }
-    return (float)remainder_finite((double)x, (double)y, 0);
+    saved_errno = errno;
+    result = (float)remainder_finite((double)x, (double)y, 0);
+    errno = saved_errno;
+    return result;
 }
 
 double remquo(double x, double y, int *quo)
 {
+    int saved_errno;
+    double result;
+
     if (quo != 0) {
         *quo = 0;
     }
@@ -376,11 +435,17 @@ double remquo(double x, double y, int *quo)
     if (isinf(y) || x == 0.0) {
         return x;
     }
-    return remainder_finite(x, y, quo);
+    saved_errno = errno;
+    result = remainder_finite(x, y, quo);
+    errno = saved_errno;
+    return result;
 }
 
 float remquof(float x, float y, int *quo)
 {
+    int saved_errno;
+    float result;
+
     if (quo != 0) {
         *quo = 0;
     }
@@ -397,5 +462,8 @@ float remquof(float x, float y, int *quo)
     if (isinf(y) || x == 0.0f) {
         return x;
     }
-    return (float)remainder_finite((double)x, (double)y, quo);
+    saved_errno = errno;
+    result = (float)remainder_finite((double)x, (double)y, quo);
+    errno = saved_errno;
+    return result;
 }
