@@ -171,9 +171,9 @@ The state/owner/depth implementation has now also converged on the public C11
 atomic abstraction; the migrated mutex host target no longer links the private
 atomic assembly object.
 
-The remaining synchronization-convergence frontier is private runtime locking:
-allocator metadata, thread registry/reaper state, the TSS registry, and the
-specialized recursive stdio serializer still retain the private atomic assembly
-boundary. Those paths should be migrated only while preserving their separate
-lifetime, futex, and recursion invariants; `docs/atomics.md` is authoritative for
-that promotion.
+The generic private runtime serializers have since converged as well: allocator
+metadata, thread registry/reaper state, and the TSS registry now use the shared
+private C11 `atomic_int` + futex abstraction described in `docs/atomics.md`.
+The only remaining private assembly synchronization boundary is the specialized
+recursive stdio serializer. Its TLS recursion contract should be migrated as a
+separate phase before `src/internal/atomic.S` is deleted.
