@@ -8,6 +8,7 @@ char *strerror(int errnum)
     static char enomem[] = "Cannot allocate memory";
     static char eexist[] = "File exists";
     static char einval[] = "Invalid argument";
+    static char edom[] = "Numerical argument out of domain";
     static char erange[] = "Numerical result out of range";
     static char unknown[] = "Unknown error";
 
@@ -22,6 +23,8 @@ char *strerror(int errnum)
         return eexist;
     case EINVAL:
         return einval;
+    case EDOM:
+        return edom;
     case ERANGE:
         return erange;
     default:
