@@ -5,6 +5,38 @@
 #define MATH_ERREXCEPT 2
 #define math_errhandling MATH_ERRNO
 
+#define FP_NAN 0
+#define FP_INFINITE 1
+#define FP_ZERO 2
+#define FP_SUBNORMAL 3
+#define FP_NORMAL 4
+
+int __mini_fpclassify(double x);
+int __mini_fpclassifyf(float x);
+int __mini_signbit(double x);
+int __mini_signbitf(float x);
+int __mini_math_compare(double x, double y, int operation);
+int __mini_math_comparef(float x, float y, int operation);
+
+#define fpclassify(x) \
+    _Generic((x), float: __mini_fpclassifyf, double: __mini_fpclassify)(x)
+#define isfinite(x) (fpclassify(x) != FP_INFINITE && fpclassify(x) != FP_NAN)
+#define isinf(x) (fpclassify(x) == FP_INFINITE)
+#define isnan(x) (fpclassify(x) == FP_NAN)
+#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+#define signbit(x) \
+    _Generic((x), float: __mini_signbitf, double: __mini_signbit)(x)
+
+#define __MINI_MATH_COMPARE(x, y, operation) \
+    _Generic(((x) + (y)), float: __mini_math_comparef, \
+             double: __mini_math_compare)((x), (y), (operation))
+#define isunordered(x, y) __MINI_MATH_COMPARE((x), (y), 0)
+#define isgreater(x, y) __MINI_MATH_COMPARE((x), (y), 1)
+#define isgreaterequal(x, y) __MINI_MATH_COMPARE((x), (y), 2)
+#define isless(x, y) __MINI_MATH_COMPARE((x), (y), 3)
+#define islessequal(x, y) __MINI_MATH_COMPARE((x), (y), 4)
+#define islessgreater(x, y) __MINI_MATH_COMPARE((x), (y), 5)
+
 double fabs(double x);
 float fabsf(float x);
 double copysign(double x, double y);
@@ -32,6 +64,13 @@ double scalbn(double x, int n);
 float scalbnf(float x, int n);
 double modf(double x, double *iptr);
 float modff(float x, float *iptr);
+
+double fmod(double x, double y);
+float fmodf(float x, float y);
+double remainder(double x, double y);
+float remainderf(float x, float y);
+double remquo(double x, double y, int *quo);
+float remquof(float x, float y, int *quo);
 
 double exp(double x);
 float expf(float x);
