@@ -13,6 +13,8 @@
 
 int __mini_fpclassify(double x);
 int __mini_fpclassifyf(float x);
+int __mini_math_predicate(double x, int operation);
+int __mini_math_predicatef(float x, int operation);
 int __mini_signbit(double x);
 int __mini_signbitf(float x);
 int __mini_math_compare(double x, double y, int operation);
@@ -20,10 +22,13 @@ int __mini_math_comparef(float x, float y, int operation);
 
 #define fpclassify(x) \
     _Generic((x), float: __mini_fpclassifyf, double: __mini_fpclassify)(x)
-#define isfinite(x) (fpclassify(x) != FP_INFINITE && fpclassify(x) != FP_NAN)
-#define isinf(x) (fpclassify(x) == FP_INFINITE)
-#define isnan(x) (fpclassify(x) == FP_NAN)
-#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+#define __MINI_MATH_PREDICATE(x, operation) \
+    _Generic((x), float: __mini_math_predicatef, \
+             double: __mini_math_predicate)((x), (operation))
+#define isfinite(x) __MINI_MATH_PREDICATE((x), 0)
+#define isinf(x) __MINI_MATH_PREDICATE((x), 1)
+#define isnan(x) __MINI_MATH_PREDICATE((x), 2)
+#define isnormal(x) __MINI_MATH_PREDICATE((x), 3)
 #define signbit(x) \
     _Generic((x), float: __mini_signbitf, double: __mini_signbit)(x)
 
