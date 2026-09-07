@@ -119,8 +119,8 @@ int main(void)
     }
 
     *__mini_errno_location() = 82;
-    if (mini_test_sin(dfrom(0x7ff0000000000042ULL)) ==
-            mini_test_sin(dfrom(0x7ff0000000000042ULL)) ||
+    if (mini_test_sin(dfrom(0x7ff0000000000000ULL)) ==
+            mini_test_sin(dfrom(0x7ff0000000000000ULL)) ||
         *__mini_errno_location() != EDOM) {
         return 6;
     }
