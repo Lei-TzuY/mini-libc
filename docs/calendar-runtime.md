@@ -121,14 +121,16 @@ and adds deterministic calendar evidence for:
 - C-locale names, day-of-year, Sunday/Monday week numbers, ISO week/year, UTC
   zone text, and composite `strftime` forms;
 - small-buffer and unsupported-format behavior;
-- bounded ISO week-year rejection when `%G`/`%g` would leave 0000 through 9999;
 - out-of-range `time_t` rejection when `tm_year` cannot represent the result;
 - distinct `gmtime`/`asctime` static-result addresses across a real C11 worker,
   while the main thread's TLS values remain unchanged.
 
 The hosted `time_test` proves that calendar conversion, normalization and text
 formatting perform zero raw `clock_gettime` calls while retaining the existing
-fake-clock scalar-time coverage.
+fake-clock scalar-time coverage. It also locks the bounded ISO week-year text
+policy at Gregorian year 0000, where January 1 belongs to ISO year -1 and
+`%G`/`%g` therefore return zero with `EINVAL` instead of unsigned-wrapping the
+year.
 
 Pinned tiny-c compiles the production calendar runtime and a dedicated time
 integration executable that performs `gmtime`, `mktime`, `strftime`,
