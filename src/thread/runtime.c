@@ -32,7 +32,7 @@ void __mini_thread_runtime_init_main(long *initial_stack)
     tcb->self = tcb;
     tcb->control = (void *)0;
     tcb->errno_value = 0;
-    tcb->stdio_lock_depth = 0U;
+    tcb->reserved = 0U;
     if (!__mini_thread_tls_prepare(tcb)) {
         mini_sys_exit(MINI_THREAD_INIT_FAILURE);
     }
