@@ -15,7 +15,7 @@ MATH_RENAMES := -Dfabs=mini_test_fabs -Dfabsf=mini_test_fabsf \
                 -Dsqrt=mini_test_sqrt -Dsqrtf=mini_test_sqrtf
 
 $(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_explog.o $(BUILD)/math_sqrt.o
-all: $(BUILD)/math_probe $(BUILD)/math_differential
+all: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/explog_probe $(BUILD)/explog_differential
 inspect: math_inspect
 test: math_test_run
 
@@ -39,6 +39,12 @@ $(BUILD)/math_probe.o: tests/math_probe.c include/math.h include/errno.h include
 $(BUILD)/math_probe: $(BUILD)/math_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/math_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/explog_probe.o: tests/explog_probe.c include/math.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/explog_probe: $(BUILD)/explog_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/explog_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/math_diff_impl.o: src/math/math.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
 
@@ -51,12 +57,21 @@ $(BUILD)/math_explog_diff_impl.o: src/math/explog.c include/math.h include/errno
 $(BUILD)/math_differential.o: tests/math_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_explog_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
+$(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
-math_test_run: $(BUILD)/math_probe $(BUILD)/math_differential
-	@test "$$($(BUILD)/math_probe)" = "math-ok" || { echo "unexpected math probe output" >&2; exit 1; }
-	$(BUILD)/math_differential
+$(BUILD)/explog_differential.o: tests/explog_differential.c | $(BUILD)
+	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-math_inspect: $(BUILD)/math_probe
+$(BUILD)/explog_differential: $(BUILD)/explog_differential.o $(BUILD)/math_explog_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/errno.o
+	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
+
+math_test_run: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/explog_probe $(BUILD)/explog_differential
+	@test "$$($(BUILD)/math_probe)" = "math-ok" || { echo "unexpected math probe output" >&2; exit 1; }
+	@test "$$($(BUILD)/explog_probe)" = "explog-ok" || { echo "unexpected exp/log probe output" >&2; exit 1; }
+	$(BUILD)/math_differential
+	$(BUILD)/explog_differential
+
+math_inspect: $(BUILD)/math_probe $(BUILD)/explog_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/math_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/explog_probe
