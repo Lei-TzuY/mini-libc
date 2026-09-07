@@ -50,6 +50,8 @@ done
     -o "$OUT/condition.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_mutex_integration.c \
     -o "$OUT/mutex.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_atomic_integration.c \
+    -o "$OUT/atomic-test.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -72,6 +74,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/mutex" \
         "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/atomic-test" \
+        "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -94,6 +98,8 @@ else
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/mutex" \
         "$OUT/mutex.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/atomic-test" \
+        "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -195,6 +201,12 @@ if [ "$mutex_output" != "tiny-mutex-ok" ]; then
     exit 1
 fi
 
+atomic_output=$("$OUT/atomic-test")
+if [ "$atomic_output" != "tiny-atomics-ok" ]; then
+    echo "unexpected tiny-c atomics output: $atomic_output" >&2
+    exit 1
+fi
+
 set +e
 termination_quick_output=$("$OUT/termination" quick)
 termination_quick_status=$?
@@ -223,5 +235,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/thread"
 ./tests/verify-no-host-libc.sh "$OUT/condition"
 ./tests/verify-no-host-libc.sh "$OUT/mutex"
+./tests/verify-no-host-libc.sh "$OUT/atomic-test"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
