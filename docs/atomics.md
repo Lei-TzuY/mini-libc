@@ -1,11 +1,11 @@
 # Public C11 atomics interoperability
 
 This document records mini-libc's bounded public C11 atomic interoperability
-baseline for static x86-64 Linux executables. The goal of this phase is not to
-reimplement atomic lowering in libc. Atomics are a compiler-language boundary:
-mini-libc supplies a stable `<stdatomic.h>` entry point and executable runtime
-integration, while the selected compiler owns machine-level atomic lowering and
-memory-order semantics.
+baseline for static x86-64 Linux executables and the first internal
+synchronization-convergence slice built on top of it. Atomics remain a
+compiler-language boundary: mini-libc supplies a stable `<stdatomic.h>` entry
+point and executable runtime integration, while the selected compiler owns
+machine-level atomic lowering and memory-order semantics.
 
 ## Header ownership
 
@@ -102,27 +102,71 @@ mini-elf-toolchain, so the evidence covers GCC, Clang, tiny-c, mini-libc's threa
 runtime, GNU `ld`, and mini-elf rather than only checking that `<stdatomic.h>` can
 be included.
 
-## Relationship to private runtime atomics
+## Internal synchronization convergence
 
-Mini-libc predates this public header and still has bespoke scalar atomic
-helpers in `src/internal/atomic.S`. They currently back allocator, thread,
-futex-state, TSS/once, and stdio synchronization code. This phase does not
-silently rewrite those proven state machines while introducing the public API.
-The public atomic boundary and its cross-toolchain evidence are established
-first.
+The public atomic boundary is now also used by the first set of runtime state
+machines instead of remaining a standalone language-surface feature.
+
+`once_flag`, `mtx_t`, and `cnd_t` use real C11 atomic storage in `<threads.h>`.
+Compile-time x86-64 ABI guards require the atomic integer/unsigned-long storage
+to retain the existing futex and owner-word sizes, and require `once_flag`,
+`cnd_t`, and `mtx_t` to retain their established public object sizes. Mutex
+state, owner identity, and recursion depth now use C11 atomic load/store,
+exchange, and fetch-add operations. Condition sequence publication uses C11
+atomic load/store/fetch-add. `call_once` uses C11 atomic storage for both the
+public flag and its private transition serializer.
+
+The migration deliberately keeps default sequentially consistent operations for
+this slice. The retired private x86 helpers were exchange/xadd based and already
+provided conservative ordering. Changing memory-order policy at the same time as
+changing the abstraction would make it harder to distinguish an ownership or
+futex regression from an ordering optimization.
+
+The futex ABI remains explicit. Atomic state words used by the thread APIs are
+required to remain lock-free 32-bit words on this supported target and their
+addresses are passed to the raw futex boundary after the same representation
+checks that protect the public object ABI.
+
+As a result, the following generic private assembly entry points have been
+removed and are forbidden from reappearing in production by the compiler-
+neutrality/source audit:
+
+- `__mini_atomic_fetch_add_int`;
+- `__mini_atomic_load_ulong`;
+- `__mini_atomic_exchange_ulong`.
+
+The hosted mutex target also no longer links `atomic.o`, providing a build-graph
+check that the migrated mutex state machine is independent of the remaining
+private assembly object.
+
+## Remaining private synchronization boundary
+
+Internal convergence is not yet complete. `src/internal/atomic.S` remains in the
+archive because several private runtime surfaces still use its integer exchange
+primitive and because stdio still uses its specialized recursive lock:
+
+- allocator metadata / `brk` ownership;
+- thread-control registry and detached-thread reaper coordination;
+- TSS registry serialization;
+- the process-wide stdio serializer and its per-thread recursive depth.
+
+Those paths are intentionally left untouched by this slice. In particular, the
+stdio lock has a separate recursive/TLS contract and should not be treated as a
+mechanical replacement of an integer exchange call.
 
 ## Phase boundary and promotion
 
-This phase closes the bounded public C11 atomic interoperability milestone for
-the current static x86-64 runtime. It does not claim general dynamic linking,
-non-lock-free large atomics, 128-bit atomics, or a portable contract for pointer
-fetch arithmetic.
+This phase closes two bounded milestones for the current static x86-64 runtime:
+public C11 atomic interoperability, and C11-atomic convergence of the public C11
+synchronization object state machines (`mtx_t`, `cnd_t`, and `once_flag`). It
+does not claim general dynamic linking, non-lock-free large atomics, 128-bit
+atomics, or a portable contract for pointer fetch arithmetic.
 
-The next higher-value synchronization frontier is **internal synchronization
-convergence**. Allocator, thread lifecycle, mutex/condition, once/TSS, and stdio
-still mix C state machines with bespoke scalar assembly atomic helpers. A
-coherent next phase should migrate those internal scalar synchronization paths
-to the now-proven C11 atomic abstraction, preserve all futex and recursive-lock
-invariants, retain deterministic fake-runtime tests, and reduce or eliminate
-private scalar atomic assembly only after GCC, Clang, tiny-c, GNU `ld`, and
-mini-elf all prove the converted runtime executable behavior.
+The next higher-value synchronization frontier remains **private runtime lock
+convergence**. Allocator, thread registry/reaper, TSS registry, and stdio still
+depend on the remaining bespoke scalar assembly boundary. A coherent next phase
+should migrate those private serializers onto the proven C11 atomic abstraction,
+preserve every futex and recursive-lock invariant, retain deterministic fake-
+runtime tests, and delete `src/internal/atomic.S` only when no runtime consumer
+remains and GCC, Clang, tiny-c, GNU `ld`, and mini-elf all prove the converted
+executable behavior.
