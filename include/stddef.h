@@ -3,5 +3,7 @@
 
 /* mini-libc targets the x86-64 Linux LP64 data model. */
 typedef unsigned long size_t;
+typedef long ptrdiff_t;
+typedef int wchar_t;
 
 #endif
