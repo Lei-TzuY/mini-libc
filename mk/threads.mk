@@ -3,15 +3,12 @@ CONDITION_RENAMES := -Dmini_sys_futex=mini_test_futex \
                      -Dmtx_unlock=mini_test_mtx_unlock
 SLEEP_RENAMES := -Dmini_sys_nanosleep=mini_test_nanosleep
 
-$(LIBC): $(BUILD)/atomic.o $(BUILD)/condition.o $(BUILD)/mutex.o $(BUILD)/sleep.o $(BUILD)/yield.o $(BUILD)/once.o $(BUILD)/tss.o $(BUILD)/tls.o $(BUILD)/thread_runtime.o $(BUILD)/lifecycle.o $(BUILD)/thread_entry.o
+$(LIBC): $(BUILD)/condition.o $(BUILD)/mutex.o $(BUILD)/sleep.o $(BUILD)/yield.o $(BUILD)/once.o $(BUILD)/tss.o $(BUILD)/tls.o $(BUILD)/thread_runtime.o $(BUILD)/lifecycle.o $(BUILD)/thread_entry.o
 all: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe $(BUILD)/condition_test $(BUILD)/mutex_test $(BUILD)/once_tss_test $(BUILD)/tls_test
 inspect: thread_inspect
 test: thread_test_run
 
 .PHONY: thread_inspect thread_test_run
-
-$(BUILD)/atomic.o: src/internal/atomic.S | $(BUILD)
-	$(CC) $(ASFLAGS) -c $< -o $@
 
 $(BUILD)/condition.o: src/thread/condition.c include/threads.h include/stdatomic.h include/time.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
