@@ -24,11 +24,12 @@ done
 "$CC" -fno-pie -c src/stdio/scan_entry.S -o "$OUT/scan_entry.o"
 "$CC" -fno-pie -c src/control/setjmp.S -o "$OUT/setjmp.o"
 "$CC" -fno-pie -c src/thread/thread_entry.S -o "$OUT/thread-entry.o"
+"$CC" -fno-pie -c src/fenv/fenv_asm.S -o "$OUT/fenv-asm.o"
 "$CC" -fno-pie -c src/math/sqrt.S -o "$OUT/math-sqrt.o"
 "$CC" -fno-pie -c src/crt/crt0.S -o "$OUT/crt0.o"
 "$AR" rcs "$OUT/libc.a" $objects "$OUT/syscall.o" \
     "$OUT/format_entry.o" "$OUT/scan_entry.o" "$OUT/setjmp.o" \
-    "$OUT/thread-entry.o" "$OUT/math-sqrt.o"
+    "$OUT/thread-entry.o" "$OUT/fenv-asm.o" "$OUT/math-sqrt.o"
 
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_c_integration.c \
     -o "$OUT/integration.o"
