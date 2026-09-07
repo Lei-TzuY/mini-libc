@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Lei-TzuY/mini-elf-toolchain
-          ref: eba756877d209287bd776b370d93d7a6b8f87fe6
+          ref: 50118544203cb608e33dfef51050caf6069d040b
           path: .integration/mini-elf-toolchain
       - name: Build integration toolchains
         run: |
