@@ -8,14 +8,14 @@ on host pthread or host TLS services.
 
 ## Public surface
 
-`<threads.h>` now exposes:
+`<threads.h>` exposes:
 
 ```c
 typedef struct {
-    int __state;
+    atomic_int __state;
 } once_flag;
 
-#define ONCE_FLAG_INIT {0}
+#define ONCE_FLAG_INIT {ATOMIC_VAR_INIT(0)}
 
 void call_once(once_flag *flag, void (*func)(void));
 
@@ -29,6 +29,10 @@ void tss_delete(tss_t key);
 void *tss_get(tss_t key);
 int tss_set(tss_t key, void *value);
 ```
+
+`<threads.h>` includes the public C11 atomic surface so `once_flag` uses a real
+lock-free `atomic_int` state word. Compile-time ABI guards require the object to
+remain exactly one 32-bit futex word on the supported x86-64 profile.
 
 The runtime supports 32 simultaneously active TSS keys. Exhausting that bounded
 registry returns `thrd_nomem`. Successful and failed TSS operations preserve the
@@ -49,16 +53,21 @@ A small process-wide transition lock serializes only state inspection and state
 publication. The initializer itself runs outside that lock, so initialization
 functions attached to different flags may execute concurrently.
 
-The first caller changes `0 -> 1`, releases the transition lock, invokes the
-initializer, then publishes `2` and wakes all futex waiters on the flag. A caller
-that observes state 1 sleeps with `FUTEX_WAIT(flag, 1)` and retries. If completion
-races with entry into the wait, the futex expected-value comparison returns
-immediately and the caller observes state 2 on the next loop.
+Both the public flag and the private transition serializer now use C11 atomic
+storage and operations. The first caller atomically publishes `0 -> 1`, releases
+the transition lock, invokes the initializer, then atomically publishes `2` and
+wakes all futex waiters on the flag. A caller that observes state 1 sleeps with
+`FUTEX_WAIT(flag, 1)` and retries. If completion races with entry into the wait,
+the futex expected-value comparison returns immediately and the caller observes
+state 2 on the next loop.
 
-The locked transition boundaries provide the publication barrier used by this
-runtime: callers do not return from `call_once` after observing completion until
-they have passed through the same atomic lock path that follows the initializer's
-writes.
+The migration retains default sequentially consistent operations. The previous
+private exchange helper already imposed conservative ordering, so this phase
+does not mix abstraction convergence with a memory-order weakening exercise.
+The transition boundaries continue to provide the publication barrier used by
+this runtime: callers do not return from `call_once` after observing completion
+until they have passed through the same atomic serialization path that follows
+the initializer's writes.
 
 This phase does not define recovery when an initializer terminates its thread or
 otherwise fails to return normally. In that case the flag remains in the running
@@ -89,9 +98,14 @@ bounded implementation limit rather than an unbounded ABA claim.
 calling thread, but it never invokes a destructor. Values that remain in other
 TCBs after deletion are unreachable because their generation is stale.
 
+The TSS registry serializer itself remains on the private integer-exchange /
+futex boundary in this convergence slice. Moving that private registry lock to
+C11 atomics is part of the next internal-lock phase rather than being hidden
+inside the public once-flag migration.
+
 ## Destructor lifecycle
 
-Worker TCBs now own the fixed TSS value/generation arrays. New worker controls
+Worker TCBs own the fixed TSS value/generation arrays. New worker controls
 explicitly zero those arrays before clone publication; the main and reaper TCBs
 have static-storage zero initialization.
 
@@ -152,21 +166,21 @@ The deterministic hosted harness additionally proves:
 The pinned tiny-c thread integration compiles and executes `call_once`, `tss_*`,
 normal-return destructors, and explicit-`thrd_exit` destructors in the existing
 thread stress executable. The same executable is linked and run through both GNU
-`ld` and the pinned mini-elf-toolchain.
+`ld` and the pinned mini-elf-toolchain. The atomic-convergence candidate proves
+that the `atomic_int` once-flag representation is interoperable on that same
+cross-toolchain path rather than only under GCC/Clang.
 
 ## Phase boundary and promotion
 
 Exactly-once initialization, bounded generation-safe TSS, and thread-exit
-destructor passes close this C11 thread-lifecycle phase. More key-count variants
-or additional destructor-pass tests are not the next priority.
+destructor passes close the C11 thread-lifecycle phase. The `once_flag` state
+machine has additionally converged on the public C11 atomic abstraction; more
+once-state variants are not the next priority.
 
-The next larger thread-runtime frontier is compiler-native C11 TLS
-interoperability. The pinned tiny-c compiler already emits real `_Thread_local`
-objects using the x86-64 local-exec TLS model, while mini-libc currently owns the
-`%fs` thread-pointer base for its custom TCB. Before claiming `<threads.h>`
-`thread_local` interoperability, the runtime and linker path need an explicit
-contract that makes compiler-emitted TLS objects coexist with the mini-libc TCB
-on main and cloned threads. That phase should include real `_Thread_local`
-isolation through GCC, Clang, tiny-c, and mini-elf. The remaining `thrd_yield`
-scheduler boundary is a small C11 conformance item to close alongside that
-larger TLS integration, not a standalone feature milestone.
+Compiler-native C11 TLS interoperability and `thrd_yield` have since shipped in
+the later compiler-TLS phase. The current higher-value synchronization frontier
+is the remaining private runtime-lock convergence described in
+`docs/atomics.md`: TSS registry serialization, allocator ownership, thread
+registry/reaper coordination, and the specialized recursive stdio lock still
+retain the private scalar assembly boundary and should be migrated only with
+their existing futex/lifetime invariants intact.
