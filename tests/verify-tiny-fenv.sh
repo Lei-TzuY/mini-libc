@@ -16,7 +16,12 @@ fi
 "$CC" -fno-pie -c src/fenv/fenv_asm.S -o "$OUT/fenv-asm.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/fenv_rounding.c \
     -o "$OUT/fenv-rounding.o"
-"$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/decompose.c \
+    -o "$OUT/fenv-decompose.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/explog.c \
+    -o "$OUT/fenv-explog.o"
+"$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o" \
+    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_integration.c \
     -o "$OUT/fenv-test.o"
 
