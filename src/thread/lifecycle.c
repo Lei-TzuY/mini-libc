@@ -48,6 +48,8 @@ struct mini_thread_control {
     thrd_start_t start;
     void *arg;
     struct mini_thread_control *next;
+    _Alignas(MINI_COMPILER_TLS_ALIGNMENT)
+        unsigned char compiler_tls[MINI_COMPILER_TLS_CAPACITY];
     struct mini_thread_tcb tcb;
 };
 

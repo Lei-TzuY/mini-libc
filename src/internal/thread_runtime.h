@@ -2,6 +2,8 @@
 #define MINI_LIBC_INTERNAL_THREAD_RUNTIME_H
 
 #define MINI_TSS_MAX_KEYS 32U
+#define MINI_COMPILER_TLS_CAPACITY 4096U
+#define MINI_COMPILER_TLS_ALIGNMENT 16U
 
 struct mini_thread_tcb {
     struct mini_thread_tcb *self;
@@ -12,9 +14,11 @@ struct mini_thread_tcb {
     unsigned int tss_generations[MINI_TSS_MAX_KEYS];
 };
 
-void __mini_thread_runtime_init_main(void);
+void __mini_thread_runtime_init_main(long *initial_stack);
 struct mini_thread_tcb *__mini_thread_current_tcb(void);
 void __mini_errno_set_provider(int *(*provider)(void));
 void __mini_tss_run_destructors(void);
+int __mini_thread_tls_discover(long *initial_stack);
+int __mini_thread_tls_prepare(struct mini_thread_tcb *tcb);
 
 #endif
