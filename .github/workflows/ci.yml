@@ -33,7 +33,9 @@ jobs:
       - name: Compile and run mini-libc through tiny-c-compiler
         env:
           MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
-        run: ./tests/verify-tiny-c-compiler.sh
+        run: |
+          ./tests/verify-tiny-c-compiler.sh
+          sh ./tests/verify-tiny-c-tls.sh
 
   mini-toolchain-bootstrap:
     runs-on: ubuntu-latest
@@ -49,7 +51,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Lei-TzuY/mini-elf-toolchain
-          ref: 3e0f2da92e21b9399dfa4139b56c2b6b52c3c1a5
+          ref: 9eb1a4814d3e7b56fd4678a9818a7439794740f0
           path: .integration/mini-elf-toolchain
       - name: Build integration toolchains
         run: |
@@ -60,4 +62,6 @@ jobs:
           MINICC: ${{ github.workspace }}/.integration/tiny-c-compiler/minicc
           MINI_ELF_LINKER: ${{ github.workspace }}/.integration/mini-elf-toolchain/target/debug/mini-elf-toolchain
           OUT: build/mini-toolchain-integration
-        run: ./tests/verify-tiny-c-compiler.sh
+        run: |
+          ./tests/verify-tiny-c-compiler.sh
+          sh ./tests/verify-tiny-c-tls.sh
