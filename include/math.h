@@ -24,6 +24,15 @@ float ceilf(float x);
 double round(double x);
 float roundf(float x);
 
+double frexp(double x, int *exp);
+float frexpf(float x, int *exp);
+double ldexp(double x, int exp);
+float ldexpf(float x, int exp);
+double scalbn(double x, int n);
+float scalbnf(float x, int n);
+double modf(double x, double *iptr);
+float modff(float x, float *iptr);
+
 double sqrt(double x);
 float sqrtf(float x);
 

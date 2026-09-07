@@ -52,6 +52,9 @@ int main(void)
     float nan_float = ffrom(0x7fc00042U);
     double result;
     float fresult;
+    double integral;
+    float fintegral;
+    int exponent;
 
     if (math_errhandling != MATH_ERRNO) {
         return 1;
@@ -95,33 +98,127 @@ int main(void)
         return 9;
     }
 
-    errno = 71;
-    result = sqrt(9.0);
-    if (result != 3.0 || errno != 71) {
+    exponent = 99;
+    result = frexp(8.0, &exponent);
+    if (result != 0.5 || exponent != 4) {
         return 10;
+    }
+    exponent = 99;
+    result = frexp(-6.0, &exponent);
+    if (result != -0.75 || exponent != 3) {
+        return 11;
+    }
+    exponent = 99;
+    result = frexp(dfrom(1ULL), &exponent);
+    if (result != 0.5 || exponent != -1073) {
+        return 12;
+    }
+    exponent = 99;
+    fresult = frexpf(ffrom(1U), &exponent);
+    if (fresult != 0.5f || exponent != -148) {
+        return 13;
+    }
+    exponent = 99;
+    result = frexp(dfrom(0x8000000000000000ULL), &exponent);
+    if (dbits(result) != 0x8000000000000000ULL || exponent != 0) {
+        return 14;
+    }
+    exponent = 99;
+    result = frexp(nan_value, &exponent);
+    if (dbits(result) != dbits(nan_value) || exponent != 0) {
+        return 15;
+    }
+
+    errno = 81;
+    result = scalbn(0.75, 4);
+    if (result != 12.0 || errno != 81) {
+        return 16;
+    }
+    errno = 82;
+    fresult = ldexpf(0.75f, 4);
+    if (fresult != 12.0f || errno != 82) {
+        return 17;
+    }
+    errno = 83;
+    result = scalbn(1.0, -1074);
+    if (dbits(result) != 1ULL || errno != 83) {
+        return 18;
+    }
+    errno = 84;
+    fresult = scalbnf(1.0f, -149);
+    if (fbits(fresult) != 1U || errno != 84) {
+        return 19;
+    }
+    errno = 85;
+    result = scalbn(dfrom(1ULL), 52);
+    if (dbits(result) != 0x0010000000000000ULL || errno != 85) {
+        return 20;
+    }
+    errno = 86;
+    result = scalbn(1.5, -1074);
+    if (dbits(result) != 2ULL || errno != ERANGE) {
+        return 21;
+    }
+    errno = 87;
+    result = scalbn(1.0, -1075);
+    if (dbits(result) != 0ULL || errno != ERANGE) {
+        return 22;
+    }
+    errno = 88;
+    result = ldexp(-1.0, 1024);
+    if (dbits(result) != 0xfff0000000000000ULL || errno != ERANGE) {
+        return 23;
+    }
+
+    errno = 89;
+    result = modf(-3.25, &integral);
+    if (result != -0.25 || integral != -3.0 || errno != 89) {
+        return 24;
+    }
+    result = modf(-3.0, &integral);
+    if (dbits(result) != 0x8000000000000000ULL || integral != -3.0) {
+        return 25;
+    }
+    fresult = modff(-3.25f, &fintegral);
+    if (fresult != -0.25f || fintegral != -3.0f) {
+        return 26;
+    }
+    result = modf(dfrom(0x7ff0000000000000ULL), &integral);
+    if (dbits(result) != 0ULL || dbits(integral) != 0x7ff0000000000000ULL) {
+        return 27;
+    }
+    result = modf(nan_value, &integral);
+    if (dbits(result) != dbits(nan_value) || dbits(integral) != dbits(nan_value)) {
+        return 28;
+    }
+
+    errno = 91;
+    result = sqrt(9.0);
+    if (result != 3.0 || errno != 91) {
+        return 29;
     }
     if (dbits(sqrt(2.0)) != 0x3ff6a09e667f3bcdULL ||
         fbits(sqrtf(2.0f)) != 0x3fb504f3U) {
-        return 11;
+        return 30;
     }
     if (dbits(sqrt(dfrom(0x8000000000000000ULL))) !=
             0x8000000000000000ULL) {
-        return 12;
+        return 31;
     }
 
-    errno = 72;
+    errno = 92;
     result = sqrt(-1.0);
     if (result == result || errno != EDOM) {
-        return 13;
+        return 32;
     }
-    errno = 73;
+    errno = 93;
     fresult = sqrtf(-1.0f);
     if (fresult == fresult || errno != EDOM) {
-        return 14;
+        return 33;
     }
 
     if (mini_sys_write(1, "math-ok\n", 8) != 8) {
-        return 15;
+        return 34;
     }
     return 0;
 }
