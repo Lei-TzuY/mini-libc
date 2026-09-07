@@ -10,7 +10,7 @@
 #define MINI_PI 3.141592653589793238462643383279502884
 #define MINI_LOG_PI 1.14472988584940017414342735135305871165
 #define MINI_LOG_SQRT_2PI 0.91893853320467274178032973640561763986
-#define MINI_TWO_POW_53 9007199254740992.0
+#define MINI_TWO_POW_52 4503599627370496.0
 
 static const double lanczos_coefficients[] = {
     0.99999999999980993227684700473478,
@@ -73,29 +73,42 @@ static int double_is_nan_bits(unsigned long long bits)
            (bits & MINI_DOUBLE_FRAC) != 0ULL;
 }
 
-static int integer_is_odd(double value)
+static int signed_integer_is_odd(long long value)
 {
-    double magnitude = value < 0.0 ? -value : value;
+    unsigned long long magnitude;
 
-    if (magnitude >= MINI_TWO_POW_53) {
-        return 0;
+    if (value < 0) {
+        magnitude = (unsigned long long)(-value);
+    } else {
+        magnitude = (unsigned long long)value;
     }
-    return (((unsigned long long)magnitude) & 1ULL) != 0ULL;
+    return (magnitude & 1ULL) != 0ULL;
 }
 
 /*
  * Reduce x to sin(pi*x) without ever sending a large argument to the bounded
- * trigonometric runtime. For finite nonintegers, fraction is in (0, 1) and is
- * mirrored into (0, 0.5].
+ * trigonometric runtime. Every representable binary64 value with magnitude at
+ * least 2^52 is integral, so only smaller values need a fractional reduction.
  */
 static double sin_pi(double x, int *pole)
 {
-    double integer = floor(x);
-    double fraction = x - integer;
+    long long integer;
+    double fraction;
     double reduced;
     double result;
     int saved_errno = errno;
 
+    if (x >= MINI_TWO_POW_52 || x <= -MINI_TWO_POW_52) {
+        *pole = 1;
+        return 0.0;
+    }
+
+    integer = (long long)x;
+    fraction = x - (double)integer;
+    if (fraction < 0.0) {
+        --integer;
+        fraction += 1.0;
+    }
     if (fraction == 0.0) {
         *pole = 1;
         return 0.0;
@@ -103,7 +116,7 @@ static double sin_pi(double x, int *pole)
 
     reduced = fraction > 0.5 ? 1.0 - fraction : fraction;
     result = sin(MINI_PI * reduced);
-    if (integer_is_odd(integer)) {
+    if (signed_integer_is_odd(integer)) {
         result = -result;
     }
 
