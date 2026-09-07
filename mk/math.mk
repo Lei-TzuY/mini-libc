@@ -10,9 +10,11 @@ MATH_RENAMES := -Dfabs=mini_test_fabs -Dfabsf=mini_test_fabsf \
                 -Dldexp=mini_test_ldexp -Dldexpf=mini_test_ldexpf \
                 -Dscalbn=mini_test_scalbn -Dscalbnf=mini_test_scalbnf \
                 -Dmodf=mini_test_modf -Dmodff=mini_test_modff \
+                -Dexp=mini_test_exp -Dexpf=mini_test_expf \
+                -Dlog=mini_test_log -Dlogf=mini_test_logf \
                 -Dsqrt=mini_test_sqrt -Dsqrtf=mini_test_sqrtf
 
-$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_sqrt.o
+$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_explog.o $(BUILD)/math_sqrt.o
 all: $(BUILD)/math_probe $(BUILD)/math_differential
 inspect: math_inspect
 test: math_test_run
@@ -23,6 +25,9 @@ $(BUILD)/math.o: src/math/math.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_decompose.o: src/math/decompose.c include/math.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/math_explog.o: src/math/explog.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_sqrt.o: src/math/sqrt.S | $(BUILD)
@@ -40,10 +45,13 @@ $(BUILD)/math_diff_impl.o: src/math/math.c include/math.h include/errno.h | $(BU
 $(BUILD)/math_decompose_diff_impl.o: src/math/decompose.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
 
+$(BUILD)/math_explog_diff_impl.o: src/math/explog.c include/math.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(MATH_RENAMES) -c $< -o $@
+
 $(BUILD)/math_differential.o: tests/math_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
+$(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_explog_diff_impl.o $(BUILD)/math_sqrt.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
 math_test_run: $(BUILD)/math_probe $(BUILD)/math_differential
