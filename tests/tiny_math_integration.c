@@ -118,8 +118,30 @@ int main(void)
         return 19;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 83;
+    if (!close_double(sin(0.5), 0.47942553860420300538, 3.0e-15) ||
+        !close_double(cos(0.5), 0.87758256189037271612, 3.0e-15) ||
+        !close_double(tan(0.5), 0.54630248984379051326, 5.0e-15) || errno != 83) {
         return 20;
+    }
+    if (!close_double(sin(1234.5), 0.14539565052293642557, 4.0e-14) ||
+        !close_double(cos(1234.5), -0.98937359213242199729, 4.0e-14) ||
+        !close_double(tan(1234.5), -0.14695727850342305132, 7.0e-14)) {
+        return 21;
+    }
+    if (!close_float(sinf(0.5f), 0.47942555f, 2.0e-7f) ||
+        !close_float(cosf(0.5f), 0.87758255f, 2.0e-7f) ||
+        !close_float(tanf(0.5f), 0.5463025f, 3.0e-7f)) {
+        return 22;
+    }
+    errno = 84;
+    bad = sin(1048577.0);
+    if (bad == bad || errno != EDOM) {
+        return 23;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 24;
     }
     return 0;
 }
