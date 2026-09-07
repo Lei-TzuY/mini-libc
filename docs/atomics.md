@@ -116,12 +116,20 @@ and fetch-add operations. Condition sequence publication uses C11 atomic
 load/store/fetch-add. `call_once` uses C11 atomic storage for both the public flag
 and its private transition serializer.
 
-The allocator metadata lock, thread-control registry/reaper serializer, and TSS
-registry serializer now share one private `atomic_int` + futex abstraction in
-`src/internal/futex_lock.h`. The helper requires a lock-free 32-bit `atomic_int`,
-keeps the existing exchange/`FUTEX_WAIT`/`FUTEX_WAKE` protocol, and passes the
-same representation to the raw futex boundary. Their existing heap, lifetime,
-reaper, and TSS generation/destructor state machines remain outside the helper.
+The allocator metadata lock, thread-control registry/reaper serializer, TSS
+registry serializer, and process-wide stdio serializer now share the proven C11
+atomic/futex boundary. The non-recursive private locks use
+`src/internal/futex_lock.h`; the stdio wrapper adds only the established
+per-thread recursion depth stored in the mini-libc TCB before entering that same
+32-bit lock-free `atomic_int` + futex protocol.
+
+The stdio migration deliberately preserves the existing TCB layout: the
+implementation-reserved 32-bit word that the old assembly reached as `%fs:20`
+continues to carry recursive depth, but C now reaches it through
+`__mini_thread_current_tcb()` instead of a hard-coded segment offset. Nested
+formatted/scanner/file calls therefore remain recursive without acquiring the
+global word again, while only the outermost unlock publishes state zero and
+issues the futex wake.
 
 The convergence deliberately keeps default sequentially consistent operations.
 The retired private x86 helpers were exchange/xadd based and already provided
@@ -138,40 +146,33 @@ compiler-neutrality/source audit:
 - `__mini_atomic_exchange_ulong`;
 - `__mini_atomic_exchange_int`.
 
-The real `thread_probe` supplies contention evidence for the migrated private
-serializers: four allocator workers repeatedly run malloc/calloc/realloc/free
-while thread creation, join/detach races, and the detached-thread reaper exercise
-the thread registry. `once_tss_probe` runs eight workers through TSS generation,
-lookup, destructor, and thread-exit behavior. Deterministic hosted harnesses
-retain allocator failure/realloc checks and TSS lifecycle state checks without
-reintroducing a private atomic test hook.
+The final specialized assembly entries, `__mini_stdio_lock` and
+`__mini_stdio_unlock`, have now moved to `src/stdio/lock.c` as well.
+`src/internal/atomic.S` is deleted and no longer appears in either the normal
+archive build or the pinned tiny-c integration archive.
 
-## Remaining private synchronization boundary
-
-`src/internal/atomic.S` remains in the archive for exactly one specialized
-runtime surface: the process-wide stdio serializer. That lock combines a global
-futex word with per-thread recursive depth stored in the mini-libc TLS/TCB
-contract, so it is intentionally not treated as a mechanical replacement of the
-non-recursive serializers migrated above.
-
-The assembly object no longer provides a generic scalar atomic primitive. Its
-remaining purpose is `__mini_stdio_lock` / `__mini_stdio_unlock`, which preserve
-the recursive stdio critical-section contract used by FILE buffering, registry,
-positioning, formatting, and scanning wrappers.
+The real `thread_probe` supplies contention evidence for the migrated generic
+private serializers: four allocator workers repeatedly run
+malloc/calloc/realloc/free while thread creation, join/detach races, and the
+detached-thread reaper exercise the thread registry. `once_tss_probe` runs eight
+workers through TSS generation, lookup, destructor, and thread-exit behavior.
+The real `stdio_thread_probe` concurrently formats records from six workers into
+one stream and scans them back, exercising nested recursive stdio calls and
+cross-thread serialization. A deterministic hosted stdio-lock harness separately
+locks down recursion depth and the WAIT/WAKE boundary without scheduler timing.
 
 ## Phase boundary and promotion
 
-This phase closes three bounded milestones for the current static x86-64 runtime:
-public C11 atomic interoperability, C11-atomic convergence of public C11
-synchronization objects (`mtx_t`, `cnd_t`, and `once_flag`), and convergence of
-the generic private allocator/thread/TSS serializers. It does not claim general
-dynamic linking, non-lock-free large atomics, 128-bit atomics, or a portable
-contract for pointer fetch arithmetic.
+This phase closes the bounded synchronization-convergence milestones for the
+current static x86-64 runtime: public C11 atomic interoperability, C11-atomic
+convergence of public C11 synchronization objects, convergence of generic
+private allocator/thread/TSS serializers, and convergence of the specialized
+recursive stdio serializer.
 
-The next higher-value synchronization frontier is now narrowly scoped to
-**recursive stdio serializer convergence**. A coherent next phase should move
-the process-wide stdio lock word onto the proven C11 atomic/futex abstraction
-while preserving `%fs`/TCB recursive depth, nested formatted/scanner/file calls,
-and multi-thread FILE behavior. `src/internal/atomic.S` should be deleted only
-after that specialized lock has executable GCC, Clang, tiny-c, GNU `ld`, and
-mini-elf evidence and no consumer remains.
+There is no remaining private scalar synchronization assembly object to farm for
+another migration PR. Future atomic work should require a new capability claim
+such as a broader target/ABI profile or a deliberately justified memory-order
+change with executable concurrency evidence; ordinary lock-by-lock convergence
+is complete. The next repository phase should therefore be selected from the
+remaining live architectural gaps rather than extending this completed
+serializer-convergence line.
