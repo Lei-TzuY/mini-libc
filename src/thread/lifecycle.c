@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <threads.h>
 
+#include "../internal/futex_lock.h"
 #include "../internal/thread_runtime.h"
 
 #define MINI_THREAD_STACK_SIZE (1024UL * 1024UL)
@@ -59,13 +60,13 @@ struct mini_futex_timeout {
 };
 
 static struct mini_thread_control *mini_thread_controls;
-static volatile int mini_thread_registry_lock_word;
+static struct mini_futex_lock mini_thread_registry_lock_word =
+    MINI_FUTEX_LOCK_INIT;
 static volatile int mini_reaper_event;
 static int mini_reaper_started;
 static struct mini_thread_control mini_reaper_control;
 static const struct mini_futex_timeout mini_reaper_poll = {0L, 10000000L};
 
-extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
 extern long __mini_clone_thread(struct mini_thread_control *control,
                                 void *stack_top, unsigned long flags,
                                 volatile int *child_tid, void *tls);
@@ -77,18 +78,12 @@ static int raw_failed(long value)
 
 static void registry_lock(void)
 {
-    while (__mini_atomic_exchange_int(&mini_thread_registry_lock_word, 1) != 0) {
-        (void)mini_sys_futex(&mini_thread_registry_lock_word, MINI_FUTEX_WAIT, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_acquire(&mini_thread_registry_lock_word);
 }
 
 static void registry_unlock(void)
 {
-    if (__mini_atomic_exchange_int(&mini_thread_registry_lock_word, 0) != 0) {
-        (void)mini_sys_futex(&mini_thread_registry_lock_word, MINI_FUTEX_WAKE, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_release(&mini_thread_registry_lock_word);
 }
 
 static struct mini_thread_control *find_control_locked(thrd_t thread)

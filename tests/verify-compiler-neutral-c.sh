@@ -92,7 +92,8 @@ done
 for removed_helper in \
     '__mini_atomic_fetch_add_int' \
     '__mini_atomic_load_ulong' \
-    '__mini_atomic_exchange_ulong'
+    '__mini_atomic_exchange_ulong' \
+    '__mini_atomic_exchange_int'
 do
     if grep -R -n -F "$removed_helper" include src; then
         echo "removed private atomic helper $removed_helper reintroduced into production" >&2

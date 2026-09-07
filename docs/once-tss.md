@@ -98,10 +98,12 @@ bounded implementation limit rather than an unbounded ABA claim.
 calling thread, but it never invokes a destructor. Values that remain in other
 TCBs after deletion are unreachable because their generation is stale.
 
-The TSS registry serializer itself remains on the private integer-exchange /
-futex boundary in this convergence slice. Moving that private registry lock to
-C11 atomics is part of the next internal-lock phase rather than being hidden
-inside the public once-flag migration.
+The TSS registry serializer now uses the shared private C11 `atomic_int` + futex
+lock defined in `src/internal/futex_lock.h`. The generation, active-state, and
+destructor-table critical sections are unchanged; only the serializer primitive
+moved off the retired private x86 exchange helper. The supported profile requires
+the atomic state to remain a lock-free 32-bit futex word and keeps conservative
+sequentially consistent exchange semantics for this convergence step.
 
 ## Destructor lifecycle
 
@@ -166,21 +168,18 @@ The deterministic hosted harness additionally proves:
 The pinned tiny-c thread integration compiles and executes `call_once`, `tss_*`,
 normal-return destructors, and explicit-`thrd_exit` destructors in the existing
 thread stress executable. The same executable is linked and run through both GNU
-`ld` and the pinned mini-elf-toolchain. The atomic-convergence candidate proves
-that the `atomic_int` once-flag representation is interoperable on that same
-cross-toolchain path rather than only under GCC/Clang.
+`ld` and the pinned mini-elf-toolchain. The private serializer convergence keeps
+that same cross-toolchain path while removing the generic private atomic helper.
 
 ## Phase boundary and promotion
 
 Exactly-once initialization, bounded generation-safe TSS, and thread-exit
-destructor passes close the C11 thread-lifecycle phase. The `once_flag` state
-machine has additionally converged on the public C11 atomic abstraction; more
-once-state variants are not the next priority.
+destructor passes close the C11 thread-lifecycle phase. Both the `once_flag`
+state machine and the TSS registry serializer have now converged on the proven
+C11 atomic abstraction; more once/TSS state variants are not the next priority.
 
 Compiler-native C11 TLS interoperability and `thrd_yield` have since shipped in
-the later compiler-TLS phase. The current higher-value synchronization frontier
-is the remaining private runtime-lock convergence described in
-`docs/atomics.md`: TSS registry serialization, allocator ownership, thread
-registry/reaper coordination, and the specialized recursive stdio lock still
-retain the private scalar assembly boundary and should be migrated only with
-their existing futex/lifetime invariants intact.
+the later compiler-TLS phase. Allocator ownership and thread registry/reaper
+serialization have converged in the same private-lock phase as TSS. The only
+remaining private assembly synchronization boundary is the specialized recursive
+stdio serializer; `docs/atomics.md` is authoritative for that next promotion.
