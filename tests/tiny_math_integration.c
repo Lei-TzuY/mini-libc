@@ -140,8 +140,27 @@ int main(void)
         return 23;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 85;
+    if (!close_double(atan(0.5), 0.46364760900080611621, 5.0e-16) ||
+        !close_double(atan2(1.0, -1.0), 2.35619449019234492885, 7.0e-16) ||
+        !close_double(asin(0.5), 0.52359877559829887308, 6.0e-16) ||
+        !close_double(acos(0.5), 1.04719755119659774615, 7.0e-16) || errno != 85) {
         return 24;
+    }
+    if (!close_float(atanf(0.5f), 0.4636476f, 2.0e-7f) ||
+        !close_float(atan2f(-1.0f, -1.0f), -2.3561945f, 3.0e-7f) ||
+        !close_float(asinf(0.5f), 0.5235988f, 2.0e-7f) ||
+        !close_float(acosf(0.5f), 1.0471976f, 3.0e-7f)) {
+        return 25;
+    }
+    errno = 86;
+    bad = asin(1.01);
+    if (bad == bad || errno != EDOM) {
+        return 26;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 27;
     }
     return 0;
 }
