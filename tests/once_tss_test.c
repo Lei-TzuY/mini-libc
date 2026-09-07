@@ -31,14 +31,6 @@ struct mini_thread_tcb *__mini_thread_current_tcb(void)
     return &fake_tcbs[current_tcb];
 }
 
-int __mini_atomic_exchange_int(volatile int *value, int replacement)
-{
-    int previous = *value;
-
-    *value = replacement;
-    return previous;
-}
-
 long mini_sys_futex(volatile int *uaddr, int op, int value,
                     const void *timeout, volatile int *uaddr2, int value3)
 {
