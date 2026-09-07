@@ -2,7 +2,7 @@ STDIO_LOCK_RENAMES := -Dmini_sys_futex=mini_test_futex
 
 $(LIBC): $(BUILD)/stdio_lock.o $(BUILD)/file_sync.o $(BUILD)/position_sync.o $(BUILD)/format_sync.o $(BUILD)/scan_sync.o
 all: $(BUILD)/stdio_thread_probe
- test: stdio_sync_test_run
+test: stdio_sync_test_run
 inspect: stdio_sync_inspect
 
 .PHONY: stdio_sync_test_run stdio_sync_inspect
