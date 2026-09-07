@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -323,6 +324,7 @@ double sqrt(double x)
     }
     if ((bits & MINI_DOUBLE_SIGN) != 0ULL && magnitude != 0ULL) {
         errno = EDOM;
+        (void)feraiseexcept(FE_INVALID);
         return double_from_bits(0x7ff8000000000000ULL);
     }
     return __mini_sqrt_hw(x);
@@ -338,6 +340,7 @@ float sqrtf(float x)
     }
     if ((bits & MINI_FLOAT_SIGN) != 0U && magnitude != 0U) {
         errno = EDOM;
+        (void)feraiseexcept(FE_INVALID);
         return float_from_bits(0x7fc00000U);
     }
     return __mini_sqrtf_hw(x);

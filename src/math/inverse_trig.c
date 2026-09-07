@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -61,6 +62,7 @@ static int float_is_nan(unsigned int bits)
 static double invalid_inverse_trig(void)
 {
     errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
     return double_from_bits(0x7ff8000000000000ULL);
 }
 

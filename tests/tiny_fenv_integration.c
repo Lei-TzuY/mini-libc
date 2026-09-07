@@ -219,11 +219,84 @@ int main(void)
         return 40;
     }
 
-    if (fesetenv(&saved) != 0) {
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 41;
     }
-    if (puts("tiny-fenv-ok") == EOF) {
+    errno = 71;
+    if (sqrt(4.0) != 2.0 || fetestexcept(FE_ALL_EXCEPT) != 0 || errno != 71) {
         return 42;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 43;
+    }
+    errno = 71;
+    value = sqrt(-1.0);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 44;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 45;
+    }
+    errno = 71;
+    value = asin(1.5);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 46;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 47;
+    }
+    errno = 71;
+    value = acos(-1.5);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 48;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 49;
+    }
+    errno = 71;
+    value = acosh(0.5);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 50;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 51;
+    }
+    errno = 71;
+    value = atanh(1.25);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 52;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 53;
+    }
+    errno = 71;
+    value = atanh(1.0);
+    if (!isinf(value) || signbit(value) || errno != ERANGE ||
+        !has_flags(FE_DIVBYZERO)) {
+        return 54;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 55;
+    }
+    errno = 71;
+    value = atanh(0.5);
+    if (!(value > 0.54 && value < 0.55) || errno != 71 ||
+        !has_flags(FE_INEXACT)) {
+        return 56;
+    }
+
+    if (fesetenv(&saved) != 0) {
+        return 57;
+    }
+    if (puts("tiny-fenv-ok") == EOF) {
+        return 58;
     }
     return 0;
 }
