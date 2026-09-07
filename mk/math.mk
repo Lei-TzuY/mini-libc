@@ -31,7 +31,7 @@ MATH_RENAMES := -Dfabs=mini_test_fabs -Dfabsf=mini_test_fabsf \
                 -Datanh=mini_test_atanh -Datanhf=mini_test_atanhf \
                 -Dsqrt=mini_test_sqrt -Dsqrtf=mini_test_sqrtf
 
-$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_remainder.o $(BUILD)/math_explog.o $(BUILD)/math_pow.o $(BUILD)/math_trig.o $(BUILD)/math_inverse_trig.o $(BUILD)/math_hyperbolic.o $(BUILD)/math_sqrt.o
+$(LIBC): $(BUILD)/math.o $(BUILD)/math_decompose.o $(BUILD)/math_classify.o $(BUILD)/math_remainder.o $(BUILD)/math_explog.o $(BUILD)/math_pow.o $(BUILD)/math_trig.o $(BUILD)/math_inverse_trig.o $(BUILD)/math_hyperbolic.o $(BUILD)/math_sqrt.o
 all: $(BUILD)/math_probe $(BUILD)/math_differential $(BUILD)/remainder_probe $(BUILD)/remainder_differential $(BUILD)/explog_probe $(BUILD)/explog_differential $(BUILD)/pow_probe $(BUILD)/pow_differential $(BUILD)/trig_probe $(BUILD)/trig_differential $(BUILD)/inverse_trig_probe $(BUILD)/inverse_trig_differential $(BUILD)/hyperbolic_probe $(BUILD)/hyperbolic_differential
 inspect: math_inspect
 test: math_test_run
@@ -42,6 +42,9 @@ $(BUILD)/math.o: src/math/math.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_decompose.o: src/math/decompose.c include/math.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/math_classify.o: src/math/classify.c include/math.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_remainder.o: src/math/remainder.c include/math.h include/errno.h | $(BUILD)
@@ -140,7 +143,7 @@ $(BUILD)/math_differential: $(BUILD)/math_differential.o $(BUILD)/math_diff_impl
 $(BUILD)/remainder_differential.o: tests/remainder_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/remainder_differential: $(BUILD)/remainder_differential.o $(BUILD)/math_remainder_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_diff_impl.o $(BUILD)/errno.o
+$(BUILD)/remainder_differential: $(BUILD)/remainder_differential.o $(BUILD)/math_classify.o $(BUILD)/math_remainder_diff_impl.o $(BUILD)/math_decompose_diff_impl.o $(BUILD)/math_diff_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
 $(BUILD)/explog_differential.o: tests/explog_differential.c | $(BUILD)
