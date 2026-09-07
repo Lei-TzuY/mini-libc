@@ -16,17 +16,6 @@
 #define MINI_INT_MAX ((int)(~0U >> 1))
 #define MINI_MTX_TYPE_MASK (mtx_recursive | mtx_timed)
 
-extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
-extern int __mini_atomic_fetch_add_int(volatile int *value, int increment);
-extern unsigned long __mini_atomic_load_ulong(volatile unsigned long *value);
-extern unsigned long __mini_atomic_exchange_ulong(volatile unsigned long *value,
-                                                   unsigned long replacement);
-
-static int atomic_load_int(volatile int *value)
-{
-    return __mini_atomic_fetch_add_int(value, 0);
-}
-
 static int valid_type(int type)
 {
     return type >= 0 && (type & ~MINI_MTX_TYPE_MASK) == 0;
@@ -46,30 +35,28 @@ static unsigned long current_owner(void)
 
 static int owned_by(mtx_t *mtx, unsigned long owner)
 {
-    return atomic_load_int((volatile int *)&mtx->__state) != 0 &&
-           __mini_atomic_load_ulong((volatile unsigned long *)&mtx->__owner) ==
-               owner;
+    return atomic_load(&mtx->__state) != 0 &&
+           atomic_load(&mtx->__owner) == owner;
 }
 
 static int acquire_unlocked(mtx_t *mtx, unsigned long owner)
 {
-    if (__mini_atomic_exchange_int((volatile int *)&mtx->__state, 1) != 0) {
+    if (atomic_exchange(&mtx->__state, 1) != 0) {
         return 0;
     }
-    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
-                                       owner);
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 1);
+    atomic_store(&mtx->__owner, owner);
+    atomic_store(&mtx->__depth, 1);
     return 1;
 }
 
 static int recurse_owned(mtx_t *mtx)
 {
-    int depth = atomic_load_int((volatile int *)&mtx->__depth);
+    int depth = atomic_load(&mtx->__depth);
 
     if (depth <= 0 || depth == MINI_INT_MAX) {
         return thrd_error;
     }
-    (void)__mini_atomic_fetch_add_int((volatile int *)&mtx->__depth, 1);
+    (void)atomic_fetch_add(&mtx->__depth, 1);
     return thrd_success;
 }
 
@@ -149,11 +136,10 @@ int mtx_init(mtx_t *mtx, int type)
         return thrd_error;
     }
 
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0);
+    atomic_init(&mtx->__state, 0);
     mtx->__type = type;
-    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
-                                       0UL);
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
+    atomic_init(&mtx->__owner, 0UL);
+    atomic_init(&mtx->__depth, 0);
     errno = saved_errno;
     return thrd_success;
 }
@@ -219,13 +205,13 @@ int mtx_unlock(mtx_t *mtx)
         return thrd_error;
     }
 
-    depth = atomic_load_int((volatile int *)&mtx->__depth);
+    depth = atomic_load(&mtx->__depth);
     if (depth <= 0) {
         errno = saved_errno;
         return thrd_error;
     }
     if ((mtx->__type & mtx_recursive) != 0 && depth > 1) {
-        (void)__mini_atomic_fetch_add_int((volatile int *)&mtx->__depth, -1);
+        (void)atomic_fetch_add(&mtx->__depth, -1);
         errno = saved_errno;
         return thrd_success;
     }
@@ -234,10 +220,9 @@ int mtx_unlock(mtx_t *mtx)
         return thrd_error;
     }
 
-    (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
-    (void)__mini_atomic_exchange_ulong((volatile unsigned long *)&mtx->__owner,
-                                       0UL);
-    if (__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0) == 0) {
+    atomic_store(&mtx->__depth, 0);
+    atomic_store(&mtx->__owner, 0UL);
+    if (atomic_exchange(&mtx->__state, 0) == 0) {
         errno = saved_errno;
         return thrd_error;
     }
@@ -252,10 +237,9 @@ void mtx_destroy(mtx_t *mtx)
     int saved_errno = errno;
 
     if (mtx != (mtx_t *)0) {
-        (void)__mini_atomic_exchange_int((volatile int *)&mtx->__depth, 0);
-        (void)__mini_atomic_exchange_ulong(
-            (volatile unsigned long *)&mtx->__owner, 0UL);
-        (void)__mini_atomic_exchange_int((volatile int *)&mtx->__state, 0);
+        atomic_store(&mtx->__depth, 0);
+        atomic_store(&mtx->__owner, 0UL);
+        atomic_store(&mtx->__state, 0);
         mtx->__type = mtx_plain;
     }
     errno = saved_errno;
