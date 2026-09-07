@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../internal/futex_lock.h"
+
 #define MINI_ALLOC_ALIGNMENT 16UL
-#define MINI_FUTEX_WAIT 0
-#define MINI_FUTEX_WAKE 1
 
 typedef unsigned long mini_uintptr_t;
 
@@ -24,24 +24,16 @@ static struct mini_block *block_head;
 static struct mini_block *block_tail;
 static mini_uintptr_t heap_end;
 static int heap_initialized;
-static volatile int allocator_lock_word;
-
-extern int __mini_atomic_exchange_int(volatile int *value, int replacement);
+static struct mini_futex_lock allocator_lock_word = MINI_FUTEX_LOCK_INIT;
 
 static void allocator_lock(void)
 {
-    while (__mini_atomic_exchange_int(&allocator_lock_word, 1) != 0) {
-        (void)mini_sys_futex(&allocator_lock_word, MINI_FUTEX_WAIT, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_acquire(&allocator_lock_word);
 }
 
 static void allocator_unlock(void)
 {
-    if (__mini_atomic_exchange_int(&allocator_lock_word, 0) != 0) {
-        (void)mini_sys_futex(&allocator_lock_word, MINI_FUTEX_WAKE, 1,
-                             (const void *)0, (volatile int *)0, 0);
-    }
+    mini_futex_lock_release(&allocator_lock_word);
 }
 
 static int align_size(size_t size, size_t *aligned)
