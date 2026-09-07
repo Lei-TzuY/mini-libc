@@ -189,12 +189,17 @@ It does **not** claim:
 Those require a different loader/runtime architecture and should not be implied
 by this bounded static-executable milestone.
 
-The next higher-value compiler/runtime frontier is public C11 atomics
-interoperability. Mini-libc already has private assembly atomics for locks and
-futex state machines, while the pinned tiny-c compiler already supports
-`_Atomic`, `<stdatomic.h>`, memory-order operands, pointer atomics, and floating
-atomic objects. A proper next phase should expose a mini-libc compiler-neutral
-atomic header/runtime contract and prove lock-free scalar operations, fences,
-compare/exchange, fetch/update behavior, and real multi-thread synchronization
-through GCC, Clang, tiny-c, and mini-elf rather than growing more private lock
-helpers.
+The public C11 atomics interoperability frontier identified by this phase is now
+closed as a bounded executable baseline. Mini-libc exposes `<stdatomic.h>`
+through compiler-owned lowering for GCC/Clang and a pinned tiny-c fallback, and
+proves scalar atomic operations, memory orders, fences, real relaxed contention,
+and release/acquire publication across GCC, Clang, tiny-c, GNU `ld`, and
+mini-elf. See `docs/atomics.md` for the exact portability boundary.
+
+The next higher-value synchronization frontier is internal synchronization
+convergence: allocator, thread lifecycle, mutex/condition, once/TSS, and stdio
+still depend on bespoke scalar helpers in `src/internal/atomic.S`. A future
+phase should migrate those proven state machines onto the now-established C11
+atomic abstraction, preserving futex and recursive-lock invariants while
+reducing private assembly only when all existing deterministic and
+cross-toolchain runtime gates remain green.
