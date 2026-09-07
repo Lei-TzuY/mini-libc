@@ -113,6 +113,11 @@ float acoshf(float x);
 double atanh(double x);
 float atanhf(float x);
 
+double erf(double x);
+float erff(float x);
+double erfc(double x);
+float erfcf(float x);
+
 double sqrt(double x);
 float sqrtf(float x);
 
