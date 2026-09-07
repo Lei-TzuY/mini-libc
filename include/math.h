@@ -33,6 +33,11 @@ float scalbnf(float x, int n);
 double modf(double x, double *iptr);
 float modff(float x, float *iptr);
 
+double exp(double x);
+float expf(float x);
+double log(double x);
+float logf(float x);
+
 double sqrt(double x);
 float sqrtf(float x);
 

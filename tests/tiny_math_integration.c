@@ -2,6 +2,26 @@
 #include <math.h>
 #include <stdio.h>
 
+static int close_double(double actual, double expected, double tolerance)
+{
+    double difference = actual - expected;
+
+    if (difference < 0.0) {
+        difference = -difference;
+    }
+    return difference <= tolerance;
+}
+
+static int close_float(float actual, float expected, float tolerance)
+{
+    float difference = actual - expected;
+
+    if (difference < 0.0f) {
+        difference = -difference;
+    }
+    return difference <= tolerance;
+}
+
 int main(void)
 {
     double bad;
@@ -61,8 +81,30 @@ int main(void)
         return 12;
     }
 
-    if (puts("tiny-math-ok") == EOF) {
+    errno = 78;
+    fraction = exp(1.0);
+    if (!close_double(fraction, 2.71828182845904523536, 3.0e-15) || errno != 78 ||
+        !close_double(log(2.0), 0.69314718055994530942, 2.0e-15) || errno != 78) {
         return 13;
+    }
+    if (!close_float(expf(1.0f), 2.7182817f, 2.0e-6f) ||
+        !close_float(logf(2.0f), 0.6931472f, 2.0e-6f)) {
+        return 14;
+    }
+
+    errno = 79;
+    bad = exp(1000.0);
+    if (!(bad > 1.0e308) || errno != ERANGE) {
+        return 15;
+    }
+    errno = 80;
+    bad = log(-1.0);
+    if (bad == bad || errno != EDOM) {
+        return 16;
+    }
+
+    if (puts("tiny-math-ok") == EOF) {
+        return 17;
     }
     return 0;
 }
