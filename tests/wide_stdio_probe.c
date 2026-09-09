@@ -64,9 +64,15 @@ int main(void)
     static const wchar_t truncated_expected[] = {'a', 'b', 'c', 'd', 0};
     static const wchar_t invalid_format[] = {(wchar_t)0x80, 0};
     static const char invalid_narrow[] = {(char)0x80, 0};
+    static const wchar_t narrow_wide[] = {'O', 'K', 0};
+    static const wchar_t wide_arg_text[] = {'W', 'I', 'D', 'E', 0};
+    static const wchar_t wide_arg_memory_expected[] = {'[', ' ', ' ', 'W', 'I', 'D', ']', '[', 'Q', ' ', ' ', ']', 0};
+    static const wchar_t wide_arg_stream_value[] = {'W', 'X', 0};
+    static const wchar_t wide_arg_stream_expected[] = {'[', 'W', 'X', ':', 'Q', ']', 0};
     wchar_t line[32];
     wchar_t formatted[64];
     wchar_t small[5];
+    char narrow[32];
     FILE *stream;
     int count;
 
@@ -241,6 +247,58 @@ int main(void)
     clearerr(stream);
     if (fclose(stream) != 0) {
         return fail((FILE *)0, 31);
+    }
+
+    errno = ERANGE;
+    count = snprintf(narrow, sizeof(narrow), "[%ls:%lc]", narrow_wide,
+                     (wint_t)'Q');
+    if (count != 6 || narrow[0] != '[' || narrow[1] != 'O' ||
+        narrow[2] != 'K' || narrow[3] != ':' || narrow[4] != 'Q' ||
+        narrow[5] != ']' || narrow[6] != '\0' || errno != ERANGE) {
+        return fail((FILE *)0, 35);
+    }
+    errno = ERANGE;
+    count = swprintf(formatted, 64U, L"[%5.3ls][%-3lc]", wide_arg_text,
+                     (wint_t)'Q');
+    if (count != (int)wcslen(wide_arg_memory_expected) ||
+        wcscmp(formatted, wide_arg_memory_expected) != 0 || errno != ERANGE) {
+        return fail((FILE *)0, 36);
+    }
+    errno = 0;
+    if (snprintf(narrow, sizeof(narrow), "%ls", invalid_wide) != EOF ||
+        errno != EILSEQ) {
+        return fail((FILE *)0, 37);
+    }
+    errno = 0;
+    if (swprintf(formatted, 64U, L"%ls", invalid_wide) != EOF ||
+        errno != EILSEQ) {
+        return fail((FILE *)0, 38);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fwprintf(stream, L"[%ls:%lc]", wide_arg_stream_value,
+                 (wint_t)'Q') != 6 || ftell(stream) != 6L) {
+        return fail(stream, 39);
+    }
+    rewind(stream);
+    if (fgetws(line, 32, stream) != line ||
+        wcscmp(line, wide_arg_stream_expected) != 0 || fclose(stream) != 0) {
+        return fail((FILE *)0, 40);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0) {
+        return fail(stream, 41);
+    }
+    errno = 0;
+    if (fwprintf(stream, L"%ls", invalid_wide) != EOF || errno != EILSEQ ||
+        !ferror(stream)) {
+        return fail(stream, 42);
+    }
+    clearerr(stream);
+    if (fclose(stream) != 0) {
+        return fail((FILE *)0, 43);
     }
 
     errno = ERANGE;
