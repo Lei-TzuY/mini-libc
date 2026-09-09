@@ -88,39 +88,38 @@ size_t mbsrtowcs(wchar_t *restrict dst, const char **restrict src, size_t len,
     size_t count = 0U;
 
     if (dst == (wchar_t *)0) {
-        while (*cursor != '\0') {
-            if (decode_byte((unsigned char)*cursor, (wchar_t *)0) < 0) {
-                reset_state(ps);
+        for (;;) {
+            size_t converted = mbrtowc((wchar_t *)0, cursor, 1U, ps);
+
+            if (converted == (size_t)-1) {
                 return (size_t)-1;
             }
-            ++cursor;
+            if (converted == 0U) {
+                return count;
+            }
+            cursor += converted;
             ++count;
         }
-        reset_state(ps);
-        return count;
     }
 
     while (count < len) {
         wchar_t wc;
-        int decoded = decode_byte((unsigned char)*cursor, &wc);
+        size_t converted = mbrtowc(&wc, cursor, 1U, ps);
 
-        if (decoded < 0) {
+        if (converted == (size_t)-1) {
             *src = cursor;
-            reset_state(ps);
             return (size_t)-1;
         }
         dst[count] = wc;
-        if (decoded == 0) {
+        if (converted == 0U) {
             *src = (const char *)0;
-            reset_state(ps);
             return count;
         }
-        ++cursor;
+        cursor += converted;
         ++count;
     }
 
     *src = cursor;
-    reset_state(ps);
     return count;
 }
 
@@ -132,37 +131,40 @@ size_t wcsrtombs(char *restrict dst, const wchar_t **restrict src, size_t len,
 
     if (dst == (char *)0) {
         while (*cursor != 0) {
-            if (encode_wide(*cursor, (char *)0) < 0) {
-                reset_state(ps);
+            char byte;
+            size_t converted = wcrtomb(&byte, *cursor, ps);
+
+            if (converted == (size_t)-1) {
                 return (size_t)-1;
             }
+            count += converted;
             ++cursor;
-            ++count;
         }
-        reset_state(ps);
         return count;
     }
 
     while (count < len) {
         char byte;
+        size_t converted = wcrtomb(&byte, *cursor, ps);
 
-        if (encode_wide(*cursor, &byte) < 0) {
+        if (converted == (size_t)-1) {
             *src = cursor;
-            reset_state(ps);
             return (size_t)-1;
+        }
+        if (converted > len - count) {
+            *src = cursor;
+            return count;
         }
         dst[count] = byte;
         if (*cursor == 0) {
             *src = (const wchar_t *)0;
-            reset_state(ps);
             return count;
         }
+        count += converted;
         ++cursor;
-        ++count;
     }
 
     *src = cursor;
-    reset_state(ps);
     return count;
 }
 
