@@ -54,10 +54,15 @@ int main(int argc, char **argv)
     static const wchar_t wide_mem_expected[] = {'V', '=', '7', '/', '2', '.', '5', 0};
     static const wchar_t wide_hex_format[] = {'%', '#', 'x', 0};
     static const wchar_t wide_hex_expected[] = {'0', 'x', '2', 'a', 0};
+    static const wchar_t wide_arg_value[] = {'W', 'X', 0};
+    static const wchar_t wide_arg_format[] = {'[', '%', 'l', 's', ':', '%', 'l', 'c', ']', 0};
+    static const wchar_t wide_arg_expected[] = {'[', 'W', 'X', ':', 'Q', ']', 0};
     static const wchar_t wide_file_format[] = {'N', '=', '%', 'd', '\n', 0};
     static const wchar_t wide_vfile_format[] = {'V', '=', '%', '.', '1', 'f', '\n', 0};
+    static const wchar_t wide_varg_file_format[] = {'W', '=', '%', 'l', 's', '/', '%', 'l', 'c', '\n', 0};
     static const wchar_t wide_file_first[] = {'N', '=', '7', '\n', 0};
     static const wchar_t wide_file_second[] = {'V', '=', '2', '.', '5', '\n', 0};
+    static const wchar_t wide_file_third[] = {'W', '=', 'W', 'X', '/', 'Q', '\n', 0};
     char full[4];
     char line[8];
     char standard[BUFSIZ];
@@ -158,7 +163,10 @@ int main(int argc, char **argv)
     if (tiny_vswprintf(wide_format, 32U, wide_mem_format, 7, 2.5) != 7 ||
         wcscmp(wide_format, wide_mem_expected) != 0 ||
         swprintf(wide_format, 32U, wide_hex_format, 42U) != 4 ||
-        wcscmp(wide_format, wide_hex_expected) != 0) {
+        wcscmp(wide_format, wide_hex_expected) != 0 ||
+        tiny_vswprintf(wide_format, 32U, wide_arg_format, wide_arg_value,
+                       (wint_t)'Q') != 6 ||
+        wcscmp(wide_format, wide_arg_expected) != 0) {
         return 13;
     }
 
@@ -166,7 +174,9 @@ int main(int argc, char **argv)
     if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
         fwprintf(stream, wide_file_format, 7) != 4 ||
         tiny_vfwprintf(stream, wide_vfile_format, 2.5) != 6 ||
-        ftell(stream) != 10L) {
+        tiny_vfwprintf(stream, wide_varg_file_format, wide_arg_value,
+                       (wint_t)'Q') != 7 ||
+        ftell(stream) != 17L) {
         if (stream != (FILE *)0) {
             fclose(stream);
         }
@@ -176,7 +186,9 @@ int main(int argc, char **argv)
     if (fgetws(wide_read, 16, stream) != wide_read ||
         wcscmp(wide_read, wide_file_first) != 0 ||
         fgetws(wide_read, 16, stream) != wide_read ||
-        wcscmp(wide_read, wide_file_second) != 0 || fclose(stream) != 0) {
+        wcscmp(wide_read, wide_file_second) != 0 ||
+        fgetws(wide_read, 16, stream) != wide_read ||
+        wcscmp(wide_read, wide_file_third) != 0 || fclose(stream) != 0) {
         return 15;
     }
 
