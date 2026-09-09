@@ -3,13 +3,14 @@
 ## Phase status
 
 This phase is complete for the current binary32/binary64 mini-libc math target.
-The public `<math.h>` surface now includes `erf`, `erfc`, `erff`, and `erfcf`
-with executable freestanding, controlled differential, pinned tiny-c, and
-mini-elf evidence.
+The public `<math.h>` surface includes `erf`, `erfc`, `erff`, and `erfcf` with
+freestanding, controlled differential, host-fenv interoperability, pinned
+tiny-c, and mini-elf executable evidence.
 
-This checkpoint is a bounded special-function implementation, not a claim of
-complete C math conformance, correctly-rounded results for every binary input,
-long-double support, or floating-environment exception support.
+The numerical approximation is unchanged by the floating-environment promotion.
+This remains a bounded special-function implementation, not a claim of complete
+C math conformance, correctly-rounded results for every binary input,
+long-double support, or repository-wide `MATH_ERREXCEPT` coverage.
 
 ## Numerical structure
 
@@ -25,75 +26,91 @@ preserves useful relative accuracy when the complementary probability is much
 smaller than one, including the regression points around `erfc(4)` and
 `erfc(10)`.
 
-The tail exponential uses the existing mini-libc `exp` implementation. The
-special-function object saves/restores the caller's incoming `errno` around
-that internal dependency, so successful finite calls do not leak an internal
-range status.
+The tail exponential uses mini-libc's existing `exp` implementation. Public
+error-function entry points now snapshot the caller's x87/MXCSR environment
+before nontrivial approximation work, execute all internal rational/exponential
+arithmetic, restore that snapshot, and then deliberately raise only the
+exception class owned by the public result. This prevents implementation-detail
+flags from internal `exp`, multiplication, or division from leaking through the
+family boundary while preserving caller-owned sticky flags and rounding state.
 
-## Public behavior
+## Public errno and floating-exception behavior
 
-The current deterministic special-value and errno policy is:
+The deterministic family contract is:
 
-- NaN payloads are propagated unchanged;
-- `erf(+inf) = +1` and `erf(-inf) = -1`;
-- `erfc(+inf) = 0` and `erfc(-inf) = 2`;
-- `erf(-0)` preserves the negative-zero sign;
-- successful ordinary finite results preserve incoming `errno`;
-- positive finite `erfc` tails that narrow into the subnormal/zero range set
-  `errno = ERANGE`;
-- negative tails approach two without reporting the positive-tail underflow as
-  a user-visible error;
-- `erfcf` independently checks binary32 narrowing and reports positive-tail
-  underflow with `ERANGE`.
+- quiet NaN payloads are propagated unchanged without adding an error-function
+  exception flag;
+- `erf(+inf) = +1`, `erf(-inf) = -1`, `erfc(+inf) = 0`, and `erfc(-inf) = 2`
+  without adding a new flag;
+- `erf(-0)` preserves the negative-zero sign and zero/infinity exact paths
+  preserve incoming `errno` and sticky flags;
+- ordinary finite nonzero `erf` / `erfc` evaluation preserves incoming `errno`
+  and raises `FE_INEXACT`;
+- positive finite `erfc` results in the binary64 subnormal/zero range retain the
+  existing `errno = ERANGE` behavior and raise `FE_UNDERFLOW | FE_INEXACT`;
+- negative finite `erfc` approaches two with `FE_INEXACT` only: an underflow in
+  the hidden positive-tail computation is deliberately isolated and is not a
+  caller-visible `FE_UNDERFLOW`;
+- `erff` reclassifies its final binary32 result and raises `FE_INEXACT` for
+  ordinary finite nonzero evaluation;
+- positive finite `erfcf` results that narrow into the binary32 subnormal/zero
+  range set `ERANGE` and raise `FE_UNDERFLOW | FE_INEXACT`;
+- all deliberate flags are additive: a caller's pre-existing sticky exception
+  set is restored before the family adds its own result-class flag.
 
-No floating exception flags are claimed because `<fenv.h>` is outside the
-current runtime boundary and `math_errhandling` remains `MATH_ERRNO`.
+This is family-level exception coverage. `math_errhandling` remains
+`MATH_ERRNO`; mini-libc does not advertise repository-wide `MATH_ERREXCEPT`
+until the remaining math families with public domain/range behavior have been
+promoted as well.
 
 ## Archive boundary
 
-The implementation is an independent `math_special.o` archive object. It
-reuses the established exponential/decomposition substrate but has no
+The implementation remains the independent `math_special.o` archive object. It
+reuses the established exponential/decomposition and fenv substrate but has no
 dependency on trig, inverse trig, hyperbolic, power, or remainder objects.
-Programs that only need the error-function family therefore do not pull the
-rest of the newer math layers into the static link.
+Programs that only need the error-function family therefore do not pull those
+unrelated math layers into the static link.
 
 ## Executable evidence
 
-`tests/special_probe.c` is a freestanding static executable covering:
+The original `tests/special_probe.c` and `tests/special_differential.c` remain the
+numerical/result checkpoint. Their numerical corpora and tolerances are unchanged
+by this promotion. The differential now links mini-libc's renamed fenv runtime as
+well as its renamed `exp`/decomposition dependency, avoiding an invalid cross-ABI
+mix between mini-libc's `fenv_t` and the host libc fenv functions.
 
-- central and transition-region values;
-- symmetry of `erf`;
-- cancellation-sensitive complementary tails;
-- very small positive tails;
-- NaN payload propagation;
-- infinities and signed zero;
-- positive-tail underflow and negative-tail errno isolation;
-- binary32 variants and narrowing behavior.
+`tests/fenv_special_probe.c` is a freestanding static executable covering:
 
-`tests/special_differential.c` compiles the production special-function object
-under renamed symbols and compares it with the host libm over controlled
-binary64 and binary32 corpora. The differential links mini-libc's own renamed
-`exp` and decomposition objects, so host libm does not provide the production
-exponential dependency.
+- exact zero/infinity paths with a clean environment;
+- ordinary finite `erf` and `erfc` inexact signaling;
+- finite `erf` saturation to one as an inexact mathematical result;
+- positive binary64 `erfc` underflow;
+- negative-tail isolation proving hidden positive-tail underflow is not exposed;
+- binary32 `erff` and `erfcf` outward classification; and
+- preservation/combination of caller-owned sticky flags across exact and
+  nontrivial paths.
 
-Pinned tiny-c compiles the production special-function source as part of the
-complete mini-libc source set and executes representative `erf`/`erfc`, float
-variants, and range paths in `tests/tiny_math_integration.c`. The same
-integration executable is linked and run through GNU `ld` and the pinned
-mini-elf-toolchain.
+`tests/fenv_special_interop.c` compiles the production special-function object
+under renamed symbols and observes its hardware-visible flags through the host
+`<fenv.h>` ABI while using mini-libc's fenv implementation internally.
 
-## Next frontier
+Pinned tiny-c compiles the promoted production `special.c` together with the
+fenv, decomposition, and exp/log runtime, then executes `tiny_fenv_special`.
+The same executable is linked and run through GNU `ld` and the pinned
+mini-elf-toolchain and is included in host-libc-independence inspection.
 
-The error-function checkpoint established the first dedicated special-function
-layer. The following Gamma promotion now lives beside it as an independent
-archive member with shared Lanczos/reflection semantics; see
-`docs/gamma-runtime.md` for that current checkpoint.
+## Phase boundary and promotion
 
-With both error-function and Gamma families executable, the next architectural
-gap is no longer another isolated special-function wrapper. The strongest
-promotion is a floating-environment foundation (`<fenv.h>`) that exposes
-rounding-mode and exception-status state coherently across x86-64 SSE/MXCSR and
-x87, enabling later rounding-sensitive math behavior to be verified honestly.
+The error-function numerical and family-level floating-exception phases are now
+complete. More ordinary `erf` vectors or wrapper-specific `FE_INEXACT` variants
+would be low-value micro-expansion at this checkpoint.
 
-Long-double special functions, complex arithmetic, and globally
-correctly-rounded transcendental guarantees remain separate phases.
+The strongest remaining whole-family fenv gap is the remainder/reduction layer:
+`fmod`, `remainder`, and `remquo` already have executable result/errno behavior,
+but zero-divisor and infinite-dividend domain results still need deliberate
+public `FE_INVALID` propagation and sticky-flag evidence. That family should be
+re-audited against the latest main before another implementation slice is
+opened.
+
+Long-double special functions, complex arithmetic, and globally correctly
+rounded transcendental guarantees remain separate phases.
