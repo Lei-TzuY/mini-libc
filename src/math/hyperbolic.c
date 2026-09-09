@@ -74,6 +74,12 @@ static double quiet_nan(void)
     return double_from_bits(0x7ff8000000000000ULL);
 }
 
+static void raise_overflow(void)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(FE_OVERFLOW | FE_INEXACT);
+}
+
 static double domain_nan(void)
 {
     errno = EDOM;
@@ -164,7 +170,7 @@ double sinh(double x)
         return sinh_small(x);
     }
     if (magnitude > MINI_HYP_OVERFLOW) {
-        errno = ERANGE;
+        raise_overflow();
         return signed_infinity(bits);
     }
     if (magnitude > MINI_HYP_LARGE) {
@@ -187,6 +193,9 @@ double cosh(double x)
     if (double_is_nan(bits)) {
         return x;
     }
+    if (magnitude_bits == 0ULL) {
+        return 1.0;
+    }
     if (magnitude_bits == MINI_DOUBLE_EXP) {
         return double_from_bits(MINI_DOUBLE_EXP);
     }
@@ -196,7 +205,7 @@ double cosh(double x)
         return cosh_small(magnitude);
     }
     if (magnitude > MINI_HYP_OVERFLOW) {
-        errno = ERANGE;
+        raise_overflow();
         return double_from_bits(MINI_DOUBLE_EXP);
     }
     if (magnitude > MINI_HYP_LARGE) {
@@ -232,6 +241,7 @@ double tanh(double x)
         return sinh_small(x) / cosh_small(x);
     }
     if (magnitude > MINI_HYP_LARGE) {
+        (void)feraiseexcept(FE_INEXACT);
         return (bits & MINI_DOUBLE_SIGN) != 0ULL ? -1.0 : 1.0;
     }
     {
@@ -331,7 +341,7 @@ float sinhf(float x)
     result = (float)sinh((double)x);
     if ((bits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
         (float_bits(result) & MINI_FLOAT_EXP) == MINI_FLOAT_EXP) {
-        errno = ERANGE;
+        raise_overflow();
     }
     return result;
 }
@@ -347,7 +357,7 @@ float coshf(float x)
     result = (float)cosh((double)x);
     if ((bits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
         (float_bits(result) & MINI_FLOAT_EXP) == MINI_FLOAT_EXP) {
-        errno = ERANGE;
+        raise_overflow();
     }
     return result;
 }
