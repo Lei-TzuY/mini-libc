@@ -25,3 +25,4 @@ setjmp_inspect: $(BUILD)/setjmp_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/setjmp_probe
 
 include mk/threads.mk
+include mk/locale.mk

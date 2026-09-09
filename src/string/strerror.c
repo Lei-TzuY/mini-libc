@@ -10,6 +10,7 @@ char *strerror(int errnum)
     static char einval[] = "Invalid argument";
     static char edom[] = "Numerical argument out of domain";
     static char erange[] = "Numerical result out of range";
+    static char eilseq[] = "Invalid or incomplete multibyte or wide character";
     static char unknown[] = "Unknown error";
 
     switch (errnum) {
@@ -27,6 +28,8 @@ char *strerror(int errnum)
         return edom;
     case ERANGE:
         return erange;
+    case EILSEQ:
+        return eilseq;
     default:
         return unknown;
     }

@@ -39,6 +39,7 @@ int main(int argc, char **argv, char **envp)
         !same_string(strerror(EINVAL), "Invalid argument") ||
         !same_string(strerror(EDOM), "Numerical argument out of domain") ||
         !same_string(strerror(ERANGE), "Numerical result out of range") ||
+        !same_string(strerror(EILSEQ), "Invalid or incomplete multibyte or wide character") ||
         errno != ERANGE) {
         return 2;
     }
