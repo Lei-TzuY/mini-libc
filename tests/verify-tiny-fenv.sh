@@ -22,14 +22,19 @@ fi
     -o "$OUT/fenv-explog.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/hyperbolic.c \
     -o "$OUT/math_hyperbolic.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/trig.c \
+    -o "$OUT/math_trig.o"
 "$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o" \
-    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o" "$OUT/math_hyperbolic.o"
+    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o" "$OUT/math_hyperbolic.o" \
+    "$OUT/math_trig.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_integration.c \
     -o "$OUT/fenv-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_hyperbolic.c \
     -o "$OUT/fenv-hyperbolic-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_gamma.c \
     -o "$OUT/fenv-gamma-test.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_trig.c \
+    -o "$OUT/fenv-trig-test.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-test" \
@@ -38,6 +43,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-gamma-test" \
         "$OUT/fenv-gamma-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/fenv-trig-test" \
+        "$OUT/fenv-trig-test.o" "$OUT/crt0.o" "$OUT/libc.a"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-test" \
         "$OUT/fenv-test.o" "$OUT/crt0.o" "$OUT/libc.a"
@@ -45,6 +52,8 @@ else
         "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-gamma-test" \
         "$OUT/fenv-gamma-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/fenv-trig-test" \
+        "$OUT/fenv-trig-test.o" "$OUT/crt0.o" "$OUT/libc.a"
 fi
 
 set +e
@@ -74,7 +83,16 @@ if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-gamma-ok" ]; then
     exit 1
 fi
 
+set +e
+output=$("$OUT/fenv-trig-test")
+status=$?
+set -e
+if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-trig-ok" ]; then
+    echo "unexpected tiny-c trig fenv: status=$status output='$output'" >&2
+    exit 1
+fi
+
 ./tests/verify-no-host-libc.sh "$OUT/fenv-test" "$OUT/fenv-hyperbolic-test" \
-    "$OUT/fenv-gamma-test"
+    "$OUT/fenv-gamma-test" "$OUT/fenv-trig-test"
 
 echo "tiny-c floating environment integration passed"
