@@ -69,6 +69,16 @@ int main(void)
     }
 
     if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 22;
+    }
+    errno = 81;
+    value = scalbn(from_bits(0x3fffffffffffffffULL), -1023);
+    if (dbits(value) != 0x0010000000000000ULL || errno != 81 ||
+        !only_flags(FE_INEXACT)) {
+        return 23;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 4;
     }
     errno = 73;
