@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <locale.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,6 +108,9 @@ int main(int argc, char **argv, char **envp)
     char memory_letters[3];
     char format_buffer[64];
     char trunc_buffer[6];
+    char locale_bytes[4] = {'?', '?', '?', '?'};
+    wchar_t locale_wide[4] = {9, 9, 9, 9};
+    struct lconv *locale_info;
     FILE *stream;
     int scan_auto;
     unsigned int scan_decimal;
@@ -145,6 +149,23 @@ int main(int argc, char **argv, char **envp)
     }
 
     errno = EIO;
+    locale_info = localeconv();
+    value = setlocale(LC_ALL, (const char *)0);
+    if (MB_CUR_MAX != 1 || value == (char *)0 || strcmp(value, "C") != 0 ||
+        setlocale(LC_ALL, "C") == (char *)0 || locale_info == (struct lconv *)0 ||
+        strcmp(locale_info->decimal_point, ".") != 0 ||
+        mbstowcs(locale_wide, "AB", 4U) != 2U || locale_wide[0] != 'A' ||
+        locale_wide[1] != 'B' || locale_wide[2] != 0 ||
+        wcstombs(locale_bytes, locale_wide, 4U) != 2U ||
+        locale_bytes[0] != 'A' || locale_bytes[1] != 'B' ||
+        locale_bytes[2] != '\0' || errno != EIO) {
+        return 42;
+    }
+    if (wctomb(locale_bytes, (wchar_t)0x80) != -1 || errno != EILSEQ) {
+        return 43;
+    }
+    errno = EIO;
+
     if (strtol("123x", &end, 10) != 123 || *end != 'x' || errno != EIO) {
         return 4;
     }
