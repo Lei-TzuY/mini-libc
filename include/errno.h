@@ -9,6 +9,7 @@
 #define EINVAL 22
 #define EDOM 33
 #define ERANGE 34
+#define EILSEQ 84
 
 /*
  * ISO C requires errno to expand to a modifiable int lvalue. The accessor
