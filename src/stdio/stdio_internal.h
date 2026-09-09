@@ -84,6 +84,21 @@ int __mini_format_dispatch_unlocked(FILE *stream, const char *format,
 int __mini_scan_dispatch_unlocked(FILE *stream, const char *format,
                                   struct mini_scan_args *args);
 
+size_t __mini_fread_byte_core(void *restrict ptr, size_t size, size_t nmemb,
+                              FILE *restrict stream);
+size_t __mini_fwrite_byte_core(const void *restrict ptr, size_t size,
+                               size_t nmemb, FILE *restrict stream);
+int __mini_fgetc_byte_core(FILE *stream);
+int __mini_getc_byte_core(FILE *stream);
+int __mini_getchar_byte_core(void);
+char *__mini_fgets_byte_core(char *restrict s, int n, FILE *restrict stream);
+int __mini_ungetc_byte_core(int c, FILE *stream);
+int __mini_fputc_byte_core(int c, FILE *stream);
+int __mini_putc_byte_core(int c, FILE *stream);
+int __mini_putchar_byte_core(int c);
+int __mini_fputs_byte_core(const char *restrict s, FILE *restrict stream);
+int __mini_puts_byte_core(const char *s);
+
 void __mini_stdio_lock(void);
 void __mini_stdio_unlock(void);
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length);
