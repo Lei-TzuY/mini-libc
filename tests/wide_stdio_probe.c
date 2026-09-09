@@ -25,7 +25,6 @@ int main(void)
     static const wchar_t stdout_tail[] = {'O', 'K', 0};
     wchar_t line[8];
     FILE *stream;
-    wint_t wc;
 
     (void)remove(path);
     stream = fopen(path, "w+");
