@@ -4,19 +4,12 @@
 
 #define MINI_C_MB_MAX 0x7fU
 
-static mbstate_t mini_internal_state;
-
-static mbstate_t *state_or_internal(mbstate_t *ps)
-{
-    return ps != (mbstate_t *)0 ? ps : &mini_internal_state;
-}
-
 static void reset_state(mbstate_t *ps)
 {
-    mbstate_t *state = state_or_internal(ps);
-
-    state->__count = 0U;
-    state->__value = 0U;
+    if (ps != (mbstate_t *)0) {
+        ps->__count = 0U;
+        ps->__value = 0U;
+    }
 }
 
 static int decode_byte(unsigned char byte, wchar_t *out)
