@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -60,6 +61,7 @@ static int float_is_nan(unsigned int bits)
 static double invalid_trig(void)
 {
     errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
     return double_from_bits(0x7ff8000000000000ULL);
 }
 
@@ -120,7 +122,7 @@ static double cos_kernel(double x)
     return 1.0 + z * p;
 }
 
-static void reduced_sincos(double x, double *sine, double *cosine)
+static int reduced_sincos(double x, double *sine, double *cosine)
 {
     int quadrant;
     double r;
@@ -128,9 +130,7 @@ static void reduced_sincos(double x, double *sine, double *cosine)
     double c;
 
     if (!reduce_pio2(x, &quadrant, &r)) {
-        *sine = invalid_trig();
-        *cosine = *sine;
-        return;
+        return 0;
     }
 
     s = sin_kernel(r);
@@ -148,6 +148,7 @@ static void reduced_sincos(double x, double *sine, double *cosine)
         *sine = -c;
         *cosine = s;
     }
+    return 1;
 }
 
 double sin(double x)
@@ -167,7 +168,10 @@ double sin(double x)
         return x;
     }
 
-    reduced_sincos(x, &s, &c);
+    if (!reduced_sincos(x, &s, &c)) {
+        return invalid_trig();
+    }
+    (void)feraiseexcept(FE_INEXACT);
     return s;
 }
 
@@ -188,7 +192,10 @@ double cos(double x)
         return 1.0;
     }
 
-    reduced_sincos(x, &s, &c);
+    if (!reduced_sincos(x, &s, &c)) {
+        return invalid_trig();
+    }
+    (void)feraiseexcept(FE_INEXACT);
     return c;
 }
 
@@ -198,6 +205,7 @@ double tan(double x)
     unsigned long long magnitude = bits & ~MINI_DOUBLE_SIGN;
     double s;
     double c;
+    double result;
 
     if (double_is_nan(bits)) {
         return x;
@@ -209,8 +217,12 @@ double tan(double x)
         return x;
     }
 
-    reduced_sincos(x, &s, &c);
-    return s / c;
+    if (!reduced_sincos(x, &s, &c)) {
+        return invalid_trig();
+    }
+    result = s / c;
+    (void)feraiseexcept(FE_INEXACT);
+    return result;
 }
 
 float sinf(float x)
