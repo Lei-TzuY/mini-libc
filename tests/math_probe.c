@@ -56,7 +56,7 @@ int main(void)
     float fintegral;
     int exponent;
 
-    if (math_errhandling != MATH_ERRNO) {
+    if (math_errhandling != (MATH_ERRNO | MATH_ERREXCEPT)) {
         return 1;
     }
     if (dbits(fabs(dfrom(0x8000000000000000ULL))) != 0ULL ||
