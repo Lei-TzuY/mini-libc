@@ -15,6 +15,21 @@
 #define __mini_scan_dispatch __mini_scan_dispatch_unlocked
 #endif
 
+#ifndef MINI_STDIO_BYTE_PUBLIC_WRAPPER
+#define fread __mini_fread_byte_core
+#define fwrite __mini_fwrite_byte_core
+#define fgetc __mini_fgetc_byte_core
+#define getc __mini_getc_byte_core
+#define getchar __mini_getchar_byte_core
+#define fgets __mini_fgets_byte_core
+#define ungetc __mini_ungetc_byte_core
+#define fputc __mini_fputc_byte_core
+#define putc __mini_putc_byte_core
+#define putchar __mini_putchar_byte_core
+#define fputs __mini_fputs_byte_core
+#define puts __mini_puts_byte_core
+#endif
+
 #define MINI_FILE_READABLE 1U
 #define MINI_FILE_WRITABLE 2U
 #define MINI_FILE_OWNED 4U
@@ -27,6 +42,10 @@
 #define MINI_FILE_ERROR 8U
 #define MINI_FILE_READ_NEEDS_POSITION 16U
 #define MINI_FILE_WRITE_NEEDS_SYNC 32U
+#define MINI_FILE_BYTE_ORIENTED 64U
+#define MINI_FILE_WIDE_ORIENTED 128U
+#define MINI_FILE_ORIENTATION_MASK \
+    (MINI_FILE_BYTE_ORIENTED | MINI_FILE_WIDE_ORIENTED)
 
 #define MINI_FILE_BUFFER_SIZE 256U
 
@@ -75,5 +94,9 @@ int __mini_stdio_flush_all(void);
 void __mini_stdio_register(FILE *stream);
 void __mini_stdio_unregister(FILE *stream);
 void __mini_stdio_release_buffer(FILE *stream);
+
+int __mini_stdio_fwide_unlocked(FILE *stream, int mode);
+int __mini_stdio_require_byte(FILE *stream);
+int __mini_stdio_require_wide(FILE *stream);
 
 #endif
