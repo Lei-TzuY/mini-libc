@@ -33,8 +33,7 @@ static int wide_require_writable(FILE *stream)
     if (__mini_stdio_require_wide(stream) == EOF) {
         return EOF;
     }
-    if ((stream->mode & MINI_FILE_WRITABLE) == 0U ||
-        (stream->state & MINI_FILE_READ_NEEDS_POSITION) != 0U) {
+    if ((stream->mode & MINI_FILE_WRITABLE) == 0U) {
         (void)wide_error(stream, EINVAL);
         return EOF;
     }
