@@ -5,6 +5,7 @@
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
+#define MB_CUR_MAX 1
 
 typedef struct {
     int quot;
@@ -27,6 +28,11 @@ double strtod(const char *restrict nptr, char **restrict endptr);
 long strtol(const char *restrict nptr, char **restrict endptr, int base);
 unsigned long strtoul(const char *restrict nptr, char **restrict endptr, int base);
 long long strtoll(const char *restrict nptr, char **restrict endptr, int base);
+int mblen(const char *s, size_t n);
+int mbtowc(wchar_t *restrict pwc, const char *restrict s, size_t n);
+int wctomb(char *s, wchar_t wc);
+size_t mbstowcs(wchar_t *restrict dst, const char *restrict src, size_t len);
+size_t wcstombs(char *restrict dst, const wchar_t *restrict src, size_t len);
 char *getenv(const char *name);
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
               int (*compar)(const void *, const void *));
