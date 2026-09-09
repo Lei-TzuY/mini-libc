@@ -18,6 +18,8 @@ fi
     -o "$OUT/fenv-rounding.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/decompose.c \
     -o "$OUT/fenv-decompose.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/scale.c \
+    -o "$OUT/fenv-scale.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/explog.c \
     -o "$OUT/fenv-explog.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/hyperbolic.c \
@@ -27,10 +29,12 @@ fi
 "$MINICC" -nostdinc -Iinclude -c src/math/special.c \
     -o "$OUT/math_special.o"
 "$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o" \
-    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o" "$OUT/math_hyperbolic.o" \
-    "$OUT/math_trig.o" "$OUT/math_special.o"
+    "$OUT/fenv-decompose.o" "$OUT/fenv-scale.o" "$OUT/fenv-explog.o" \
+    "$OUT/math_hyperbolic.o" "$OUT/math_trig.o" "$OUT/math_special.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_integration.c \
     -o "$OUT/fenv-test.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_scaling.c \
+    -o "$OUT/fenv-scaling-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_hyperbolic.c \
     -o "$OUT/fenv-hyperbolic-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_gamma.c \
@@ -43,6 +47,8 @@ fi
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-test" \
         "$OUT/fenv-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/fenv-scaling-test" \
+        "$OUT/fenv-scaling-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-hyperbolic-test" \
         "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-gamma-test" \
@@ -54,6 +60,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-test" \
         "$OUT/fenv-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/fenv-scaling-test" \
+        "$OUT/fenv-scaling-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-hyperbolic-test" \
         "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-gamma-test" \
@@ -70,6 +78,15 @@ status=$?
 set -e
 if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-ok" ]; then
     echo "unexpected tiny-c fenv: status=$status output='$output'" >&2
+    exit 1
+fi
+
+set +e
+output=$("$OUT/fenv-scaling-test")
+status=$?
+set -e
+if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-scaling-ok" ]; then
+    echo "unexpected tiny-c scaling fenv: status=$status output='$output'" >&2
     exit 1
 fi
 
@@ -109,7 +126,8 @@ if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-special-ok" ]; then
     exit 1
 fi
 
-./tests/verify-no-host-libc.sh "$OUT/fenv-test" "$OUT/fenv-hyperbolic-test" \
-    "$OUT/fenv-gamma-test" "$OUT/fenv-trig-test" "$OUT/fenv-special-test"
+./tests/verify-no-host-libc.sh "$OUT/fenv-test" "$OUT/fenv-scaling-test" \
+    "$OUT/fenv-hyperbolic-test" "$OUT/fenv-gamma-test" \
+    "$OUT/fenv-trig-test" "$OUT/fenv-special-test"
 
 echo "tiny-c floating environment integration passed"
