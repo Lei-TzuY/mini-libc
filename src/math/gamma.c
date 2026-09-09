@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -71,6 +72,24 @@ static int double_is_nan_bits(unsigned long long bits)
 {
     return (bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP &&
            (bits & MINI_DOUBLE_FRAC) != 0ULL;
+}
+
+static void raise_domain(void)
+{
+    errno = EDOM;
+    (void)feraiseexcept(FE_INVALID);
+}
+
+static void raise_pole(void)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(FE_DIVBYZERO);
+}
+
+static void raise_range(int exception)
+{
+    errno = ERANGE;
+    (void)feraiseexcept(exception | FE_INEXACT);
 }
 
 static int signed_integer_is_odd(long long value)
@@ -192,15 +211,15 @@ double lgamma(double x)
         return signed_infinity(0);
     }
     if (magnitude == 0ULL) {
-        errno = ERANGE;
+        raise_pole();
         return signed_infinity(0);
     }
     if (gamma_logabs(x, &result, &sign) != 0) {
-        errno = ERANGE;
+        raise_pole();
         return signed_infinity(0);
     }
     if ((double_bits(result) & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP) {
-        errno = ERANGE;
+        raise_range(FE_OVERFLOW);
         return signed_infinity(0);
     }
 
@@ -222,26 +241,27 @@ double tgamma(double x)
     }
     if (magnitude == MINI_DOUBLE_EXP) {
         if ((bits & MINI_DOUBLE_SIGN) != 0ULL) {
-            errno = EDOM;
+            raise_domain();
             return quiet_nan();
         }
         return x;
     }
     if (magnitude == 0ULL) {
-        errno = ERANGE;
+        raise_pole();
         return signed_infinity((bits & MINI_DOUBLE_SIGN) != 0ULL);
     }
     if (gamma_logabs(x, &logabs, &sign) != 0) {
-        errno = EDOM;
+        raise_domain();
         return quiet_nan();
     }
 
     errno = saved_errno;
     result = exp(logabs);
     bits = double_bits(result);
-    if ((bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP ||
-        (bits & MINI_DOUBLE_EXP) == 0ULL) {
-        errno = ERANGE;
+    if ((bits & MINI_DOUBLE_EXP) == MINI_DOUBLE_EXP) {
+        raise_range(FE_OVERFLOW);
+    } else if ((bits & MINI_DOUBLE_EXP) == 0ULL) {
+        raise_range(FE_UNDERFLOW);
     } else {
         errno = saved_errno;
     }
@@ -274,10 +294,11 @@ float lgammaf(float x)
 
     result_bits = float_bits(result);
     if ((double_bits(wide) & MINI_DOUBLE_EXP) != MINI_DOUBLE_EXP &&
-        wide != 0.0 &&
-        ((result_bits & MINI_FLOAT_EXP) == 0U ||
-         (result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP)) {
-        errno = ERANGE;
+        wide != 0.0 && (result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP) {
+        raise_range(FE_OVERFLOW);
+    } else if ((double_bits(wide) & MINI_DOUBLE_EXP) != MINI_DOUBLE_EXP &&
+               wide != 0.0 && (result_bits & MINI_FLOAT_EXP) == 0U) {
+        raise_range(FE_UNDERFLOW);
     } else {
         errno = saved_errno;
     }
@@ -309,10 +330,11 @@ float tgammaf(float x)
 
     result_bits = float_bits(result);
     if ((double_bits(wide) & MINI_DOUBLE_EXP) != MINI_DOUBLE_EXP &&
-        wide != 0.0 &&
-        ((result_bits & MINI_FLOAT_EXP) == 0U ||
-         (result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP)) {
-        errno = ERANGE;
+        wide != 0.0 && (result_bits & MINI_FLOAT_EXP) == MINI_FLOAT_EXP) {
+        raise_range(FE_OVERFLOW);
+    } else if ((double_bits(wide) & MINI_DOUBLE_EXP) != MINI_DOUBLE_EXP &&
+               wide != 0.0 && (result_bits & MINI_FLOAT_EXP) == 0U) {
+        raise_range(FE_UNDERFLOW);
     } else {
         errno = saved_errno;
     }
