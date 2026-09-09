@@ -8,7 +8,7 @@ MULTIBYTE_RENAMES := -Dmblen=mini_test_mblen -Dmbtowc=mini_test_mbtowc \
                      -Dwcstombs=mini_test_wcstombs
 
 $(LIBC): $(BUILD)/locale.o $(BUILD)/wchar.o $(BUILD)/wide_stdio.o \
-         $(BUILD)/multibyte.o
+         $(BUILD)/wide_format.o $(BUILD)/multibyte.o
 all: $(BUILD)/locale_probe $(BUILD)/locale_differential \
      $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
      $(BUILD)/wide_stdio_probe
@@ -25,6 +25,11 @@ $(BUILD)/wchar.o: src/wchar/wchar.c include/wchar.h include/stddef.h include/err
 
 $(BUILD)/wide_stdio.o: src/wchar/wide_stdio.c include/wchar.h include/stdio.h \
                        src/stdio/stdio_internal.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/wide_format.o: src/wchar/wide_format.c include/wchar.h include/stdio.h \
+                        include/stdarg.h include/stdlib.h include/errno.h \
+                        src/stdio/stdio_internal.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/multibyte.o: src/stdlib/multibyte.c include/stdlib.h include/wchar.h include/stddef.h | $(BUILD)
@@ -77,7 +82,7 @@ locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_differential \
 	@test "$$($(BUILD)/locale_differential)" = "locale-differential-ok"
 	@test "$$($(BUILD)/wchar_probe)" = "wchar-ok"
 	@test "$$($(BUILD)/wchar_differential)" = "wchar-differential-ok"
-	@test "$$(printf 'ROW\n' | $(BUILD)/wide_stdio_probe)" = "!OKwide-stdio-ok"
+	@test "$$(printf 'ROW\n' | $(BUILD)/wide_stdio_probe)" = "!OK:7:2.5wide-stdio-ok"
 
 locale_inspect: $(BUILD)/locale_probe $(BUILD)/wchar_probe $(BUILD)/wide_stdio_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/locale_probe

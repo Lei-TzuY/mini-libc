@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <mini/syscall.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <wchar.h>
 
@@ -10,6 +11,40 @@ static int fail(FILE *stream, int code)
     }
     (void)remove("build/wide-stdio-probe.tmp");
     return code;
+}
+
+static int call_vfwprintf(FILE *stream, const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfwprintf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int call_vswprintf(wchar_t *buffer, size_t size,
+                          const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vswprintf(buffer, size, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int call_vwprintf(const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vwprintf(format, ap);
+    va_end(ap);
+    return result;
 }
 
 int main(void)
@@ -23,8 +58,17 @@ int main(void)
     static const wchar_t invalid_wide[] = {'O', (wchar_t)0x80, 0};
     static const wchar_t stdin_tail[] = {'O', 'W', '\n', 0};
     static const wchar_t stdout_tail[] = {'O', 'K', 0};
-    wchar_t line[8];
+    static const wchar_t memory_expected[] = {'O', 'K', ':', '7', ':', '2', '.', '5', 0};
+    static const wchar_t ordinary_expected[] = {'0', 'x', '2', 'a', '/', '9', 0};
+    static const wchar_t stream_expected[] = {'N', '=', '7', ' ', 'S', '=', 'o', 'k', ' ', 'F', '=', '2', '.', '5', '\n', 0};
+    static const wchar_t truncated_expected[] = {'a', 'b', 'c', 'd', 0};
+    static const wchar_t invalid_format[] = {(wchar_t)0x80, 0};
+    static const char invalid_narrow[] = {(char)0x80, 0};
+    wchar_t line[32];
+    wchar_t formatted[64];
+    wchar_t small[5];
     FILE *stream;
+    int count;
 
     (void)remove(path);
     stream = fopen(path, "w+");
@@ -134,21 +178,88 @@ int main(void)
     }
 
     errno = ERANGE;
+    count = call_vswprintf(formatted, 64U, L"%s:%d:%.1f", "OK", 7, 2.5);
+    if (count != (int)wcslen(memory_expected) ||
+        wcscmp(formatted, memory_expected) != 0 || errno != ERANGE) {
+        return fail((FILE *)0, 19);
+    }
+    count = swprintf(formatted, 64U, L"%#x/%u", 42U, 9U);
+    if (count != (int)wcslen(ordinary_expected) ||
+        wcscmp(formatted, ordinary_expected) != 0) {
+        return fail((FILE *)0, 20);
+    }
+    errno = 0;
+    if (swprintf(small, 5U, L"abcdef") != EOF || errno != ERANGE ||
+        wcscmp(small, truncated_expected) != 0) {
+        return fail((FILE *)0, 21);
+    }
+    errno = 0;
+    if (swprintf((wchar_t *)0, 0U, L"") != EOF || errno != ERANGE) {
+        return fail((FILE *)0, 22);
+    }
+    errno = 0;
+    if (swprintf(formatted, 64U, invalid_format) != EOF || errno != EILSEQ) {
+        return fail((FILE *)0, 23);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fwprintf(stream, L"N=%d S=%s ", 7, "ok") != 9 ||
+        call_vfwprintf(stream, L"F=%.1f\n", 2.5) != 6 ||
+        ftell(stream) != 15L) {
+        return fail(stream, 24);
+    }
+    rewind(stream);
+    if (fgetws(line, 32, stream) != line ||
+        wcscmp(line, stream_expected) != 0 || fclose(stream) != 0) {
+        return fail((FILE *)0, 25);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fputc('B', stream) != 'B') {
+        return fail(stream, 26);
+    }
+    errno = 0;
+    if (fwprintf(stream, L"%d", 1) != EOF || errno != EINVAL ||
+        !ferror(stream)) {
+        return fail(stream, 27);
+    }
+    clearerr(stream);
+    if (fclose(stream) != 0) {
+        return fail((FILE *)0, 28);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0) {
+        return fail(stream, 29);
+    }
+    errno = 0;
+    if (fwprintf(stream, L"%s", invalid_narrow) != EOF || errno != EILSEQ ||
+        !ferror(stream)) {
+        return fail(stream, 30);
+    }
+    clearerr(stream);
+    if (fclose(stream) != 0) {
+        return fail((FILE *)0, 31);
+    }
+
+    errno = ERANGE;
     if (fwide(stdin, 0) != 0 || getwchar() != (wint_t)'R' ||
         fgetws(line, 8, stdin) != line || wcscmp(line, stdin_tail) != 0 ||
         fwide(stdin, 0) <= 0 || errno != ERANGE) {
-        return fail((FILE *)0, 19);
+        return fail((FILE *)0, 32);
     }
     if (fwide(stdout, 0) != 0 || putwchar((wchar_t)'!') != (wint_t)'!' ||
-        fputws(stdout_tail, stdout) < 0 || fwide(stdout, 0) <= 0 ||
+        fputws(stdout_tail, stdout) < 0 || wprintf(L":%d", 7) != 2 ||
+        call_vwprintf(L":%.1f", 2.5) != 4 || fwide(stdout, 0) <= 0 ||
         fflush(stdout) != 0) {
-        return fail((FILE *)0, 20);
+        return fail((FILE *)0, 33);
     }
 
     (void)remove(path);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
-        return 21;
+        return 34;
     }
     return 0;
 }
