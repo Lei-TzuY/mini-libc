@@ -29,6 +29,17 @@ static unsigned int fbits(float value)
     return convert.bits;
 }
 
+static double from_bits(unsigned long long bits)
+{
+    union {
+        double value;
+        unsigned long long bits;
+    } convert;
+
+    convert.bits = bits;
+    return convert.value;
+}
+
 static int only_flags(int flags)
 {
     return fetestexcept(FE_ALL_EXCEPT) == flags;
@@ -54,6 +65,14 @@ int main(void)
     fvalue = mini_test_scalbnf(1.0f, -149);
     if (dbits(value) != 1ULL || fbits(fvalue) != 1U || !only_flags(0)) {
         return 3;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 14;
+    }
+    value = mini_test_scalbn(from_bits(0x3fffffffffffffffULL), -1023);
+    if (dbits(value) != 0x0010000000000000ULL || !only_flags(FE_INEXACT)) {
+        return 15;
     }
 
     if (feclearexcept(FE_ALL_EXCEPT) != 0) {
