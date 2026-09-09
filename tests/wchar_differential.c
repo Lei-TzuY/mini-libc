@@ -29,6 +29,12 @@ static int same_sign(int left, int right)
            (left > 0 && right > 0);
 }
 
+static void reset_states(mbstate_t *host_state, unsigned long *mini_storage)
+{
+    memset(host_state, 0, sizeof(*host_state));
+    memset(mini_storage, 0, 2U * sizeof(*mini_storage));
+}
+
 int main(void)
 {
     static const char high[] = {(char)0x80, '\0'};
@@ -86,6 +92,7 @@ int main(void)
         errno != *__mini_errno_location()) {
         return 4;
     }
+    reset_states(&host_state, mini_storage);
 
     errno = 123;
     *__mini_errno_location() = 123;
@@ -142,6 +149,7 @@ int main(void)
         errno != *__mini_errno_location()) {
         return 9;
     }
+    reset_states(&host_state, mini_storage);
 
     host_wsrc = wide_abc;
     mini_wsrc = wide_abc;
@@ -168,6 +176,7 @@ int main(void)
         errno != *__mini_errno_location()) {
         return 11;
     }
+    reset_states(&host_state, mini_storage);
 
     if (wcslen(wide_abc) != mini_test_wcslen(wide_abc) ||
         !same_sign(wcscmp(wide_abc, (const wchar_t[]){'A', 'C', 0}),
