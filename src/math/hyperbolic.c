@@ -193,6 +193,9 @@ double cosh(double x)
     if (double_is_nan(bits)) {
         return x;
     }
+    if (magnitude_bits == 0ULL) {
+        return 1.0;
+    }
     if (magnitude_bits == MINI_DOUBLE_EXP) {
         return double_from_bits(MINI_DOUBLE_EXP);
     }
