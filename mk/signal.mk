@@ -45,4 +45,5 @@ include mk/fenv-domain.mk
 include mk/fenv-hyperbolic.mk
 include mk/fenv-gamma.mk
 include mk/fenv-trig.mk
+include mk/fenv-special.mk
 include mk/setjmp.mk
