@@ -21,8 +21,10 @@ $(BUILD)/fenv_hyperbolic_interop.o: tests/fenv_hyperbolic_interop.c | $(BUILD)
 
 $(BUILD)/fenv_hyperbolic_interop: $(BUILD)/fenv_hyperbolic_interop.o \
                                   $(BUILD)/fenv_hyperbolic_hyperbolic_test_impl.o \
+                                  $(BUILD)/fenv_domain_math_test_impl.o \
                                   $(BUILD)/fenv_explog_test_impl.o \
                                   $(BUILD)/math_decompose_diff_impl.o \
+                                  $(BUILD)/math_sqrt.o \
                                   $(BUILD)/fenv_test_impl.o \
                                   $(BUILD)/fenv_asm.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
