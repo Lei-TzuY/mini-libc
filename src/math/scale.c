@@ -71,36 +71,60 @@ static int highest_bit_u64(unsigned long long value)
     return bit;
 }
 
-static unsigned long long round_shift_even(unsigned long long value,
+static unsigned long long round_shift_mode(unsigned long long value,
                                            unsigned long long shift,
+                                           int negative, int rounding,
                                            int *discarded)
 {
     unsigned long long quotient;
-    unsigned long long remainder;
-    unsigned long long half;
+    unsigned long long remainder = 0ULL;
 
     if (shift == 0ULL) {
         *discarded = 0;
         return value;
     }
     if (shift >= 64ULL) {
+        quotient = 0ULL;
         *discarded = value != 0ULL;
-        return 0ULL;
+    } else {
+        quotient = value >> shift;
+        remainder = value & ((1ULL << shift) - 1ULL);
+        *discarded = remainder != 0ULL;
     }
 
-    quotient = value >> shift;
-    remainder = value & ((1ULL << shift) - 1ULL);
-    half = 1ULL << (shift - 1ULL);
-    *discarded = remainder != 0ULL;
+    if (!*discarded) {
+        return quotient;
+    }
 
-    if (remainder > half ||
-        (remainder == half && (quotient & 1ULL) != 0ULL)) {
-        ++quotient;
+    if (rounding == FE_UPWARD) {
+        if (!negative) {
+            ++quotient;
+        }
+        return quotient;
+    }
+    if (rounding == FE_DOWNWARD) {
+        if (negative) {
+            ++quotient;
+        }
+        return quotient;
+    }
+    if (rounding == FE_TOWARDZERO) {
+        return quotient;
+    }
+
+    if (shift < 64ULL) {
+        unsigned long long half = 1ULL << (shift - 1ULL);
+
+        if (remainder > half ||
+            (remainder == half && (quotient & 1ULL) != 0ULL)) {
+            ++quotient;
+        }
     }
     return quotient;
 }
 
-static double scale_double(double x, int n, enum mini_scale_status *status)
+static double scale_double(double x, int n, int rounding,
+                           enum mini_scale_status *status)
 {
     unsigned long long bits = double_bits(x);
     unsigned long long sign = bits & MINI_DOUBLE_SIGN;
@@ -142,7 +166,8 @@ static double scale_double(double x, int n, enum mini_scale_status *status)
         unsigned long long shift = (unsigned long long)(-target - 1022LL);
         int discarded;
         unsigned long long rounded =
-            round_shift_even(significand, shift, &discarded);
+            round_shift_mode(significand, shift, sign != 0ULL, rounding,
+                             &discarded);
 
         if (rounded >= (1ULL << 52)) {
             if (discarded) {
@@ -157,7 +182,8 @@ static double scale_double(double x, int n, enum mini_scale_status *status)
     }
 }
 
-static float scale_float(float x, int n, enum mini_scale_status *status)
+static float scale_float(float x, int n, int rounding,
+                         enum mini_scale_status *status)
 {
     unsigned int bits = float_bits(x);
     unsigned int sign = bits & MINI_FLOAT_SIGN;
@@ -198,7 +224,8 @@ static float scale_float(float x, int n, enum mini_scale_status *status)
         unsigned long long shift = (unsigned long long)(-target - 126LL);
         int discarded;
         unsigned long long rounded =
-            round_shift_even(significand, shift, &discarded);
+            round_shift_mode(significand, shift, sign != 0U, rounding,
+                             &discarded);
 
         if (rounded >= (1ULL << 23)) {
             if (discarded) {
@@ -236,10 +263,14 @@ static double scale_public_double(double x, int n)
     fenv_t environment;
     enum mini_scale_status status;
     int saved_errno = errno;
+    int rounding = fegetround();
     double result;
 
+    if (rounding < 0) {
+        rounding = FE_TONEAREST;
+    }
     (void)fegetenv(&environment);
-    result = scale_double(x, n, &status);
+    result = scale_double(x, n, rounding, &status);
     finish_scale(&environment, saved_errno, status);
     return result;
 }
@@ -249,10 +280,14 @@ static float scale_public_float(float x, int n)
     fenv_t environment;
     enum mini_scale_status status;
     int saved_errno = errno;
+    int rounding = fegetround();
     float result;
 
+    if (rounding < 0) {
+        rounding = FE_TONEAREST;
+    }
     (void)fegetenv(&environment);
-    result = scale_float(x, n, &status);
+    result = scale_float(x, n, rounding, &status);
     finish_scale(&environment, saved_errno, status);
     return result;
 }

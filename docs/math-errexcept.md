@@ -105,27 +105,31 @@ also included in host-libc independence inspection.
 ## Claim boundary: rounding modes
 
 The global `MATH_ERREXCEPT` promotion does not erase previously documented
-numerical boundaries. In particular, `scalbn*` / `ldexp*` still use the explicit
-nearest-even bit-level rule for subnormal creation even when `fesetround` selects
-a directed mode. Their exception reporting is deliberate and is part of this
-closure; their tiny-result numerical rounding is not yet an active-rounding-mode
-conformance claim.
+numerical boundaries. The scaling family now follows the active rounding mode
+for inexact binary64/binary32 subnormal and round-to-zero creation. Exact
+normal/subnormal scaling remains mode-independent, and tininess is classified
+after rounding so a tiny mathematical result promoted to the minimum normal
+value raises only `FE_INEXACT`.
 
-Likewise, bounded polynomial/series implementations remain governed by their
-existing numerical error envelopes. `math_errhandling` describes how math
-errors are reported, not a promise of correctly rounded results.
+This is still not a blanket Annex F rounding-mode claim. In particular, finite
+`scalbn*` / `ldexp*` overflow retains the established signed-infinity endpoint
+under every public mode, and bounded polynomial/series implementations remain
+governed by their documented numerical error envelopes. `math_errhandling`
+describes how math errors are reported, not a promise that every approximate
+result is correctly rounded under every active direction.
 
 ## Phase promotion
 
-Repository-wide math error reporting is now a completed baseline. More tests
-that merely repeat the same domain/range classes would be low-value farming.
+Repository-wide math error reporting and active-rounding tiny scaling are now
+completed baselines. More half-way scaling vectors or repeated domain/range
+flags would be low-value farming.
 
-The strongest next floating-environment promotion is numerical rounding-mode
-integration for the remaining bit-level result kernels, beginning with
-`scalbn*` / `ldexp*` subnormal creation. That phase should make directed
-rounding affect the actual tiny-result bits (not only exception flags), preserve
-exact results and existing errno semantics, and prove all four public rounding
-modes through freestanding, host-fenv, pinned tiny-c, and mini-elf execution.
-Only after that should the same audit expand to other algorithms whose current
-bounded numerical implementation is explicitly nearest-even or otherwise
-rounding-direction-independent.
+The strongest next floating-environment promotion is a coherent numerical
+rounding-mode audit across the remaining result kernels. Finite-overflow endpoint
+selection in `scalbn*` / `ldexp*` is an explicit first gap, but it should be
+audited together with other routines whose bounded implementation still
+hard-codes nearest-even or otherwise ignores the active direction rather than
+split into a wrapper-only micro-PR. A promotion should make the selected result
+bits depend deliberately on all four public rounding modes, preserve existing
+`errno` and sticky `FE_*` contracts, and continue through freestanding,
+host-fenv, pinned tiny-c, and mini-elf executable evidence.

@@ -68,6 +68,92 @@ int main(void)
         return 3;
     }
 
+    if (fesetround(FE_UPWARD) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 24;
+    }
+    errno = 82;
+    value = scalbn(1.0, -1075);
+    if (dbits(value) != 1ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 25;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 26;
+    }
+    value = ldexp(-1.0, -1075);
+    if (dbits(value) != 0x8000000000000000ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 27;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 28;
+    }
+    fvalue = scalbnf(1.0f, -150);
+    if (fbits(fvalue) != 1U || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 29;
+    }
+
+    if (fesetround(FE_DOWNWARD) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 30;
+    }
+    value = scalbn(1.0, -1075);
+    if (dbits(value) != 0ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 31;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 32;
+    }
+    value = ldexp(-1.0, -1075);
+    if (dbits(value) != 0x8000000000000001ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 33;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 34;
+    }
+    fvalue = scalbnf(-1.0f, -150);
+    if (fbits(fvalue) != 0x80000001U || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 35;
+    }
+
+    if (fesetround(FE_TOWARDZERO) != 0 ||
+        feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 36;
+    }
+    value = scalbn(1.5, -1074);
+    if (dbits(value) != 1ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 37;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 38;
+    }
+    value = scalbn(-1.5, -1074);
+    if (dbits(value) != 0x8000000000000001ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 39;
+    }
+
+    if (fesetround(FE_TONEAREST) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 40;
+    }
+    value = scalbn(1.5, -1074);
+    if (dbits(value) != 2ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 41;
+    }
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 42;
+    }
+    value = scalbn(-1.5, -1074);
+    if (dbits(value) != 0x8000000000000002ULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 43;
+    }
+
     if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 22;
     }
@@ -78,9 +164,28 @@ int main(void)
         return 23;
     }
 
-    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
-        return 4;
+    if (fesetround(FE_DOWNWARD) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 44;
     }
+    errno = 83;
+    value = scalbn(from_bits(0x3fffffffffffffffULL), -1023);
+    if (dbits(value) != 0x000fffffffffffffULL || errno != ERANGE ||
+        !only_flags(FE_UNDERFLOW | FE_INEXACT)) {
+        return 45;
+    }
+    if (fesetround(FE_UPWARD) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 46;
+    }
+    errno = 84;
+    value = scalbn(from_bits(0x3fffffffffffffffULL), -1023);
+    if (dbits(value) != 0x0010000000000000ULL || errno != 84 ||
+        !only_flags(FE_INEXACT)) {
+        return 47;
+    }
+    if (fesetround(FE_TONEAREST) != 0 || feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 48;
+    }
+
     errno = 73;
     value = ldexp(1.0, 1024);
     if (!isinf(value) || signbit(value) || errno != ERANGE ||
