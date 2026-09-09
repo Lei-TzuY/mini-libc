@@ -41,15 +41,21 @@ else
         "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
 fi
 
+set +e
 output=$("$OUT/fenv-test")
-if [ "$output" != "tiny-fenv-ok" ]; then
-    echo "unexpected tiny-c fenv output: $output" >&2
+status=$?
+set -e
+if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-ok" ]; then
+    echo "unexpected tiny-c fenv: status=$status output='$output'" >&2
     exit 1
 fi
 
+set +e
 output=$("$OUT/fenv-hyperbolic-test")
-if [ "$output" != "tiny-fenv-hyperbolic-ok" ]; then
-    echo "unexpected tiny-c hyperbolic fenv output: $output" >&2
+status=$?
+set -e
+if [ "$status" -ne 0 ] || [ "$output" != "tiny-fenv-hyperbolic-ok" ]; then
+    echo "unexpected tiny-c hyperbolic fenv: status=$status output='$output'" >&2
     exit 1
 fi
 
