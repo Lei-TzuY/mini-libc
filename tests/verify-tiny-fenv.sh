@@ -20,17 +20,25 @@ fi
     -o "$OUT/fenv-decompose.o"
 "$MINICC" -nostdinc -Iinclude -c src/math/explog.c \
     -o "$OUT/fenv-explog.o"
+"$MINICC" -nostdinc -Iinclude -c src/math/hyperbolic.c \
+    -o "$OUT/math_hyperbolic.o"
 "$AR" rcs "$OUT/libc.a" "$OUT/fenv-asm.o" "$OUT/fenv-rounding.o" \
-    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o"
+    "$OUT/fenv-decompose.o" "$OUT/fenv-explog.o" "$OUT/math_hyperbolic.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_integration.c \
     -o "$OUT/fenv-test.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_fenv_hyperbolic.c \
+    -o "$OUT/fenv-hyperbolic-test.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/fenv-test" \
         "$OUT/fenv-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/fenv-hyperbolic-test" \
+        "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/fenv-test" \
         "$OUT/fenv-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/fenv-hyperbolic-test" \
+        "$OUT/fenv-hyperbolic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
 fi
 
 output=$("$OUT/fenv-test")
@@ -39,6 +47,12 @@ if [ "$output" != "tiny-fenv-ok" ]; then
     exit 1
 fi
 
-./tests/verify-no-host-libc.sh "$OUT/fenv-test"
+output=$("$OUT/fenv-hyperbolic-test")
+if [ "$output" != "tiny-fenv-hyperbolic-ok" ]; then
+    echo "unexpected tiny-c hyperbolic fenv output: $output" >&2
+    exit 1
+fi
+
+./tests/verify-no-host-libc.sh "$OUT/fenv-test" "$OUT/fenv-hyperbolic-test"
 
 echo "tiny-c floating environment integration passed"
