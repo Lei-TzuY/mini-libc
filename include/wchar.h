@@ -26,9 +26,11 @@ int fwide(FILE *stream, int mode);
 wint_t fgetwc(FILE *stream);
 wint_t getwc(FILE *stream);
 wint_t getwchar(void);
+wchar_t *fgetws(wchar_t *restrict s, int n, FILE *restrict stream);
 wint_t fputwc(wchar_t wc, FILE *stream);
 wint_t putwc(wchar_t wc, FILE *stream);
 wint_t putwchar(wchar_t wc);
+int fputws(const wchar_t *restrict s, FILE *restrict stream);
 wint_t ungetwc(wint_t wc, FILE *stream);
 
 size_t wcslen(const wchar_t *s);

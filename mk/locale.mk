@@ -77,7 +77,7 @@ locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_differential \
 	@test "$$($(BUILD)/locale_differential)" = "locale-differential-ok"
 	@test "$$($(BUILD)/wchar_probe)" = "wchar-ok"
 	@test "$$($(BUILD)/wchar_differential)" = "wchar-differential-ok"
-	@test "$$(printf R | $(BUILD)/wide_stdio_probe)" = "!wide-stdio-ok"
+	@test "$$(printf 'ROW\n' | $(BUILD)/wide_stdio_probe)" = "!OKwide-stdio-ok"
 
 locale_inspect: $(BUILD)/locale_probe $(BUILD)/wchar_probe $(BUILD)/wide_stdio_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/locale_probe

@@ -25,10 +25,12 @@ static int file_equals(const char *path, const char *expected, size_t length)
 int main(int argc, char **argv)
 {
     static const char ok[] = "tiny-buffering-ok\n";
+    static const wchar_t wide_text[] = {'W', 'Q', '\n', 0};
     char full[4];
     char line[8];
     char standard[BUFSIZ];
     char temporary[4];
+    wchar_t wide_read[4] = {0, 0, 0, 0};
     FILE *stream;
 
     if (argc != 2) {
@@ -91,8 +93,7 @@ int main(int argc, char **argv)
 
     stream = tmpfile();
     if (stream == (FILE *)0 || fwide(stream, 0) != 0 || fwide(stream, 1) <= 0 ||
-        fputwc((wchar_t)'W', stream) != (wint_t)'W' ||
-        fputwc((wchar_t)'Q', stream) != (wint_t)'Q' || ftell(stream) != 2L) {
+        fputws(wide_text, stream) < 0 || ftell(stream) != 3L) {
         if (stream != (FILE *)0) {
             fclose(stream);
         }
@@ -105,15 +106,24 @@ int main(int argc, char **argv)
     }
     clearerr(stream);
     rewind(stream);
+    if (fgetws(wide_read, 4, stream) != wide_read ||
+        wcscmp(wide_read, wide_text) != 0 || ftell(stream) != 3L ||
+        fgetws(wide_read, 4, stream) != (wchar_t *)0 || !feof(stream)) {
+        fclose(stream);
+        return 11;
+    }
+    clearerr(stream);
+    rewind(stream);
     if (fwide(stream, 0) <= 0 || fgetwc(stream) != (wint_t)'W' ||
         ungetwc((wint_t)'Z', stream) != (wint_t)'Z' || ftell(stream) != 0L ||
         fgetwc(stream) != (wint_t)'Z' || fgetwc(stream) != (wint_t)'Q' ||
-        fgetwc(stream) != WEOF || !feof(stream) || fclose(stream) != 0) {
-        return 11;
+        fgetwc(stream) != (wint_t)'\n' || fgetwc(stream) != WEOF ||
+        !feof(stream) || fclose(stream) != 0) {
+        return 12;
     }
 
     if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
-        return 12;
+        return 13;
     }
     return 0;
 }

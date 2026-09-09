@@ -1,9 +1,10 @@
 # C locale, multibyte, and wide-character baseline
 
 mini-libc currently implements one deliberate locale: the ISO C `"C"` locale.
-The text runtime now includes locale selection/querying, a single-byte C-locale
-multibyte model, restartable wide-character conversions, and a basic wide-string
-core without claiming a locale database, UTF-8 locale, or stateful encoding.
+The text runtime includes locale selection/querying, a single-byte C-locale
+multibyte model, restartable wide-character conversions, a basic wide-string
+core, and oriented wide stream character/line I/O without claiming a locale
+database, UTF-8 locale, or stateful encoding.
 
 ## Public locale surface
 
@@ -45,9 +46,9 @@ The legacy `<stdlib.h>` surface remains available:
 - `mbstowcs`
 - `wcstombs`
 
-Those entry points now delegate to the restartable wide-character core instead
-of maintaining a second decoder/encoder. The C-locale ASCII/EILSEQ rules
-therefore have one production source of truth.
+Those entry points delegate to the restartable wide-character core instead of
+maintaining a second decoder/encoder. The C-locale ASCII/EILSEQ rules therefore
+have one production source of truth.
 
 The conversion is stateless. `mblen(NULL, ...)`, `mbtowc(..., NULL, ...)`, and
 `wctomb(NULL, ...)` therefore report an initial-state result of zero. For a
@@ -62,7 +63,7 @@ current multibyte encoding and causes the applicable conversion to report
 
 ## Restartable wide-character surface
 
-`<wchar.h>` now exposes a concrete `mbstate_t` plus:
+`<wchar.h>` exposes a concrete `mbstate_t` plus:
 
 - `mbsinit`
 - `mbrtowc`
@@ -96,6 +97,45 @@ The basic wide-string functions are allocation-free and independent of locale
 state. `wcscmp` guarantees the usual negative/zero/positive ordering contract
 rather than a specific magnitude.
 
+## Oriented wide stream I/O
+
+`<wchar.h>` now exposes the C-locale wide stream baseline:
+
+- `fwide`
+- `fgetwc`, `getwc`, `getwchar`
+- `fputwc`, `putwc`, `putwchar`
+- `fgetws`, `fputws`
+- `ungetwc`
+
+An unoriented stream becomes wide-oriented on its first successful wide I/O
+operation or through `fwide(stream, positive_mode)`. Byte-oriented streams reject
+wide operations with `EINVAL` and a sticky stream error; wide-oriented streams
+likewise reject byte, block, and byte-formatted I/O. Positioning and buffering
+preserve orientation. A successful `freopen` rebind resets the stream to the
+unoriented state so the rebound stream can establish a fresh orientation.
+
+Wide character and wide line/string APIs share the same private conversion and
+buffered `FILE` path rather than issuing parallel raw-descriptor I/O. In the
+current single-byte C locale each successful wide character maps through
+`mbrtowc`/`wcrtomb` to exactly one ASCII byte. Invalid input bytes or
+unrepresentable wide values report `EILSEQ` and set the stream error indicator.
+
+`fgetws` validates orientation, readability, and the update-stream write-to-read
+synchronization barrier before any transfer, including the `n == 1` boundary.
+It stores at most `n - 1` wide characters, retains an encountered newline, and
+always terminates a successful result with a wide null. EOF after at least one
+character returns the partial line; immediate EOF returns null. `n == 1`
+returns an empty wide string without advancing the logical file position.
+
+`fputws` validates wide orientation and writability even for an empty source,
+then emits source characters through the same wide write core as `fputwc`; the
+terminating wide null is not written. Non-empty output continues to inherit the
+existing buffered/update-stream write contract from `FILE`.
+
+`ungetwc` uses the existing guaranteed one-byte pushback slot. A successful
+pushback clears EOF and updates the logical position; a second pending pushback
+or an incompatible update-stream state is rejected deterministically.
+
 ## Executable evidence
 
 `tests/locale_probe.c` remains the freestanding baseline for locale selection,
@@ -108,6 +148,11 @@ mini-libc. It directly exercises caller-owned and null restartable state,
 restartable bulk conversion, source-pointer updates, error recovery, and the
 wide-string core.
 
+`tests/wide_stdio_probe.c` exercises stream orientation, byte-vs-wide conflicts,
+wide character and line/string I/O, bounded/newline `fgetws`, `ungetwc`, EOF and
+`EILSEQ` propagation, positioning, `freopen` orientation reset, and stdin/stdout
+wide paths in a freestanding executable.
+
 `tests/locale_differential.c` runs the host libc under `setlocale(LC_ALL, "C")`
 and compares the directly comparable locale and legacy conversion behavior
 against renamed mini-libc implementations. `tests/wchar_differential.c` does
@@ -115,11 +160,11 @@ the same for restartable conversions and wide strings; it explicitly resets
 conversion state after error cases instead of depending on the standard's
 unspecified post-error state.
 
-The pinned tiny-c integration still compiles every production C source and its
-legacy multibyte calls now execute through the restartable core. The same
-integration is linked and executed through the pinned mini-elf-toolchain, so
-this phase retains the three-repo executable gate while GCC/Clang freestanding
-probes directly cover every newly public entry point.
+The pinned tiny-c buffering integration directly executes `fputws` and `fgetws`
+on an oriented buffered `tmpfile`, then mixes the result with the existing
+`fgetwc`/`ungetwc` coverage. The same binary is linked and executed through the
+pinned mini-elf-toolchain, so wide line/string I/O retains the three-repo
+executable gate while GCC/Clang freestanding probes cover the public behavior.
 
 ## Phase boundary and next frontier
 
@@ -128,13 +173,12 @@ claim. It does not implement UTF-8 decoding/encoding, stateful multibyte
 encodings, locale databases, per-thread locales, collation, locale-aware ctype,
 or non-C numeric/monetary formatting.
 
-The strongest next text-runtime frontier is **wide stdio orientation and stream
-I/O**: introduce stream orientation through `fwide`, then build coherent
-`fgetwc`/`getwc`/`getwchar`, `fputwc`/`putwc`/`putwchar`, and `ungetwc` behavior
-on the proven restartable conversion layer and the existing buffered/locked
-`FILE` architecture. That work must define byte-vs-wide orientation transitions,
-EOF/error propagation, buffering, positioning/rebinding interaction, and
-multi-thread serialization before claiming wide stream support. Broader
-wide-string/memory helpers can follow on the same `<wchar.h>` base; UTF-8 or
-additional locale support remains a separate encoding/data milestone with its
-own executable evidence.
+With orientation plus character and line/string transport established, the
+strongest next wide-stdio frontier is **wide formatted I/O**. A coherent next
+slice should build `fwprintf`/`vfwprintf` and bounded memory-wide formatting such
+as `swprintf` on top of the proven formatter, variadic ABI, wide conversion, and
+oriented `FILE` layers rather than duplicate the narrow parser. Input-side wide
+formatting can then reuse the same architectural pattern for
+`fwscanf`/`vfwscanf`/`swscanf`. Any such phase must preserve orientation,
+buffering, return-count/error behavior, and pinned GCC/Clang/tiny-c/mini-elf
+execution. UTF-8 or broader locale data remains a separate encoding milestone.
