@@ -15,6 +15,32 @@ static wint_t wide_error(FILE *stream, int error)
     return WEOF;
 }
 
+static int wide_require_readable(FILE *stream)
+{
+    if (__mini_stdio_require_wide(stream) == EOF) {
+        return EOF;
+    }
+    if ((stream->mode & MINI_FILE_READABLE) == 0U ||
+        (stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U) {
+        (void)wide_error(stream, EINVAL);
+        return EOF;
+    }
+    return 0;
+}
+
+static int wide_require_writable(FILE *stream)
+{
+    if (__mini_stdio_require_wide(stream) == EOF) {
+        return EOF;
+    }
+    if ((stream->mode & MINI_FILE_WRITABLE) == 0U ||
+        (stream->state & MINI_FILE_READ_NEEDS_POSITION) != 0U) {
+        (void)wide_error(stream, EINVAL);
+        return EOF;
+    }
+    return 0;
+}
+
 static wint_t wide_read_character_unlocked(FILE *stream)
 {
     unsigned char byte;
@@ -52,7 +78,7 @@ static wint_t wide_write_character_unlocked(wchar_t wc, FILE *stream)
 
 static wint_t wide_get_unlocked(FILE *stream)
 {
-    if (__mini_stdio_require_wide(stream) == EOF) {
+    if (wide_require_readable(stream) == EOF) {
         return WEOF;
     }
     return wide_read_character_unlocked(stream);
@@ -60,7 +86,7 @@ static wint_t wide_get_unlocked(FILE *stream)
 
 static wint_t wide_put_unlocked(wchar_t wc, FILE *stream)
 {
-    if (__mini_stdio_require_wide(stream) == EOF) {
+    if (wide_require_writable(stream) == EOF) {
         return WEOF;
     }
     return wide_write_character_unlocked(wc, stream);
@@ -105,7 +131,7 @@ wchar_t *fgetws(wchar_t *restrict s, int n, FILE *restrict stream)
     if (s == (wchar_t *)0 || n <= 0) {
         (void)wide_error(stream, EINVAL);
         result = (wchar_t *)0;
-    } else if (__mini_stdio_require_wide(stream) == EOF) {
+    } else if (wide_require_readable(stream) == EOF) {
         result = (wchar_t *)0;
     } else {
         while (length + 1U < (size_t)n) {
@@ -160,7 +186,7 @@ int fputws(const wchar_t *restrict s, FILE *restrict stream)
     if (s == (const wchar_t *)0) {
         (void)wide_error(stream, EINVAL);
         result = EOF;
-    } else if (__mini_stdio_require_wide(stream) == EOF) {
+    } else if (wide_require_writable(stream) == EOF) {
         result = EOF;
     } else {
         while (*s != 0) {
