@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <stdio.h>
+#include <wchar.h>
 
 static int file_equals(const char *path, const char *expected, size_t length)
 {
@@ -87,8 +89,31 @@ int main(int argc, char **argv)
         return 8;
     }
 
-    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 0) != 0 || fwide(stream, 1) <= 0 ||
+        fputwc((wchar_t)'W', stream) != (wint_t)'W' ||
+        fputwc((wchar_t)'Q', stream) != (wint_t)'Q' || ftell(stream) != 2L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
         return 9;
+    }
+    errno = 0;
+    if (fputc('X', stream) != EOF || errno != EINVAL || !ferror(stream)) {
+        fclose(stream);
+        return 10;
+    }
+    clearerr(stream);
+    rewind(stream);
+    if (fwide(stream, 0) <= 0 || fgetwc(stream) != (wint_t)'W' ||
+        ungetwc((wint_t)'Z', stream) != (wint_t)'Z' || ftell(stream) != 0L ||
+        fgetwc(stream) != (wint_t)'Z' || fgetwc(stream) != (wint_t)'Q' ||
+        fgetwc(stream) != WEOF || !feof(stream) || fclose(stream) != 0) {
+        return 11;
+    }
+
+    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+        return 12;
     }
     return 0;
 }
