@@ -1,6 +1,7 @@
 #ifndef MINI_LIBC_WCHAR_H
 #define MINI_LIBC_WCHAR_H
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -32,6 +33,16 @@ wint_t putwc(wchar_t wc, FILE *stream);
 wint_t putwchar(wchar_t wc);
 int fputws(const wchar_t *restrict s, FILE *restrict stream);
 wint_t ungetwc(wint_t wc, FILE *stream);
+
+int fwprintf(FILE *restrict stream, const wchar_t *restrict format, ...);
+int wprintf(const wchar_t *restrict format, ...);
+int swprintf(wchar_t *restrict buffer, size_t size,
+             const wchar_t *restrict format, ...);
+int vfwprintf(FILE *restrict stream, const wchar_t *restrict format,
+              va_list ap);
+int vwprintf(const wchar_t *restrict format, va_list ap);
+int vswprintf(wchar_t *restrict buffer, size_t size,
+              const wchar_t *restrict format, va_list ap);
 
 size_t wcslen(const wchar_t *s);
 int wcscmp(const wchar_t *left, const wchar_t *right);
