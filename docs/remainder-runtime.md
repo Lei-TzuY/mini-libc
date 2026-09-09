@@ -97,8 +97,8 @@ The deterministic family contract is:
 
 This is family-level exception coverage. `math_errhandling` remains
 `MATH_ERRNO`; mini-libc does not yet advertise repository-wide
-`MATH_ERREXCEPT` support because other public range families still require
-explicit exception propagation.
+`MATH_ERREXCEPT` support until a closure audit verifies the complete public math
+surface.
 
 ## Executable evidence
 
@@ -139,29 +139,32 @@ The runtime remains split into independent archive objects:
 
 - `math_classify.o`: IEEE-754 binary32/binary64 classification, sign, and
   ordered-comparison helpers;
+- `math_decompose.o`: exact `frexp`/`modf` decomposition without a floating
+  environment dependency;
+- `math_scale.o`: public `scalbn`/`ldexp` power-of-two scaling and its fenv
+  range boundary;
 - `math_remainder.o`: finite reduction and public remainder families, reusing
-  classification, decomposition/scaling, and now the public fenv substrate.
+  classification, decomposition/scaling, and the public fenv substrate.
 
 The numerical long-division algorithm is unchanged by the fenv promotion. The
-new boundary is deliberately at the public family entry points: internal
-floating work is isolated, then only the exception class owned by the public
-result is exposed.
+boundary remains deliberately at public family entry points: internal floating
+work is isolated, then only the exception class owned by the public result is
+exposed.
 
 ## Next frontier
 
-The remainder numerical and family-level floating-exception phases are now
-complete. More ordinary remainder vectors or wrapper-specific `FE_INVALID`
-variants would be low-value micro-expansion at this checkpoint.
+The remainder numerical/fenv phase and the subsequent scaling range-family fenv
+promotion are complete. More ordinary remainder vectors, wrapper-specific
+`FE_INVALID` variants, or another one-function exception PR would now be
+low-value micro-expansion.
 
-A fresh repository-wide audit shows that `scalbn`/`ldexp` and their binary32
-variants remain a stronger range-family fenv gap. They already have explicit
-`ERANGE` behavior for finite overflow and inexact tiny results, but that contract
-has not yet been promoted into deliberate `FE_OVERFLOW | FE_INEXACT` and
-`FE_UNDERFLOW | FE_INEXACT` propagation with sticky-flag evidence. That scaling
-family should be re-audited against the latest main before another
-implementation slice is opened.
+The next architectural phase is a repository-wide `MATH_ERREXCEPT` closure
+audit. It must inventory every remaining public exact/basic math family,
+identify any signaling-NaN, active-rounding-mode, or implementation-detail
+hardware exception that is not yet deliberately owned or isolated, and add
+executable regression evidence for genuine gaps. Only after that audit is clean
+should `math_errhandling` be considered for promotion from `MATH_ERRNO` to
+`MATH_ERRNO | MATH_ERREXCEPT`.
 
-`math_errhandling` must remain `MATH_ERRNO` until the remaining public range and
-domain families have executable exception coverage. Long-double support,
-complex arithmetic, and globally correctly-rounded transcendental guarantees
-remain separate phases.
+Long-double support, complex arithmetic, and globally correctly-rounded
+transcendental guarantees remain separate phases.
