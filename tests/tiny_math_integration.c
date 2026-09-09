@@ -31,6 +31,9 @@ int main(void)
     int exponent;
     int quotient;
 
+    if (math_errhandling != (MATH_ERRNO | MATH_ERREXCEPT)) {
+        return 45;
+    }
     if (fabs(-3.5) != 3.5 || fabsf(-2.25f) != 2.25f) {
         return 1;
     }
