@@ -162,18 +162,20 @@ When the result does not fit, this baseline stores a deterministic terminated
 prefix when space permits, returns `EOF`, and reports `ERANGE`; a zero-sized
 destination likewise returns `EOF`/`ERANGE` without dereferencing a null buffer.
 
-The baseline inherits the already executable narrow formatter conversions for
-integer, floating, narrow `%s`, narrow `%c`, `%%`, flags, field width,
-precision, ordinary variadics, and public `va_list`. In the C locale a narrow
-`%s` or `%c` result containing a byte above `0x7f` is not representable as a
-wide output character and reports `EILSEQ`. A non-ASCII wide format character is
-rejected for the same reason.
+The baseline inherits the already executable formatter conversions for integer,
+floating, narrow `%s`, narrow `%c`, wide `%ls`, wide `%lc`, `%%`, flags, field
+width, precision, ordinary variadics, and public `va_list`. `%ls` and `%lc` are
+implemented in the shared formatter itself rather than as wide-wrapper casts, so
+they are available consistently to narrow `printf`/`snprintf` and wide
+`fwprintf`/`swprintf` callers. In the current single-byte C locale each emitted
+wide argument character must be representable as one ASCII byte; an
+unrepresentable wide value reports `EILSEQ`. `%ls` precision therefore bounds
+emitted bytes and never inspects a later wide element past that bound. A
+non-ASCII wide format character is rejected for the same C-locale reason.
 
-This first wide-format slice does **not** yet claim `%ls`/`%lc` conversion
-parity. Those length-modified wide character/string conversions remain a
-separate formatter-integration frontier rather than being emulated by casting a
-`wchar_t *` into the narrow `%s` path. Wide formatted input is also still
-separate.
+Wide formatted input remains a separate scanner integration surface; this phase
+does not introduce `fwscanf`, `vfwscanf`, `wscanf`, `vwscanf`, `swscanf`, or
+`vswscanf`.
 
 ## Executable evidence
 
@@ -191,8 +193,9 @@ wide-string core.
 wide character and line/string I/O, bounded/newline `fgetws`, `ungetwc`, EOF and
 `EILSEQ` propagation, positioning, `freopen` orientation reset, stdin/stdout
 wide paths, ordinary and `v*` wide formatted FILE/stdout output, bounded
-`swprintf`/`vswprintf`, truncation, invalid C-locale format/data, and integer and
-floating formatter reuse in a freestanding executable.
+`swprintf`/`vswprintf`, truncation, invalid C-locale format/data, integer and
+floating formatter reuse, direct narrow `%ls`/`%lc`, wide-memory width/precision,
+and genuine wide-argument FILE round trips in a freestanding executable.
 
 `tests/locale_differential.c` runs the host libc under `setlocale(LC_ALL, "C")`
 and compares the directly comparable locale and legacy conversion behavior
@@ -203,11 +206,13 @@ unspecified post-error state.
 
 The pinned tiny-c buffering integration directly executes `fputws` and `fgetws`
 on an oriented buffered `tmpfile`, mixes the result with the existing
-`fgetwc`/`ungetwc` coverage, and now compiles and executes ordinary `swprintf`
-and `fwprintf` together with caller-owned-`va_list` `vswprintf` and `vfwprintf`.
-The same binary is linked and executed through the pinned mini-elf-toolchain, so
-wide formatted output retains the three-repo executable gate while GCC/Clang
-freestanding probes cover all six newly public entry points.
+`fgetwc`/`ungetwc` coverage, and compiles and executes ordinary `swprintf` and
+`fwprintf` together with caller-owned-`va_list` `vswprintf` and `vfwprintf`.
+It now also passes genuine `wchar_t *` and wide character arguments through
+`%ls`/`%lc` in both bounded memory and wide-oriented FILE paths. The same binary
+is linked and executed through the pinned mini-elf-toolchain, so wide formatted
+argument parity retains the three-repo executable gate while GCC/Clang
+freestanding probes cover the public behavior.
 
 ## Phase boundary and next frontier
 
@@ -216,13 +221,14 @@ claim. It does not implement UTF-8 decoding/encoding, stateful multibyte
 encodings, locale databases, per-thread locales, collation, locale-aware ctype,
 or non-C numeric/monetary formatting.
 
-Wide formatted output transport is now executable across FILE, stdout, bounded
-memory, ordinary variadics, and public `va_list` while sharing the existing
-formatter engine. The strongest next text-runtime work should close **wide
-conversion parity and input formatting**, not farm more numeric format vectors.
-A coherent next slice should first make `%lc`/`%ls` consume genuine wide
-arguments through the shared formatter architecture, then use the same parser /
-conversion discipline to introduce `fwscanf`/`vfwscanf`/`swscanf` without
-building a second scanner. Any such phase must preserve orientation, buffering,
-return-count/error behavior, and pinned GCC/Clang/tiny-c/mini-elf execution.
-UTF-8 or broader locale data remains a separate encoding milestone.
+Wide formatted output transport and genuine `%lc`/`%ls` argument conversion are
+now executable across FILE, stdout, bounded memory, ordinary variadics, and
+public `va_list` while sharing the existing formatter engine. The strongest next
+text-runtime frontier is **wide formatted input**. A coherent next slice should
+introduce `fwscanf`/`vfwscanf`/`wscanf`/`vwscanf` plus bounded-memory
+`swscanf`/`vswscanf` by adapting the existing scanner source/parser and wide
+conversion layer rather than building a second scanner. That phase must preserve
+stream orientation, buffered logical positioning, matching-vs-input-failure
+semantics, C-locale `EILSEQ`, field-width rules, and pinned
+GCC/Clang/tiny-c/mini-elf execution. UTF-8 or broader locale data remains a
+separate encoding milestone.

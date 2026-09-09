@@ -444,6 +444,89 @@ static int emit_character(struct mini_format_sink *sink,
     return 0;
 }
 
+static int wide_code_to_c_byte(unsigned int value, char *byte)
+{
+    if (value > 0x7fU) {
+        errno = EILSEQ;
+        return 0;
+    }
+    *byte = (char)value;
+    return 1;
+}
+
+static int emit_wide_character(struct mini_format_sink *sink,
+                               const struct mini_format_spec *spec, int value,
+                               unsigned int *count)
+{
+    char byte;
+    unsigned int padding = spec->width > 1U ? spec->width - 1U : 0U;
+
+    if (!wide_code_to_c_byte((unsigned int)value, &byte)) {
+        return EOF;
+    }
+    if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    if (emit_bytes(sink, &byte, 1U, count) == EOF) {
+        return EOF;
+    }
+    if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    return 0;
+}
+
+static int emit_wide_string(struct mini_format_sink *sink,
+                            const struct mini_format_spec *spec,
+                            const wchar_t *value, unsigned int *count)
+{
+    static const wchar_t null_text[] = {'(', 'n', 'u', 'l', 'l', ')', 0};
+    char bytes[MINI_FORMAT_PAD_CHUNK];
+    size_t length = 0U;
+    size_t offset;
+    unsigned int padding = 0U;
+
+    if (value == (const wchar_t *)0) {
+        value = null_text;
+    }
+    while (value[length] != 0 &&
+           (!spec->precision_set || length < (size_t)spec->precision)) {
+        char byte;
+
+        if (!wide_code_to_c_byte((unsigned int)value[length], &byte)) {
+            return EOF;
+        }
+        ++length;
+    }
+    if ((size_t)spec->width > length) {
+        padding = spec->width - (unsigned int)length;
+    }
+
+    if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    offset = 0U;
+    while (offset < length) {
+        size_t chunk = length - offset;
+        size_t i;
+
+        if (chunk > MINI_FORMAT_PAD_CHUNK) {
+            chunk = MINI_FORMAT_PAD_CHUNK;
+        }
+        for (i = 0U; i < chunk; ++i) {
+            bytes[i] = (char)(unsigned int)value[offset + i];
+        }
+        if (emit_bytes(sink, bytes, chunk, count) == EOF) {
+            return EOF;
+        }
+        offset += chunk;
+    }
+    if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    return 0;
+}
+
 static size_t make_digits(unsigned long long value, unsigned int base,
                           int uppercase, char *digits)
 {
@@ -1056,19 +1139,32 @@ static int emit_conversion(struct mini_format_sink *sink,
                            struct mini_format_args *args, unsigned int *count)
 {
     if (spec->conversion == 's') {
-        const char *value;
+        if (spec->length == MINI_LEN_NONE) {
+            const char *value = (const char *)next_word(args);
 
-        if (spec->length != MINI_LEN_NONE) {
-            return invalid_format();
+            return emit_string(sink, spec, value, count);
         }
-        value = (const char *)next_word(args);
-        return emit_string(sink, spec, value, count);
+        if (spec->length == MINI_LEN_L) {
+            const wchar_t *value = (const wchar_t *)next_word(args);
+
+            return emit_wide_string(sink, spec, value, count);
+        }
+        return invalid_format();
     }
     if (spec->conversion == 'c') {
-        if (spec->length != MINI_LEN_NONE || spec->precision_set) {
+        int value;
+
+        if (spec->precision_set) {
             return invalid_format();
         }
-        return emit_character(sink, spec, word_to_int(next_word(args)), count);
+        value = word_to_int(next_word(args));
+        if (spec->length == MINI_LEN_NONE) {
+            return emit_character(sink, spec, value, count);
+        }
+        if (spec->length == MINI_LEN_L) {
+            return emit_wide_character(sink, spec, value, count);
+        }
+        return invalid_format();
     }
     if (spec->conversion == 'd' || spec->conversion == 'i') {
         long long value = next_signed(args, spec->length);
