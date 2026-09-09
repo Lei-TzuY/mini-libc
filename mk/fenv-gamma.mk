@@ -32,7 +32,9 @@ fenv_gamma_test_run: $(BUILD)/fenv_gamma_probe $(BUILD)/fenv_gamma_interop
 	@output=$$($(BUILD)/fenv_gamma_probe); status=$$?; \
 		test $$status -eq 0 -a "$$output" = "fenv-gamma-ok" || { \
 			echo "unexpected fenv gamma probe: status=$$status output='$$output'" >&2; exit 1; }
-	@test "$$($(BUILD)/fenv_gamma_interop)" = "fenv-gamma-interop-ok" || { echo "unexpected fenv gamma interop output" >&2; exit 1; }
+	@output=$$($(BUILD)/fenv_gamma_interop); status=$$?; \
+		test $$status -eq 0 -a "$$output" = "fenv-gamma-interop-ok" || { \
+			echo "unexpected fenv gamma interop: status=$$status output='$$output'" >&2; exit 1; }
 
 fenv_gamma_inspect: $(BUILD)/fenv_gamma_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/fenv_gamma_probe
