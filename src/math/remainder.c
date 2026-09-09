@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
@@ -104,6 +105,18 @@ static double signed_zero_like(double x)
     return double_from_bits(double_bits(x) & MINI_DOUBLE_SIGN);
 }
 
+static void finish_finite_result(const fenv_t *environment, int saved_errno)
+{
+    (void)fesetenv(environment);
+    errno = saved_errno;
+}
+
+static void signal_domain_error(void)
+{
+    (void)feraiseexcept(FE_INVALID);
+    errno = EDOM;
+}
+
 static double fmod_finite(double x, double y)
 {
     double ax = absolute_double(x);
@@ -179,6 +192,7 @@ static double remainder_finite(double x, double y, int *quotient_out)
 
 double fmod(double x, double y)
 {
+    fenv_t environment;
     int saved_errno;
     double result;
 
@@ -189,20 +203,22 @@ double fmod(double x, double y)
         return y;
     }
     if (remainder_domain(x, y)) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nan();
     }
     if (isinf(y) || x == 0.0) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = fmod_finite(x, y);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
 
 float fmodf(float x, float y)
 {
+    fenv_t environment;
     int saved_errno;
     float result;
 
@@ -213,20 +229,22 @@ float fmodf(float x, float y)
         return y;
     }
     if (isinf(x) || y == 0.0f) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nanf();
     }
     if (isinf(y) || x == 0.0f) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = (float)fmod_finite((double)x, (double)y);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
 
 double remainder(double x, double y)
 {
+    fenv_t environment;
     int saved_errno;
     double result;
 
@@ -237,20 +255,22 @@ double remainder(double x, double y)
         return y;
     }
     if (remainder_domain(x, y)) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nan();
     }
     if (isinf(y) || x == 0.0) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = remainder_finite(x, y, 0);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
 
 float remainderf(float x, float y)
 {
+    fenv_t environment;
     int saved_errno;
     float result;
 
@@ -261,20 +281,22 @@ float remainderf(float x, float y)
         return y;
     }
     if (isinf(x) || y == 0.0f) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nanf();
     }
     if (isinf(y) || x == 0.0f) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = (float)remainder_finite((double)x, (double)y, 0);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
 
 double remquo(double x, double y, int *quo)
 {
+    fenv_t environment;
     int saved_errno;
     double result;
 
@@ -288,20 +310,22 @@ double remquo(double x, double y, int *quo)
         return y;
     }
     if (remainder_domain(x, y)) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nan();
     }
     if (isinf(y) || x == 0.0) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = remainder_finite(x, y, quo);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
 
 float remquof(float x, float y, int *quo)
 {
+    fenv_t environment;
     int saved_errno;
     float result;
 
@@ -315,14 +339,15 @@ float remquof(float x, float y, int *quo)
         return y;
     }
     if (isinf(x) || y == 0.0f) {
-        errno = EDOM;
+        signal_domain_error();
         return quiet_nanf();
     }
     if (isinf(y) || x == 0.0f) {
         return x;
     }
     saved_errno = errno;
+    (void)fegetenv(&environment);
     result = (float)remainder_finite((double)x, (double)y, quo);
-    errno = saved_errno;
+    finish_finite_result(&environment, saved_errno);
     return result;
 }
