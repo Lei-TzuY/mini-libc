@@ -3,14 +3,16 @@
 ## Phase status
 
 This phase is complete for the current binary32/binary64 mini-libc math target.
-The public math surface now includes type-sensitive floating classification and
+The public math surface includes type-sensitive floating classification and
 ordered-comparison macros together with `fmod`, `remainder`, and `remquo`
 families for `double` and `float`.
 
-This is an executable capability checkpoint, not a claim of complete C math
-conformance. Long-double classification, floating-environment exceptions,
-rounding-mode integration, and the remaining special-function families remain
-outside this phase.
+The remainder/reduction family is also promoted into the public floating
+environment. Domain results deliberately raise `FE_INVALID`, valid finite
+reduction isolates implementation-detail floating exceptions, and exact
+passthrough paths preserve the caller's existing sticky flags. This is a
+family-level executable checkpoint, not a claim of complete C math conformance,
+long-double support, or repository-wide `MATH_ERREXCEPT` coverage.
 
 ## Public classification surface
 
@@ -37,7 +39,7 @@ reduction chain into the static link.
 
 ## Remainder surface
 
-The phase adds:
+The phase provides:
 
 - `fmod` / `fmodf`;
 - `remainder` / `remainderf`;
@@ -73,71 +75,93 @@ The hosted differential therefore compares:
 The freestanding and pinned tiny-c tests additionally pin mini-libc's own
 seven-bit behavior, including a huge-quotient case.
 
-## Special values and errno
+## Public errno and floating-exception behavior
 
-Current deterministic policy:
+The deterministic family contract is:
 
-- a NaN operand is propagated without changing `errno`;
-- finite `x` with infinite `y` returns `x`;
-- signed zero in `x` is preserved;
-- infinite `x`, or a zero divisor, is a domain error: `errno = EDOM` and a quiet
-  NaN is returned;
+- a quiet NaN operand is propagated without changing `errno` or adding a new
+  exception flag;
+- finite `x` with infinite `y` returns `x` without adding a new flag;
+- signed zero in `x` is preserved without adding a new flag;
+- infinite `x`, or a zero divisor, remains a domain error: `errno = EDOM`, a
+  quiet NaN is returned, and `FE_INVALID` is deliberately raised;
 - `remquo` clears its quotient output to zero before a domain-result return;
-- valid finite operations restore the caller's incoming `errno`, including
-  cases where internal decomposition/scaling helpers are used.
+- valid finite operations restore the caller's incoming `errno` and floating
+  environment after the internal binary reduction, so helper arithmetic and
+  internal `frexp`/`scalbn` work do not leak implementation-detail `FE_*`
+  flags;
+- the float wrappers apply the same boundary around their widening, finite
+  reduction, and final narrowing path;
+- deliberate domain flags are additive: a caller's pre-existing sticky
+  exception set is preserved and `FE_INVALID` is added.
 
-No floating exception flags are claimed because the project does not yet expose
-`<fenv.h>` or `math_errhandling` exception support beyond `MATH_ERRNO`.
+This is family-level exception coverage. `math_errhandling` remains
+`MATH_ERRNO`; mini-libc does not yet advertise repository-wide
+`MATH_ERREXCEPT` support because other public range families still require
+explicit exception propagation.
 
 ## Executable evidence
 
-`tests/remainder_probe.c` is a freestanding static executable that checks:
+`tests/remainder_probe.c` remains the freestanding numerical/result checkpoint.
+It checks classification, signed-zero behavior, basic and huge-quotient
+reduction, nearest-even ties, seven-bit `remquo`, domain errno, and NaN payload
+propagation.
 
-- binary32 and binary64 zero/subnormal/normal/infinity/NaN classification;
-- type-sensitive float-subnormal handling;
-- single evaluation of public macros;
-- ordered and unordered comparisons;
-- signed-zero behavior;
-- basic and huge-quotient `fmod` reduction;
-- nearest-even `remainder` ties;
-- seven-bit `remquo` values and quotient sign;
-- domain errors and NaN payload propagation.
+`tests/remainder_differential.c` still compiles the production remainder object
+under renamed public symbols and compares it with host libm on a controlled
+corpus covering signs, ties, large exponent gaps, minimum normal values, and
+subnormals. Residuals remain bit-for-bit requirements. After the fenv promotion,
+the renamed production object is linked to mini-libc's renamed fenv runtime so
+its private `fenv_t` ABI is never mixed with host-libc fenv functions.
 
-`tests/remainder_differential.c` compiles the production remainder object under
-renamed public symbols and compares it with the host libm on a controlled corpus
-covering signs, ties, large exponent gaps, minimum normal values, and
-subnormals. `fmod`, `remainder`, and `remquo` residuals are required to match
-bit-for-bit on that corpus.
+`tests/fenv_remainder_probe.c` is a freestanding static executable covering:
 
-Pinned tiny-c compiles every production math C object plus the extended
-`tests/tiny_math_integration.c`. The same executable exercises `_Generic`
-classification, float subnormals, huge-quotient reduction, nearest-even
-remainder, and `remquo`, and is linked/run through both GNU `ld` and the pinned
-mini-elf-toolchain.
+- exact valid double and float reductions with no newly visible flag;
+- isolation of implementation-detail flags during nontrivial finite reduction;
+- zero-divisor and infinite-dividend `FE_INVALID` propagation;
+- `remquo` quotient reset on domain results;
+- NaN, infinite-divisor, and signed-zero clean paths; and
+- additive preservation of caller-owned sticky flags.
+
+`tests/fenv_remainder_interop.c` compiles the production remainder object under
+renamed symbols and observes its hardware-visible x87/MXCSR flags through the
+host `<fenv.h>` ABI while using mini-libc's fenv implementation internally.
+
+Pinned tiny-c compiles the promoted production remainder runtime and executes
+the same family contract from `tests/tiny_fenv_integration.c`. The resulting
+executables are linked and run through GNU `ld` and the pinned
+mini-elf-toolchain, while the broader tiny math integration continues to pin the
+pre-existing numerical results.
 
 ## Architecture boundary
 
-The phase is intentionally split into two archive objects:
+The runtime remains split into independent archive objects:
 
 - `math_classify.o`: IEEE-754 binary32/binary64 classification, sign, and
   ordered-comparison helpers;
-- `math_remainder.o`: finite reduction and the public remainder families,
-  relying on classification plus the existing decomposition/scaling substrate.
+- `math_remainder.o`: finite reduction and public remainder families, reusing
+  classification, decomposition/scaling, and now the public fenv substrate.
 
-This keeps classification cheap to link while allowing the remainder engine to
-reuse already-established math primitives.
+The numerical long-division algorithm is unchanged by the fenv promotion. The
+new boundary is deliberately at the public family entry points: internal
+floating work is isolated, then only the exception class owned by the public
+result is exposed.
 
 ## Next frontier
 
-The error-function layer identified by this checkpoint has now been implemented
-as the next independent special-function object. The strongest remaining
-special-function promotion is the gamma family rather than more remainder or
-error-function vectors.
+The remainder numerical and family-level floating-exception phases are now
+complete. More ordinary remainder vectors or wrapper-specific `FE_INVALID`
+variants would be low-value micro-expansion at this checkpoint.
 
-A coherent next slice should implement `tgamma`/`lgamma` and binary32 variants
-on one shared approximation/reflection substrate, define poles, negative-input
-reflection, sign and range behavior explicitly, and add controlled host
-differential plus pinned tiny-c/mini-elf execution.
+A fresh repository-wide audit shows that `scalbn`/`ldexp` and their binary32
+variants remain a stronger range-family fenv gap. They already have explicit
+`ERANGE` behavior for finite overflow and inexact tiny results, but that contract
+has not yet been promoted into deliberate `FE_OVERFLOW | FE_INEXACT` and
+`FE_UNDERFLOW | FE_INEXACT` propagation with sticky-flag evidence. That scaling
+family should be re-audited against the latest main before another
+implementation slice is opened.
 
-Long-double support, `<fenv.h>`, complex arithmetic, and globally
-correctly-rounded transcendental claims remain separate architectural phases.
+`math_errhandling` must remain `MATH_ERRNO` until the remaining public range and
+domain families have executable exception coverage. Long-double support,
+complex arithmetic, and globally correctly-rounded transcendental guarantees
+remain separate phases.

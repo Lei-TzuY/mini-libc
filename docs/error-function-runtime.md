@@ -27,8 +27,8 @@ smaller than one, including the regression points around `erfc(4)` and
 `erfc(10)`.
 
 The tail exponential uses mini-libc's existing `exp` implementation. Public
-error-function entry points now snapshot the caller's x87/MXCSR environment
-before nontrivial approximation work, execute all internal rational/exponential
+error-function entry points snapshot the caller's x87/MXCSR environment before
+nontrivial approximation work, execute all internal rational/exponential
 arithmetic, restore that snapshot, and then deliberately raise only the
 exception class owned by the public result. This prevents implementation-detail
 flags from internal `exp`, multiplication, or division from leaking through the
@@ -75,9 +75,10 @@ unrelated math layers into the static link.
 
 The original `tests/special_probe.c` and `tests/special_differential.c` remain the
 numerical/result checkpoint. Their numerical corpora and tolerances are unchanged
-by this promotion. The differential now links mini-libc's renamed fenv runtime as
-well as its renamed `exp`/decomposition dependency, avoiding an invalid cross-ABI
-mix between mini-libc's `fenv_t` and the host libc fenv functions.
+by the floating-environment promotion. The differential links mini-libc's
+renamed fenv runtime as well as its renamed `exp`/decomposition dependency,
+avoiding an invalid cross-ABI mix between mini-libc's `fenv_t` and the host libc
+fenv functions.
 
 `tests/fenv_special_probe.c` is a freestanding static executable covering:
 
@@ -101,16 +102,20 @@ mini-elf-toolchain and is included in host-libc-independence inspection.
 
 ## Phase boundary and promotion
 
-The error-function numerical and family-level floating-exception phases are now
-complete. More ordinary `erf` vectors or wrapper-specific `FE_INEXACT` variants
-would be low-value micro-expansion at this checkpoint.
+The error-function numerical and family-level floating-exception phases are
+complete. The remainder/reduction family identified by this checkpoint has now
+also been promoted: `fmod`, `remainder`, `remquo`, and their binary32 variants
+isolate internal reduction flags and deliberately raise `FE_INVALID` for their
+existing domain results.
 
-The strongest remaining whole-family fenv gap is the remainder/reduction layer:
-`fmod`, `remainder`, and `remquo` already have executable result/errno behavior,
-but zero-divisor and infinite-dividend domain results still need deliberate
-public `FE_INVALID` propagation and sticky-flag evidence. That family should be
-re-audited against the latest main before another implementation slice is
-opened.
+The strongest remaining range-family fenv gap is now the power-of-two scaling
+layer. `scalbn`/`ldexp` and their binary32 variants already expose `ERANGE` for
+finite overflow and inexact tiny results, but still need deliberate public
+`FE_OVERFLOW | FE_INEXACT` and `FE_UNDERFLOW | FE_INEXACT` propagation plus
+sticky-flag and host-fenv evidence. That family should be re-audited against the
+latest main before another implementation slice is opened.
 
-Long-double special functions, complex arithmetic, and globally correctly
-rounded transcendental guarantees remain separate phases.
+`math_errhandling` remains `MATH_ERRNO` until the remaining public range/domain
+families have executable exception coverage. Long-double special functions,
+complex arithmetic, and globally correctly rounded transcendental guarantees
+remain separate phases.

@@ -28,6 +28,8 @@ int main(void)
     volatile double half_ulp = 1.11022302462515654042e-16;
     volatile double zero = 0.0;
     double value;
+    float fvalue;
+    int quotient;
 
     if (fegetenv(&saved) != 0 || fesetenv(FE_DFL_ENV) != 0) {
         return 1;
@@ -292,11 +294,52 @@ int main(void)
         return 56;
     }
 
-    if (fesetenv(&saved) != 0) {
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
         return 57;
     }
-    if (puts("tiny-fenv-ok") == EOF) {
+    errno = 72;
+    quotient = 99;
+    if (fmod(13.0, 4.0) != 1.0 || remainder(6.0, 4.0) != -2.0 ||
+        remquo(30.0, 4.0, &quotient) != -2.0 || quotient != 8 ||
+        errno != 72 || fetestexcept(FE_ALL_EXCEPT) != 0) {
         return 58;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 59;
+    }
+    errno = 73;
+    value = fmod(1.0, 0.0);
+    if (!isnan(value) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 60;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0 ||
+        feraiseexcept(FE_OVERFLOW) != 0) {
+        return 61;
+    }
+    errno = 74;
+    quotient = 99;
+    value = remquo(1.0, 0.0, &quotient);
+    if (!isnan(value) || quotient != 0 || errno != EDOM ||
+        !has_flags(FE_OVERFLOW | FE_INVALID)) {
+        return 62;
+    }
+
+    if (feclearexcept(FE_ALL_EXCEPT) != 0) {
+        return 63;
+    }
+    errno = 75;
+    fvalue = remainderf(1.0f, 0.0f);
+    if (!isnan(fvalue) || errno != EDOM || !has_flags(FE_INVALID)) {
+        return 64;
+    }
+
+    if (fesetenv(&saved) != 0) {
+        return 65;
+    }
+    if (puts("tiny-fenv-ok") == EOF) {
+        return 66;
     }
     return 0;
 }
