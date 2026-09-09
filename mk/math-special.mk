@@ -13,7 +13,7 @@ test: math_special_test_run
 
 .PHONY: math_special_inspect math_special_test_run
 
-$(BUILD)/math_special.o: src/math/special.c include/math.h include/errno.h | $(BUILD)
+$(BUILD)/math_special.o: src/math/special.c include/math.h include/fenv.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/math_gamma.o: src/math/gamma.c include/math.h include/errno.h | $(BUILD)
@@ -31,8 +31,8 @@ $(BUILD)/gamma_probe.o: tests/gamma_probe.c include/math.h include/errno.h inclu
 $(BUILD)/gamma_probe: $(BUILD)/gamma_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/gamma_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/math_special_diff_impl.o: src/math/special.c include/math.h include/errno.h | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(SPECIAL_RENAMES) -c $< -o $@
+$(BUILD)/math_special_diff_impl.o: src/math/special.c include/math.h include/fenv.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SPECIAL_RENAMES) $(FENV_RENAMES) -c $< -o $@
 
 $(BUILD)/math_gamma_diff_impl.o: src/math/gamma.c include/math.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(GAMMA_RENAMES) -c $< -o $@
@@ -44,7 +44,8 @@ $(BUILD)/special_differential: $(BUILD)/special_differential.o \
                                $(BUILD)/math_special_diff_impl.o \
                                $(BUILD)/math_explog_diff_impl.o \
                                $(BUILD)/math_decompose_diff_impl.o \
-                               $(BUILD)/errno.o
+                               $(BUILD)/fenv_test_impl.o \
+                               $(BUILD)/fenv_asm.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^ -lm
 
 $(BUILD)/gamma_differential.o: tests/gamma_differential.c | $(BUILD)
