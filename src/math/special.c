@@ -1,9 +1,11 @@
 #include <errno.h>
+#include <fenv.h>
 #include <math.h>
 
 #define MINI_DOUBLE_SIGN 0x8000000000000000ULL
 #define MINI_DOUBLE_EXP  0x7ff0000000000000ULL
 #define MINI_DOUBLE_FRAC 0x000fffffffffffffULL
+#define MINI_FLOAT_SIGN  0x80000000U
 #define MINI_FLOAT_EXP   0x7f800000U
 #define MINI_FLOAT_FRAC  0x007fffffU
 
@@ -19,7 +21,7 @@ static const double erf_den[] = {
     3.35617141647503099647e1,
     5.21357949780152679795e2,
     4.59432382970980127987e3,
-    2.26290000613890934246e4,
+    2.26290000613805075473e4,
     4.92673942608635921086e4
 };
 
@@ -109,6 +111,16 @@ static int float_is_nan(unsigned int bits)
            (bits & MINI_FLOAT_FRAC) != 0U;
 }
 
+static void finish_public_result(const fenv_t *environment, int result_errno,
+                                 int exceptions)
+{
+    (void)fesetenv(environment);
+    errno = result_errno;
+    if (exceptions != 0) {
+        (void)feraiseexcept(exceptions);
+    }
+}
+
 static double polynomial(double x, const double *coefficients, unsigned int count)
 {
     double value = coefficients[0];
@@ -179,6 +191,7 @@ double erf(double x)
     unsigned long long magnitude_bits = bits & ~MINI_DOUBLE_SIGN;
     double magnitude;
     double result;
+    fenv_t environment;
     int saved_errno = errno;
 
     if (double_is_nan(bits)) {
@@ -191,6 +204,7 @@ double erf(double x)
         return x;
     }
 
+    (void)fegetenv(&environment);
     magnitude = double_from_bits(magnitude_bits);
     if (magnitude <= 1.0) {
         result = erf_small_positive(magnitude);
@@ -199,8 +213,11 @@ double erf(double x)
     } else {
         result = 1.0 - erfc_positive(magnitude);
     }
-    errno = saved_errno;
-    return (bits & MINI_DOUBLE_SIGN) != 0ULL ? -result : result;
+    if ((bits & MINI_DOUBLE_SIGN) != 0ULL) {
+        result = -result;
+    }
+    finish_public_result(&environment, saved_errno, FE_INEXACT);
+    return result;
 }
 
 double erfc(double x)
@@ -210,7 +227,9 @@ double erfc(double x)
     double magnitude;
     double result;
     unsigned long long result_bits;
+    fenv_t environment;
     int saved_errno = errno;
+    int underflow;
 
     if (double_is_nan(bits)) {
         return x;
@@ -222,51 +241,72 @@ double erfc(double x)
         return 1.0;
     }
 
+    (void)fegetenv(&environment);
     magnitude = double_from_bits(magnitude_bits);
     result = erfc_positive(magnitude);
     if ((bits & MINI_DOUBLE_SIGN) != 0ULL) {
-        errno = saved_errno;
-        return 2.0 - result;
+        result = 2.0 - result;
+        finish_public_result(&environment, saved_errno, FE_INEXACT);
+        return result;
     }
 
     result_bits = double_bits(result);
-    if ((result_bits & MINI_DOUBLE_EXP) == 0ULL) {
-        errno = ERANGE;
-    } else {
-        errno = saved_errno;
-    }
+    underflow = (result_bits & MINI_DOUBLE_EXP) == 0ULL;
+    finish_public_result(&environment, underflow ? ERANGE : saved_errno,
+                         underflow ? FE_UNDERFLOW | FE_INEXACT : FE_INEXACT);
     return result;
 }
 
 float erff(float x)
 {
     unsigned int bits = float_bits(x);
-
-    if (float_is_nan(bits)) {
-        return x;
-    }
-    return (float)erf((double)x);
-}
-
-float erfcf(float x)
-{
-    unsigned int bits = float_bits(x);
+    unsigned int magnitude_bits = bits & ~MINI_FLOAT_SIGN;
     float result;
-    unsigned int result_bits;
+    fenv_t environment;
     int saved_errno = errno;
 
     if (float_is_nan(bits)) {
         return x;
     }
+    if (magnitude_bits == MINI_FLOAT_EXP) {
+        return (bits & MINI_FLOAT_SIGN) != 0U ? -1.0f : 1.0f;
+    }
+    if (magnitude_bits == 0U) {
+        return x;
+    }
 
+    (void)fegetenv(&environment);
+    result = (float)erf((double)x);
+    finish_public_result(&environment, saved_errno, FE_INEXACT);
+    return result;
+}
+
+float erfcf(float x)
+{
+    unsigned int bits = float_bits(x);
+    unsigned int magnitude_bits = bits & ~MINI_FLOAT_SIGN;
+    float result;
+    unsigned int result_bits;
+    fenv_t environment;
+    int saved_errno = errno;
+    int underflow;
+
+    if (float_is_nan(bits)) {
+        return x;
+    }
+    if (magnitude_bits == MINI_FLOAT_EXP) {
+        return (bits & MINI_FLOAT_SIGN) != 0U ? 2.0f : 0.0f;
+    }
+    if (magnitude_bits == 0U) {
+        return 1.0f;
+    }
+
+    (void)fegetenv(&environment);
     result = (float)erfc((double)x);
     result_bits = float_bits(result);
-    if ((bits & 0x80000000U) == 0U &&
-        (bits & MINI_FLOAT_EXP) != MINI_FLOAT_EXP &&
-        (result_bits & MINI_FLOAT_EXP) == 0U) {
-        errno = ERANGE;
-    } else {
-        errno = saved_errno;
-    }
+    underflow = (bits & MINI_FLOAT_SIGN) == 0U &&
+                (result_bits & MINI_FLOAT_EXP) == 0U;
+    finish_public_result(&environment, underflow ? ERANGE : saved_errno,
+                         underflow ? FE_UNDERFLOW | FE_INEXACT : FE_INEXACT);
     return result;
 }
