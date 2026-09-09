@@ -103,7 +103,7 @@ size_t mbsrtowcs(wchar_t *restrict dst, const char **restrict src, size_t len,
     }
 
     while (count < len) {
-        wchar_t wc;
+        wchar_t wc = 0;
         size_t converted = mbrtowc(&wc, cursor, 1U, ps);
 
         if (converted == (size_t)-1) {
