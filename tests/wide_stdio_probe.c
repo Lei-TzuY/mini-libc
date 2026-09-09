@@ -97,10 +97,16 @@ int main(void)
     }
 
     stream = fopen(path, "w");
-    if (stream == (FILE *)0 || fputc(0x80, stream) != 0x80 ||
-        fclose(stream) != 0) {
+    if (stream == (FILE *)0) {
+        return fail((FILE *)0, 15);
+    }
+    if (fputc(0x80, stream) != 0x80) {
         return fail(stream, 15);
     }
+    if (fclose(stream) != 0) {
+        return fail((FILE *)0, 15);
+    }
+
     stream = fopen(path, "r");
     if (stream == (FILE *)0 || fwide(stream, 1) <= 0) {
         return fail(stream, 16);
