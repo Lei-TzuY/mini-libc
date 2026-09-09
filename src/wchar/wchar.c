@@ -56,9 +56,6 @@ size_t mbrtowc(wchar_t *restrict pwc, const char *restrict s, size_t n,
 
     if (s == (const char *)0) {
         reset_state(ps);
-        if (pwc != (wchar_t *)0) {
-            *pwc = 0;
-        }
         return 0U;
     }
     if (n == 0U) {
