@@ -159,4 +159,86 @@ vsscanf:
     ret
 .size vsscanf, .-vsscanf
 
+.globl __mini_vwscan_dispatch
+.type __mini_vwscan_dispatch, @function
+__mini_vwscan_dispatch:
+    subq $72, %rsp
+    movq %rdx, %r10
+
+    movq 8(%r10), %rax
+    movq %rax, 40(%rsp)
+    movl $0, 48(%rsp)
+
+    movl 0(%r10), %eax
+    cmpl $48, %eax
+    jae .Lvwscan_no_gp
+    movl $48, %ecx
+    subl %eax, %ecx
+    shrl $3, %ecx
+    cmpl $5, %ecx
+    jbe .Lvwscan_count_ready
+    movl $5, %ecx
+.Lvwscan_count_ready:
+    movl %ecx, 52(%rsp)
+    movq 16(%r10), %r8
+    addq %rax, %r8
+    xorl %edx, %edx
+.Lvwscan_copy_gp:
+    cmpl %ecx, %edx
+    jae .Lvwscan_ready
+    movq (%r8,%rdx,8), %r9
+    movq %r9, (%rsp,%rdx,8)
+    incl %edx
+    jmp .Lvwscan_copy_gp
+.Lvwscan_no_gp:
+    movl $0, 52(%rsp)
+.Lvwscan_ready:
+    movq %rsp, %rdx
+    call __mini_wscan_dispatch_unlocked
+
+    addq $72, %rsp
+    ret
+.size __mini_vwscan_dispatch, .-__mini_vwscan_dispatch
+
+.globl __mini_vwsscan_dispatch
+.type __mini_vwsscan_dispatch, @function
+__mini_vwsscan_dispatch:
+    subq $72, %rsp
+    movq %rdx, %r10
+
+    movq 8(%r10), %rax
+    movq %rax, 40(%rsp)
+    movl $0, 48(%rsp)
+
+    movl 0(%r10), %eax
+    cmpl $48, %eax
+    jae .Lvwsscan_no_gp
+    movl $48, %ecx
+    subl %eax, %ecx
+    shrl $3, %ecx
+    cmpl $5, %ecx
+    jbe .Lvwsscan_count_ready
+    movl $5, %ecx
+.Lvwsscan_count_ready:
+    movl %ecx, 52(%rsp)
+    movq 16(%r10), %r8
+    addq %rax, %r8
+    xorl %edx, %edx
+.Lvwsscan_copy_gp:
+    cmpl %ecx, %edx
+    jae .Lvwsscan_ready
+    movq (%r8,%rdx,8), %r9
+    movq %r9, (%rsp,%rdx,8)
+    incl %edx
+    jmp .Lvwsscan_copy_gp
+.Lvwsscan_no_gp:
+    movl $0, 52(%rsp)
+.Lvwsscan_ready:
+    movq %rsp, %rdx
+    call __mini_wsscan_dispatch
+
+    addq $72, %rsp
+    ret
+.size __mini_vwsscan_dispatch, .-__mini_vwsscan_dispatch
+
 .section .note.GNU-stack,"",@progbits
