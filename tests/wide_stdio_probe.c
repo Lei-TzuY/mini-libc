@@ -47,6 +47,39 @@ static int call_vwprintf(const wchar_t *format, ...)
     return result;
 }
 
+static int call_vfwscanf(FILE *stream, const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfwscanf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int call_vswscanf(const wchar_t *input, const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vswscanf(input, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int call_vwscanf(const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vwscanf(format, ap);
+    va_end(ap);
+    return result;
+}
+
 int main(void)
 {
     static const char path[] = "build/wide-stdio-probe.tmp";
@@ -69,10 +102,21 @@ int main(void)
     static const wchar_t wide_arg_memory_expected[] = {'[', ' ', ' ', 'W', 'I', 'D', ']', '[', 'Q', ' ', ' ', ']', 0};
     static const wchar_t wide_arg_stream_value[] = {'W', 'X', 0};
     static const wchar_t wide_arg_stream_expected[] = {'[', 'W', 'X', ':', 'Q', ']', 0};
+    static const wchar_t scan_memory[] = {'4', '2', ' ', 'O', 'K', ' ', '2', '.', '5', ' ', 'W', 'X', 0};
+    static const wchar_t scan_memory_v[] = {'0', 'x', '2', 'a', ' ', 'A', 'B', 'C', ' ', 'Q', 0};
+    static const wchar_t scan_file_first[] = {'1', '7', ' ', 'W', 'X', ' ', '3', '.', '5', ' ', 'Q', '\n', 0};
+    static const wchar_t scan_file_second[] = {'2', '3', ' ', 'Y', 'Z', ' ', '4', '.', '5', ' ', 'R', '\n', 0};
     wchar_t line[32];
     wchar_t formatted[64];
     wchar_t small[5];
+    wchar_t scan_wide[8];
+    wchar_t scan_set[8];
+    wchar_t scan_char = 0;
     char narrow[32];
+    char scan_narrow[8];
+    double scan_double = 0.0;
+    int scan_integer = 0;
+    int scan_second = 0;
     FILE *stream;
     int count;
 
@@ -301,8 +345,83 @@ int main(void)
         return fail((FILE *)0, 43);
     }
 
+    scan_integer = 0;
+    scan_double = 0.0;
+    scan_narrow[0] = '\0';
+    scan_wide[0] = 0;
     errno = ERANGE;
-    if (fwide(stdin, 0) != 0 || getwchar() != (wint_t)'R' ||
+    if (swscanf(scan_memory, L"%d %2s %lf %2ls", &scan_integer,
+                scan_narrow, &scan_double, scan_wide) != 4 ||
+        scan_integer != 42 || scan_narrow[0] != 'O' || scan_narrow[1] != 'K' ||
+        scan_narrow[2] != '\0' || scan_double != 2.5 ||
+        scan_wide[0] != (wchar_t)'W' || scan_wide[1] != (wchar_t)'X' ||
+        scan_wide[2] != 0 || errno != ERANGE) {
+        return fail((FILE *)0, 44);
+    }
+
+    scan_integer = 0;
+    scan_set[0] = 0;
+    scan_char = 0;
+    if (call_vswscanf(scan_memory_v, L"%i %3l[A-Z] %lc", &scan_integer,
+                      scan_set, &scan_char) != 3 || scan_integer != 42 ||
+        scan_set[0] != (wchar_t)'A' || scan_set[1] != (wchar_t)'B' ||
+        scan_set[2] != (wchar_t)'C' || scan_set[3] != 0 ||
+        scan_char != (wchar_t)'Q') {
+        return fail((FILE *)0, 45);
+    }
+
+    scan_wide[0] = 0;
+    scan_char = 0;
+    if (sscanf("OK Q", "%2ls %lc", scan_wide, &scan_char) != 2 ||
+        scan_wide[0] != (wchar_t)'O' || scan_wide[1] != (wchar_t)'K' ||
+        scan_wide[2] != 0 || scan_char != (wchar_t)'Q') {
+        return fail((FILE *)0, 46);
+    }
+
+    errno = 0;
+    scan_narrow[0] = '\0';
+    if (swscanf(invalid_wide + 1, L"%1s", scan_narrow) != EOF ||
+        errno != EILSEQ) {
+        return fail((FILE *)0, 47);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fputws(scan_file_first, stream) < 0 ||
+        fputws(scan_file_second, stream) < 0) {
+        return fail(stream, 48);
+    }
+    rewind(stream);
+    scan_integer = 0;
+    scan_double = 0.0;
+    scan_wide[0] = 0;
+    scan_char = 0;
+    if (fwscanf(stream, L"%d %2ls %lf %lc", &scan_integer, scan_wide,
+                &scan_double, &scan_char) != 4 || scan_integer != 17 ||
+        scan_wide[0] != (wchar_t)'W' || scan_wide[1] != (wchar_t)'X' ||
+        scan_wide[2] != 0 || scan_double != 3.5 ||
+        scan_char != (wchar_t)'Q' || fwide(stream, 0) <= 0) {
+        return fail(stream, 49);
+    }
+    scan_second = 0;
+    scan_double = 0.0;
+    scan_wide[0] = 0;
+    scan_char = 0;
+    if (call_vfwscanf(stream, L" %d %2ls %lf %lc", &scan_second, scan_wide,
+                      &scan_double, &scan_char) != 4 || scan_second != 23 ||
+        scan_wide[0] != (wchar_t)'Y' || scan_wide[1] != (wchar_t)'Z' ||
+        scan_wide[2] != 0 || scan_double != 4.5 ||
+        scan_char != (wchar_t)'R' || fwide(stream, 0) <= 0 ||
+        fclose(stream) != 0) {
+        return fail((FILE *)0, 50);
+    }
+
+    scan_integer = 0;
+    scan_second = 0;
+    errno = ERANGE;
+    if (fwide(stdin, 0) != 0 || wscanf(L"%d", &scan_integer) != 1 ||
+        call_vwscanf(L" %d ", &scan_second) != 1 || scan_integer != 12 ||
+        scan_second != 34 || getwchar() != (wint_t)'R' ||
         fgetws(line, 8, stdin) != line || wcscmp(line, stdin_tail) != 0 ||
         fwide(stdin, 0) <= 0 || errno != ERANGE) {
         return fail((FILE *)0, 32);
