@@ -46,6 +46,28 @@ static int tiny_vfwprintf(FILE *stream, const wchar_t *format, ...)
     return result;
 }
 
+static int tiny_vswscanf(const wchar_t *input, const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vswscanf(input, format, ap);
+    va_end(ap);
+    return result;
+}
+
+static int tiny_vfwscanf(FILE *stream, const wchar_t *format, ...)
+{
+    va_list ap;
+    int result;
+
+    va_start(ap, format);
+    result = vfwscanf(stream, format, ap);
+    va_end(ap);
+    return result;
+}
+
 int main(int argc, char **argv)
 {
     static const char ok[] = "tiny-buffering-ok\n";
@@ -63,12 +85,20 @@ int main(int argc, char **argv)
     static const wchar_t wide_file_first[] = {'N', '=', '7', '\n', 0};
     static const wchar_t wide_file_second[] = {'V', '=', '2', '.', '5', '\n', 0};
     static const wchar_t wide_file_third[] = {'W', '=', 'W', 'X', '/', 'Q', '\n', 0};
+    static const wchar_t wide_scan_memory[] = {'4', '2', ' ', 'W', 'X', ' ', '2', '.', '5', 0};
+    static const wchar_t wide_scan_format[] = {'%', 'd', ' ', '%', '2', 'l', 's', ' ', '%', 'l', 'f', 0};
+    static const wchar_t wide_scan_file[] = {'9', ' ', 'Q', '\n', 0};
+    static const wchar_t wide_scan_file_format[] = {'%', 'd', ' ', '%', 'l', 'c', 0};
     char full[4];
     char line[8];
     char standard[BUFSIZ];
     char temporary[4];
     wchar_t wide_read[16] = {0};
     wchar_t wide_format[32] = {0};
+    wchar_t wide_scan_text[4] = {0};
+    wchar_t wide_scan_char = 0;
+    double wide_scan_double = 0.0;
+    int wide_scan_value = 0;
     FILE *stream;
 
     if (argc != 2) {
@@ -192,8 +222,37 @@ int main(int argc, char **argv)
         return 15;
     }
 
-    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+    wide_scan_value = 0;
+    wide_scan_text[0] = 0;
+    wide_scan_double = 0.0;
+    if (tiny_vswscanf(wide_scan_memory, wide_scan_format, &wide_scan_value,
+                      wide_scan_text, &wide_scan_double) != 3 ||
+        wide_scan_value != 42 || wide_scan_text[0] != (wchar_t)'W' ||
+        wide_scan_text[1] != (wchar_t)'X' || wide_scan_text[2] != 0 ||
+        wide_scan_double != 2.5) {
         return 16;
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fputws(wide_scan_file, stream) < 0) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 17;
+    }
+    rewind(stream);
+    wide_scan_value = 0;
+    wide_scan_char = 0;
+    if (tiny_vfwscanf(stream, wide_scan_file_format, &wide_scan_value,
+                      &wide_scan_char) != 2 || wide_scan_value != 9 ||
+        wide_scan_char != (wchar_t)'Q' || fwide(stream, 0) <= 0 ||
+        fclose(stream) != 0) {
+        return 18;
+    }
+
+    if (fwrite(ok, 1, sizeof(ok) - 1U, stdout) != sizeof(ok) - 1U) {
+        return 19;
     }
     return 0;
 }
