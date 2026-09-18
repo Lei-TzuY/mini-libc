@@ -105,6 +105,13 @@ int main(int argc, char **argv)
     static const wchar_t utf8_scan_format[] = {
         (wchar_t)0x4e2d, ':', '%', '2', 's', ' ', '%', 'l', 'c', 0
     };
+    static const wchar_t utf8_scanset_input[] = {
+        (wchar_t)0x03b2, (wchar_t)0x03b3, (wchar_t)0x03b4, 0
+    };
+    static const wchar_t utf8_scanset_format[] = {
+        '%', '3', 'l', '[', (wchar_t)0x03b1, '-', (wchar_t)0x03b3, ']',
+        '%', 'l', 'c', 0
+    };
     static const char utf8_scan_narrow_input[] = {
         (char)0xc2, (char)0xa2, (char)0xe2, (char)0x82, (char)0xac, ' ',
         (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 0
@@ -330,15 +337,8 @@ int main(int argc, char **argv)
 
     utf8_scan_wide[0] = 0;
     utf8_scan_char = 0;
-    if (tiny_vswscanf(
-            (const wchar_t[]){
-                (wchar_t)0x03b2, (wchar_t)0x03b3, (wchar_t)0x03b4, 0
-            },
-            (const wchar_t[]){
-                '%', '3', 'l', '[', (wchar_t)0x03b1, '-',
-                (wchar_t)0x03b3, ']', '%', 'l', 'c', 0
-            },
-            utf8_scan_wide, &utf8_scan_char) != 2 ||
+    if (tiny_vswscanf(utf8_scanset_input, utf8_scanset_format,
+                     utf8_scan_wide, &utf8_scan_char) != 2 ||
         utf8_scan_wide[0] != (wchar_t)0x03b2 ||
         utf8_scan_wide[1] != (wchar_t)0x03b3 ||
         utf8_scan_wide[2] != 0 ||
