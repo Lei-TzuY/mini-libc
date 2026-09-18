@@ -7,7 +7,7 @@ MULTIBYTE_RENAMES := -Dmblen=mini_test_mblen -Dmbtowc=mini_test_mbtowc \
                      -Dwctomb=mini_test_wctomb -Dmbstowcs=mini_test_mbstowcs \
                      -Dwcstombs=mini_test_wcstombs
 
-$(LIBC): $(BUILD)/locale.o $(BUILD)/wchar.o $(BUILD)/wide_stdio.o \
+$(LIBC): $(BUILD)/locale.o $(BUILD)/wchar.o $(BUILD)/wctype.o $(BUILD)/wide_stdio.o \
          $(BUILD)/wide_format.o $(BUILD)/wide_scan.o $(BUILD)/multibyte.o
 all: $(BUILD)/locale_probe $(BUILD)/locale_differential \
      $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
@@ -21,6 +21,9 @@ $(BUILD)/locale.o: src/locale/locale.c src/locale/locale_internal.h include/loca
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wchar.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/wctype.o: src/wchar/wctype.c include/wctype.h include/wchar.h include/ctype.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wide_stdio.o: src/wchar/wide_stdio.c include/wchar.h include/stdio.h \
@@ -50,7 +53,7 @@ $(BUILD)/locale_probe.o: tests/locale_probe.c include/locale.h include/stdlib.h 
 $(BUILD)/locale_probe: $(BUILD)/locale_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/locale_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/wchar_probe.o: tests/wchar_probe.c include/wchar.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/wchar_probe.o: tests/wchar_probe.c include/wchar.h include/wctype.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wchar_probe: $(BUILD)/wchar_probe.o $(CRT0) $(LIBC)
