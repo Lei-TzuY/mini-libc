@@ -260,7 +260,7 @@ host_cc=${CC:-cc}
     -fno-builtin -fno-pie -c tests/freopen_test.c -o build/freopen_test.o
 "$host_cc" -no-pie -o build/freopen_test build/freopen_test.o \
     build/stdio_test_impl.o build/file_stream_test_impl.o build/errno.o \
-    build/orientation.o build/byte_sync.o build/file_sync.o \
+    build/locale_test_impl.o build/orientation.o build/byte_sync.o build/file_sync.o \
     build/position_test_impl.o build/stdio_write_lseek_fake.o \
     build/stdio_lock_fake.o
 ./build/freopen_test
