@@ -12,7 +12,7 @@ inspect: stdio_sync_inspect
 $(BUILD)/stdio_lock.o: src/stdio/lock.c src/internal/futex_lock.h src/internal/thread_runtime.h include/stdatomic.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/orientation.o: src/stdio/orientation.c src/stdio/stdio_internal.h include/stdio.h include/errno.h | $(BUILD)
+$(BUILD)/orientation.o: src/stdio/orientation.c src/stdio/stdio_internal.h src/locale/locale_internal.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/byte_sync.o: src/stdio/byte_sync.c src/stdio/stdio_internal.h include/stdio.h | $(BUILD)
