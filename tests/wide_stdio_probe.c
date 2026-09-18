@@ -103,6 +103,15 @@ int main(void)
     static const wchar_t wide_arg_memory_expected[] = {'[', ' ', ' ', 'W', 'I', 'D', ']', '[', 'Q', ' ', ' ', ']', 0};
     static const wchar_t wide_arg_stream_value[] = {'W', 'X', 0};
     static const wchar_t wide_arg_stream_expected[] = {'[', 'W', 'X', ':', 'Q', ']', 0};
+    static const wchar_t utf8_wide_text[] = {(wchar_t)0x00a2, (wchar_t)0x20ac, 0};
+    static const wchar_t utf8_wide_format[] = {
+        (wchar_t)0x4e2d, ':', '[', '%', '.', '2', 'l', 's', ']',
+        '[', '%', 'l', 'c', ']', 0
+    };
+    static const wchar_t utf8_wide_expected[] = {
+        (wchar_t)0x4e2d, ':', '[', (wchar_t)0x00a2, (wchar_t)0x20ac, ']',
+        '[', (wchar_t)0x1f600, ']', 0
+    };
     static const wchar_t scan_memory[] = {'4', '2', ' ', 'O', 'K', ' ', '2', '.', '5', ' ', 'W', 'X', 0};
     static const wchar_t scan_memory_v[] = {'0', 'x', '2', 'a', ' ', 'A', 'B', 'C', ' ', 'Q', 0};
     static const wchar_t scan_file_first[] = {'1', '7', ' ', 'W', 'X', ' ', '3', '.', '5', ' ', 'Q', '\n', 0};
@@ -508,6 +517,55 @@ int main(void)
     clearerr(stream);
     if (fclose(stream) != 0 || setlocale(LC_CTYPE, "C") == (char *)0) {
         return fail((FILE *)0, 63);
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return fail((FILE *)0, 64);
+    }
+    errno = ERANGE;
+    count = snprintf(narrow, sizeof(narrow), "<%.2ls><%.1ls><%lc>",
+                     utf8_wide_text, utf8_wide_text, (wint_t)0x1f600);
+    if (count != 12 || narrow[0] != '<' ||
+        (unsigned char)narrow[1] != 0xc2U ||
+        (unsigned char)narrow[2] != 0xa2U || narrow[3] != '>' ||
+        narrow[4] != '<' || narrow[5] != '>' || narrow[6] != '<' ||
+        (unsigned char)narrow[7] != 0xf0U ||
+        (unsigned char)narrow[8] != 0x9fU ||
+        (unsigned char)narrow[9] != 0x98U ||
+        (unsigned char)narrow[10] != 0x80U || narrow[11] != '>' ||
+        narrow[12] != '\0' || errno != ERANGE) {
+        return fail((FILE *)0, 65);
+    }
+
+    errno = ERANGE;
+    count = swprintf(formatted, 64U, utf8_wide_format, utf8_wide_text,
+                     (wint_t)0x1f600);
+    if (count != 9 || wcscmp(formatted, utf8_wide_expected) != 0 ||
+        errno != ERANGE) {
+        return fail((FILE *)0, 66);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0) {
+        return fail(stream, 67);
+    }
+    errno = ERANGE;
+    if (fwprintf(stream, utf8_wide_format, utf8_wide_text,
+                 (wint_t)0x1f600) != 9 || errno != ERANGE ||
+        ftell(stream) != 17L) {
+        return fail(stream, 68);
+    }
+    rewind(stream);
+    if (fgetws(line, 32, stream) != line ||
+        wcscmp(line, utf8_wide_expected) != 0 || fclose(stream) != 0) {
+        return fail((FILE *)0, 69);
+    }
+
+    errno = 0;
+    if (snprintf(narrow, sizeof(narrow), "%ls", utf8_wide_text) != EOF ||
+        errno != EILSEQ) {
+        return fail((FILE *)0, 70);
     }
 
     (void)remove(path);
