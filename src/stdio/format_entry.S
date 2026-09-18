@@ -260,4 +260,76 @@ vsnprintf:
     ret
 .size vsnprintf, .-vsnprintf
 
+.globl __mini_vsnprintf_mode
+.type __mini_vsnprintf_mode, @function
+__mini_vsnprintf_mode:
+    subq $136, %rsp
+    movq %rdx, %r11
+    movq %rcx, %r10
+    movl %r8d, 128(%rsp)
+
+    movq 8(%r10), %rax
+    movq %rax, 104(%rsp)
+    movl $0, 112(%rsp)
+    movl $0, 120(%rsp)
+
+    movl 0(%r10), %eax
+    cmpl $48, %eax
+    jae .Lmini_vsnprintf_mode_no_gp
+    movl $48, %ecx
+    subl %eax, %ecx
+    shrl $3, %ecx
+    cmpl $5, %ecx
+    jbe .Lmini_vsnprintf_mode_gp_count_ready
+    movl $5, %ecx
+.Lmini_vsnprintf_mode_gp_count_ready:
+    movl %ecx, 116(%rsp)
+    movq 16(%r10), %r8
+    addq %rax, %r8
+    xorl %edx, %edx
+.Lmini_vsnprintf_mode_copy_gp:
+    cmpl %ecx, %edx
+    jae .Lmini_vsnprintf_mode_gp_ready
+    movq (%r8,%rdx,8), %r9
+    movq %r9, (%rsp,%rdx,8)
+    incl %edx
+    jmp .Lmini_vsnprintf_mode_copy_gp
+.Lmini_vsnprintf_mode_no_gp:
+    movl $0, 116(%rsp)
+.Lmini_vsnprintf_mode_gp_ready:
+
+    movl 4(%r10), %eax
+    cmpl $176, %eax
+    jae .Lmini_vsnprintf_mode_no_fp
+    movl $176, %ecx
+    subl %eax, %ecx
+    shrl $4, %ecx
+    cmpl $8, %ecx
+    jbe .Lmini_vsnprintf_mode_fp_count_ready
+    movl $8, %ecx
+.Lmini_vsnprintf_mode_fp_count_ready:
+    movl %ecx, 124(%rsp)
+    movq 16(%r10), %r8
+    addq %rax, %r8
+    xorl %edx, %edx
+.Lmini_vsnprintf_mode_copy_fp:
+    cmpl %ecx, %edx
+    jae .Lmini_vsnprintf_mode_ready
+    movq (%r8), %r9
+    movq %r9, 40(%rsp,%rdx,8)
+    addq $16, %r8
+    incl %edx
+    jmp .Lmini_vsnprintf_mode_copy_fp
+.Lmini_vsnprintf_mode_no_fp:
+    movl $0, 124(%rsp)
+.Lmini_vsnprintf_mode_ready:
+    movq %r11, %rdx
+    movq %rsp, %rcx
+    movl 128(%rsp), %r8d
+    call __mini_snprintf_dispatch_mode
+
+    addq $136, %rsp
+    ret
+.size __mini_vsnprintf_mode, .-__mini_vsnprintf_mode
+
 .section .note.GNU-stack,"",@progbits
