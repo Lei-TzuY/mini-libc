@@ -668,6 +668,58 @@ int main(void)
         return fail((FILE *)0, 79);
     }
 
+    {
+        const wchar_t set_input[] = {
+            (wchar_t)0x00a2, (wchar_t)0x20ac, (wchar_t)0x4e2d, '!', 0
+        };
+        const wchar_t set_format[] = {
+            '%', 'l', '[', (wchar_t)0x00a2, '-', (wchar_t)0x4e2d, ']',
+            '%', 'l', 'c', 0
+        };
+        const wchar_t negate_input[] = {
+            (wchar_t)0x1f600, (wchar_t)0x00a2, '!', 0
+        };
+        const wchar_t negate_format[] = {
+            '%', 'l', '[', '^', (wchar_t)0x00a2, ']', '%', 'l', 'c', 0
+        };
+        wchar_t set_output[8] = {0};
+        wchar_t set_tail = 0;
+
+        if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 ||
+            swscanf(set_input, set_format, set_output, &set_tail) != 2 ||
+            set_output[0] != (wchar_t)0x00a2 ||
+            set_output[1] != (wchar_t)0x20ac ||
+            set_output[2] != (wchar_t)0x4e2d || set_output[3] != 0 ||
+            set_tail != (wchar_t)'!') {
+            return fail((FILE *)0, 80);
+        }
+
+        set_output[0] = 0;
+        set_tail = 0;
+        if (swscanf(negate_input, negate_format, set_output, &set_tail) != 2 ||
+            set_output[0] != (wchar_t)0x1f600 || set_output[1] != 0 ||
+            set_tail != (wchar_t)0x00a2) {
+            return fail((FILE *)0, 81);
+        }
+
+        stream = tmpfile();
+        if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+            fputws(set_input, stream) < 0 ||
+            setlocale(LC_CTYPE, "C") == (char *)0) {
+            return fail(stream, 82);
+        }
+        rewind(stream);
+        set_output[0] = 0;
+        set_tail = 0;
+        if (fwscanf(stream, set_format, set_output, &set_tail) != 2 ||
+            set_output[0] != (wchar_t)0x00a2 ||
+            set_output[1] != (wchar_t)0x20ac ||
+            set_output[2] != (wchar_t)0x4e2d || set_output[3] != 0 ||
+            set_tail != (wchar_t)'!' || fclose(stream) != 0) {
+            return fail((FILE *)0, 83);
+        }
+    }
+
     (void)remove(path);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
