@@ -272,12 +272,48 @@ int main(int argc, char **argv, char **envp)
     if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
         return 37;
     }
-    if (iswalpha((wint_t)0x03b1U) || iswprint((wint_t)0x20acU) ||
-        towlower((wint_t)0x03b1U) != (wint_t)0x03b1U ||
-        towupper((wint_t)0x03b1U) != (wint_t)0x03b1U) {
-        return 38;
+    {
+        wctype_t alpha = wctype("alpha");
+        wctype_t digit = wctype("digit");
+        wctrans_t lower = wctrans("tolower");
+        wctrans_t upper = wctrans("toupper");
+
+        if (!iswalpha((wint_t)0x03b1U) ||
+            !iswlower((wint_t)0x03b1U) ||
+            !iswupper((wint_t)0x0391U) ||
+            towupper((wint_t)0x03b1U) != (wint_t)0x0391U ||
+            towlower((wint_t)0x0391U) != (wint_t)0x03b1U ||
+            !iswalpha((wint_t)0x0416U) ||
+            towlower((wint_t)0x0416U) != (wint_t)0x0436U ||
+            towupper((wint_t)0x0436U) != (wint_t)0x0416U ||
+            !iswdigit((wint_t)0x0665U) ||
+            !iswalnum((wint_t)0x0665U) ||
+            !iswspace((wint_t)0x00a0U) ||
+            !iswblank((wint_t)0x00a0U) ||
+            !iswpunct((wint_t)0x2014U) ||
+            !iswgraph((wint_t)0x20acU) ||
+            !iswprint((wint_t)0x20acU) ||
+            !iswgraph((wint_t)0x1f600U) ||
+            !iswprint((wint_t)0x1f600U) ||
+            !iswgraph((wint_t)0x0301U) ||
+            !iswprint((wint_t)0x0301U) ||
+            iswxdigit((wint_t)0xff21U) ||
+            iswprint((wint_t)0xe000U) ||
+            alpha == (wctype_t)0 || digit == (wctype_t)0 ||
+            lower == (wctrans_t)0 || upper == (wctrans_t)0 ||
+            !iswctype((wint_t)0x03b1U, alpha) ||
+            !iswctype((wint_t)0x0665U, digit) ||
+            towctrans((wint_t)0x03b1U, upper) != (wint_t)0x0391U ||
+            towctrans((wint_t)0x0416U, lower) != (wint_t)0x0436U ||
+            towupper(WEOF) != WEOF || towlower(WEOF) != WEOF) {
+            return 38;
+        }
     }
-    if (setlocale(LC_CTYPE, "C") == (char *)0) {
+    if (setlocale(LC_CTYPE, "C") == (char *)0 ||
+        iswalpha((wint_t)0x03b1U) || iswdigit((wint_t)0x0665U) ||
+        iswprint((wint_t)0x20acU) ||
+        towupper((wint_t)0x03b1U) != (wint_t)0x03b1U ||
+        towlower((wint_t)0x0416U) != (wint_t)0x0416U) {
         return 39;
     }
 
