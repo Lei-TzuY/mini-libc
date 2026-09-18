@@ -53,7 +53,7 @@ $(BUILD)/locale_probe.o: tests/locale_probe.c include/locale.h include/stdlib.h 
 $(BUILD)/locale_probe: $(BUILD)/locale_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/locale_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/wchar_probe.o: tests/wchar_probe.c include/wchar.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/wchar_probe.o: tests/wchar_probe.c include/wchar.h include/wctype.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wchar_probe: $(BUILD)/wchar_probe.o $(CRT0) $(LIBC)
