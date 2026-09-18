@@ -44,6 +44,7 @@
 #define MINI_FILE_WRITE_NEEDS_SYNC 32U
 #define MINI_FILE_BYTE_ORIENTED 64U
 #define MINI_FILE_WIDE_ORIENTED 128U
+#define MINI_FILE_WIDE_UTF8 256U
 #define MINI_FILE_ORIENTATION_MASK \
     (MINI_FILE_BYTE_ORIENTED | MINI_FILE_WIDE_ORIENTED)
 
@@ -58,8 +59,9 @@ struct __mini_FILE {
     unsigned char *write_buffer;
     size_t read_offset;
     size_t read_length;
-    unsigned int pushback_valid;
-    unsigned char pushback_byte;
+    size_t pushback_offset;
+    size_t pushback_length;
+    unsigned char pushback_bytes[4];
     unsigned char *read_buffer;
     size_t buffer_size;
     unsigned char inline_write_buffer[MINI_FILE_BUFFER_SIZE];
@@ -104,6 +106,8 @@ void __mini_stdio_unlock(void);
 size_t __mini_stdio_read(FILE *stream, unsigned char *buffer, size_t length);
 size_t __mini_stdio_write(FILE *stream, const unsigned char *buffer,
                           size_t length);
+int __mini_stdio_pushback_unlocked(FILE *stream,
+                                   const unsigned char *bytes, size_t length);
 int __mini_stdio_flush_buffer(FILE *stream);
 int __mini_stdio_flush_all(void);
 void __mini_stdio_register(FILE *stream);

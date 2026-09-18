@@ -17,8 +17,8 @@ static size_t unread_input(FILE *stream)
     if (stream->read_length >= stream->read_offset) {
         unread = stream->read_length - stream->read_offset;
     }
-    if (stream->pushback_valid != 0U) {
-        ++unread;
+    if (stream->pushback_length >= stream->pushback_offset) {
+        unread += stream->pushback_length - stream->pushback_offset;
     }
     return unread;
 }
@@ -27,8 +27,8 @@ static void discard_input(FILE *stream)
 {
     stream->read_offset = 0;
     stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
+    stream->pushback_offset = 0U;
+    stream->pushback_length = 0U;
 }
 
 int fseek(FILE *stream, long offset, int whence)

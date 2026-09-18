@@ -7,17 +7,17 @@
 
 static FILE mini_stderr = {
     2, MINI_FILE_WRITABLE | MINI_FILE_UNBUFFERED, 0, (FILE *)0,
-    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, {0}, (unsigned char *)0, 0,
     {0}, {0}
 };
 static FILE mini_stdout = {
     1, MINI_FILE_WRITABLE, 0, &mini_stderr,
-    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, {0}, (unsigned char *)0, 0,
     {0}, {0}
 };
 static FILE mini_stdin = {
     0, MINI_FILE_READABLE, 0, &mini_stdout,
-    0, (unsigned char *)0, 0, 0, 0U, 0U, (unsigned char *)0, 0,
+    0, (unsigned char *)0, 0, 0, 0U, 0U, {0}, (unsigned char *)0, 0,
     {0}, {0}
 };
 
@@ -51,6 +51,32 @@ static size_t mark_write_error(FILE *stream, int error, size_t completed)
 static int readable_stream(FILE *stream)
 {
     return stream != (FILE *)0 && (stream->mode & MINI_FILE_READABLE) != 0U;
+}
+
+int __mini_stdio_pushback_unlocked(FILE *stream,
+                                   const unsigned char *bytes, size_t length)
+{
+    size_t i;
+
+    if (!readable_stream(stream) || bytes == (const unsigned char *)0 ||
+        length == 0U || length > sizeof(stream->pushback_bytes) ||
+        (stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U ||
+        stream->pushback_offset < stream->pushback_length) {
+        if (stream != (FILE *)0) {
+            stream->state |= MINI_FILE_ERROR;
+        }
+        errno = EINVAL;
+        return EOF;
+    }
+
+    for (i = 0U; i < length; ++i) {
+        stream->pushback_bytes[i] = bytes[i];
+    }
+    stream->pushback_offset = 0U;
+    stream->pushback_length = length;
+    stream->state &= ~MINI_FILE_EOF;
+    stream->state |= MINI_FILE_READ_NEEDS_POSITION;
+    return 0;
 }
 
 static void ensure_storage(FILE *stream)
@@ -108,9 +134,22 @@ static size_t stdio_read_unlocked(FILE *stream, unsigned char *buffer,
 
     ensure_storage(stream);
     while (completed < length) {
-        if (stream->pushback_valid != 0U) {
-            buffer[completed++] = stream->pushback_byte;
-            stream->pushback_valid = 0U;
+        if (stream->pushback_offset < stream->pushback_length) {
+            size_t available = stream->pushback_length - stream->pushback_offset;
+            size_t wanted = length - completed;
+            size_t chunk = available < wanted ? available : wanted;
+            size_t i;
+
+            for (i = 0U; i < chunk; ++i) {
+                buffer[completed + i] =
+                    stream->pushback_bytes[stream->pushback_offset + i];
+            }
+            stream->pushback_offset += chunk;
+            completed += chunk;
+            if (stream->pushback_offset == stream->pushback_length) {
+                stream->pushback_offset = 0U;
+                stream->pushback_length = 0U;
+            }
             stream->state |= MINI_FILE_READ_NEEDS_POSITION;
             continue;
         }
@@ -467,20 +506,14 @@ int ungetc(int c, FILE *stream)
     __mini_stdio_lock();
     if (c == EOF) {
         result = EOF;
-    } else if (!readable_stream(stream) ||
-               (stream->state & MINI_FILE_WRITE_NEEDS_SYNC) != 0U ||
-               stream->pushback_valid != 0U) {
-        if (stream != (FILE *)0) {
-            stream->state |= MINI_FILE_ERROR;
-        }
-        errno = EINVAL;
-        result = EOF;
     } else {
-        stream->pushback_byte = (unsigned char)c;
-        stream->pushback_valid = 1U;
-        stream->state &= ~MINI_FILE_EOF;
-        stream->state |= MINI_FILE_READ_NEEDS_POSITION;
-        result = (int)stream->pushback_byte;
+        unsigned char byte = (unsigned char)c;
+
+        if (__mini_stdio_pushback_unlocked(stream, &byte, 1U) == EOF) {
+            result = EOF;
+        } else {
+            result = (int)byte;
+        }
     }
     __mini_stdio_unlock();
     return result;

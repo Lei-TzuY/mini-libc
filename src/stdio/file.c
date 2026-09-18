@@ -97,8 +97,8 @@ static void initialize_owned_stream(FILE *stream, int fd,
     stream->write_buffer = (unsigned char *)0;
     stream->read_offset = 0;
     stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
+    stream->pushback_offset = 0U;
+    stream->pushback_length = 0U;
     stream->read_buffer = (unsigned char *)0;
     stream->buffer_size = 0;
     __mini_stdio_register(stream);
@@ -110,8 +110,8 @@ static void reset_rebound_state(FILE *stream)
     stream->write_length = 0;
     stream->read_offset = 0;
     stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
+    stream->pushback_offset = 0U;
+    stream->pushback_length = 0U;
 }
 
 static void discard_failed_rebind(FILE *stream, unsigned int owned)
@@ -178,7 +178,7 @@ int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size)
     if ((stream->mode & MINI_FILE_READABLE) != 0U &&
         ((stream->state & MINI_FILE_READ_NEEDS_POSITION) != 0U ||
          stream->read_offset != stream->read_length ||
-         stream->pushback_valid != 0U) &&
+         stream->pushback_offset < stream->pushback_length) &&
         fseek(stream, 0L, SEEK_CUR) != 0) {
         sync_error = errno;
         if (new_owned != 0U) {
@@ -204,8 +204,8 @@ int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size)
     stream->write_length = 0;
     stream->read_offset = 0;
     stream->read_length = 0;
-    stream->pushback_valid = 0U;
-    stream->pushback_byte = 0U;
+    stream->pushback_offset = 0U;
+    stream->pushback_length = 0U;
     errno = saved_errno;
     return 0;
 }
@@ -414,8 +414,8 @@ int fclose(FILE *stream)
         stream->write_length = 0;
         stream->read_offset = 0;
         stream->read_length = 0;
-        stream->pushback_valid = 0U;
-        stream->pushback_byte = 0U;
+        stream->pushback_offset = 0U;
+        stream->pushback_length = 0U;
     }
 
     if (first_error != 0) {

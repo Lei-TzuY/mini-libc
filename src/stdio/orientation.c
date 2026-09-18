@@ -3,11 +3,21 @@
 
 #define MINI_STDIO_BYTE_PUBLIC_WRAPPER 1
 #include "stdio_internal.h"
+#include "../locale/locale_internal.h"
 
 static int valid_stream(FILE *stream)
 {
     return stream != (FILE *)0 &&
            (stream->mode & (MINI_FILE_READABLE | MINI_FILE_WRITABLE)) != 0U;
+}
+
+static void bind_wide_encoding(FILE *stream)
+{
+    if (__mini_locale_is_utf8()) {
+        stream->state |= MINI_FILE_WIDE_UTF8;
+    } else {
+        stream->state &= ~MINI_FILE_WIDE_UTF8;
+    }
 }
 
 static int orientation_value(FILE *stream)
@@ -36,6 +46,7 @@ int __mini_stdio_fwide_unlocked(FILE *stream, int mode)
     if (current == 0 && mode != 0) {
         if (mode > 0) {
             stream->state |= MINI_FILE_WIDE_ORIENTED;
+            bind_wide_encoding(stream);
             current = 1;
         } else {
             stream->state |= MINI_FILE_BYTE_ORIENTED;
@@ -60,6 +71,9 @@ static int require_orientation(FILE *stream, unsigned int wanted)
     current = stream->state & MINI_FILE_ORIENTATION_MASK;
     if (current == 0U) {
         stream->state |= wanted;
+        if (wanted == MINI_FILE_WIDE_ORIENTED) {
+            bind_wide_encoding(stream);
+        }
         return 0;
     }
     if (current != wanted) {

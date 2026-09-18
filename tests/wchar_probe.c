@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <locale.h>
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <wchar.h>
@@ -9,11 +10,29 @@ int main(int argc, char **argv, char **envp)
     static const char invalid_mb[] = {'A', (char)0x80, '\0'};
     static const wchar_t wide_abc[] = {'A', 'B', 'C', 0};
     static const wchar_t invalid_wide[] = {'A', 0x80, 0};
+    static const char euro_utf8[] = {(char)0xe2, (char)0x82, (char)0xac, '\0'};
+    static const char emoji_utf8[] = {
+        (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, '\0'
+    };
+    static const char surrogate_utf8[] = {
+        (char)0xed, (char)0xa0, (char)0x80, '\0'
+    };
+    static const char too_high_utf8[] = {
+        (char)0xf4, (char)0x90, (char)0x80, (char)0x80, '\0'
+    };
+    static const char overlong_utf8[] = {(char)0xc0, (char)0x80, '\0'};
+    static const char utf8_text[] = {
+        'A', (char)0xe2, (char)0x82, (char)0xac,
+        (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 'B', '\0'
+    };
+    static const wchar_t utf8_wide[] = {
+        'A', (wchar_t)0x20ac, (wchar_t)0x1f600, 'B', 0
+    };
     mbstate_t state = {0U, 0U};
     wchar_t wc = 999;
     wchar_t wide[8] = {9, 9, 9, 9, 9, 9, 9, 9};
     wchar_t copy[8] = {9, 9, 9, 9, 9, 9, 9, 9};
-    char bytes[8] = {'?', '?', '?', '?', '?', '?', '?', '?'};
+    char bytes[10] = {'?', '?', '?', '?', '?', '?', '?', '?', '?', '?'};
     const char *mbsrc;
     const wchar_t *wcsrc;
     size_t result;
@@ -127,8 +146,102 @@ int main(int argc, char **argv, char **envp)
         return 18;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
         return 19;
+    }
+
+    state.__count = 0U;
+    state.__value = 0U;
+    errno = EIO;
+    wc = 777;
+    result = mbrtowc(&wc, euro_utf8, 1U, &state);
+    if (result != (size_t)-2 || wc != 777 || mbsinit(&state) || errno != EIO) {
+        return 20;
+    }
+    result = mbrtowc(&wc, euro_utf8 + 1, 0U, &state);
+    if (result != (size_t)-2 || mbsinit(&state) || errno != EIO) {
+        return 21;
+    }
+    result = mbrtowc(&wc, euro_utf8 + 1, 1U, &state);
+    if (result != (size_t)-2 || mbsinit(&state) || errno != EIO) {
+        return 22;
+    }
+    result = mbrtowc(&wc, euro_utf8 + 2, 1U, &state);
+    if (result != 1U || wc != (wchar_t)0x20ac || !mbsinit(&state) ||
+        errno != EIO) {
+        return 23;
+    }
+
+    result = mbrtowc(&wc, emoji_utf8, 4U, &state);
+    if (result != 4U || wc != (wchar_t)0x1f600 || !mbsinit(&state) ||
+        errno != EIO) {
+        return 24;
+    }
+
+    errno = EIO;
+    if (mbrtowc(&wc, overlong_utf8, 2U, &state) != (size_t)-1 ||
+        errno != EILSEQ || !mbsinit(&state)) {
+        return 25;
+    }
+    errno = EIO;
+    if (mbrtowc(&wc, surrogate_utf8, 3U, &state) != (size_t)-1 ||
+        errno != EILSEQ || !mbsinit(&state)) {
+        return 26;
+    }
+    errno = EIO;
+    if (mbrtowc(&wc, too_high_utf8, 4U, &state) != (size_t)-1 ||
+        errno != EILSEQ || !mbsinit(&state)) {
+        return 27;
+    }
+
+    errno = EIO;
+    result = wcrtomb(bytes, (wchar_t)0x20ac, &state);
+    if (result != 3U || (unsigned char)bytes[0] != 0xe2U ||
+        (unsigned char)bytes[1] != 0x82U || (unsigned char)bytes[2] != 0xacU ||
+        errno != EIO || !mbsinit(&state)) {
+        return 28;
+    }
+    result = wcrtomb(bytes, (wchar_t)0x1f600, &state);
+    if (result != 4U || (unsigned char)bytes[0] != 0xf0U ||
+        (unsigned char)bytes[1] != 0x9fU || (unsigned char)bytes[2] != 0x98U ||
+        (unsigned char)bytes[3] != 0x80U || errno != EIO) {
+        return 29;
+    }
+    if (wcrtomb(bytes, (wchar_t)0xd800, &state) != (size_t)-1 ||
+        errno != EILSEQ) {
+        return 30;
+    }
+
+    errno = EIO;
+    mbsrc = utf8_text;
+    result = mbsrtowcs(wide, &mbsrc, 8U, &state);
+    if (result != 4U || mbsrc != (const char *)0 ||
+        wide[0] != utf8_wide[0] || wide[1] != utf8_wide[1] ||
+        wide[2] != utf8_wide[2] || wide[3] != utf8_wide[3] ||
+        wide[4] != 0 || errno != EIO) {
+        return 31;
+    }
+    wcsrc = utf8_wide;
+    result = wcsrtombs(bytes, &wcsrc, sizeof(bytes), &state);
+    if (result != 9U || wcsrc != (const wchar_t *)0 || bytes[9] != '\0' ||
+        errno != EIO) {
+        return 32;
+    }
+    {
+        size_t i;
+        for (i = 0U; i < 10U; ++i) {
+            if ((unsigned char)bytes[i] != (unsigned char)utf8_text[i]) {
+                return 33;
+            }
+        }
+    }
+
+    if (setlocale(LC_CTYPE, "C") == (char *)0) {
+        return 34;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
+        return 35;
     }
     return 0;
 }

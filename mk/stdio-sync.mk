@@ -12,7 +12,7 @@ inspect: stdio_sync_inspect
 $(BUILD)/stdio_lock.o: src/stdio/lock.c src/internal/futex_lock.h src/internal/thread_runtime.h include/stdatomic.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/orientation.o: src/stdio/orientation.c src/stdio/stdio_internal.h include/stdio.h include/errno.h | $(BUILD)
+$(BUILD)/orientation.o: src/stdio/orientation.c src/stdio/stdio_internal.h src/locale/locale_internal.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/byte_sync.o: src/stdio/byte_sync.c src/stdio/stdio_internal.h include/stdio.h | $(BUILD)
@@ -48,13 +48,13 @@ $(BUILD)/stdio_lock_test.o: tests/stdio_lock_test.c src/internal/thread_runtime.
 $(BUILD)/stdio_lock_test: $(BUILD)/stdio_lock_test.o $(BUILD)/stdio_lock_test_impl.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-$(BUILD)/stdio_write_test: $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
+$(BUILD)/stdio_write_test: $(BUILD)/locale.o $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
                           $(BUILD)/file_sync.o $(BUILD)/position_test_impl.o \
                           $(BUILD)/stdio_write_lseek_fake.o $(BUILD)/stdio_lock_fake.o
-$(BUILD)/stdio_block_test: $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
+$(BUILD)/stdio_block_test: $(BUILD)/locale.o $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
                           $(BUILD)/block_sync.o $(BUILD)/position_sync.o \
                           $(BUILD)/stdio_lock_fake.o
-$(BUILD)/stdio_scan_test: $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
+$(BUILD)/stdio_scan_test: $(BUILD)/locale.o $(BUILD)/orientation.o $(BUILD)/byte_sync.o \
                          $(BUILD)/scan_sync.o $(BUILD)/stdio_lock_fake.o
 
 $(BUILD)/stdio_thread_probe.o: tests/stdio_thread_probe.c include/stdio.h include/string.h include/threads.h | $(BUILD)

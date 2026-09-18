@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 static int tiny_vsnprintf(char *buffer, size_t size, const char *format, ...)
 {
@@ -108,8 +109,12 @@ int main(int argc, char **argv, char **envp)
     char memory_letters[3];
     char format_buffer[64];
     char trunc_buffer[6];
+    static const char locale_euro[] = {
+        (char)0xe2, (char)0x82, (char)0xac, '\0'
+    };
     char locale_bytes[4] = {'?', '?', '?', '?'};
     wchar_t locale_wide[4] = {9, 9, 9, 9};
+    mbstate_t locale_state = {0U, 0U};
     struct lconv *locale_info;
     FILE *stream;
     int scan_auto;
@@ -163,6 +168,42 @@ int main(int argc, char **argv, char **envp)
     }
     if (wctomb(locale_bytes, (wchar_t)0x80) != -1 || errno != EILSEQ) {
         return 43;
+    }
+
+    errno = EIO;
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 || MB_CUR_MAX != 4 ||
+        mbstowcs(locale_wide, locale_euro, 4U) != 1U ||
+        locale_wide[0] != (wchar_t)0x20ac || locale_wide[1] != 0 ||
+        wcstombs(locale_bytes, locale_wide, 4U) != 3U ||
+        (unsigned char)locale_bytes[0] != 0xe2U ||
+        (unsigned char)locale_bytes[1] != 0x82U ||
+        (unsigned char)locale_bytes[2] != 0xacU ||
+        locale_bytes[3] != '\0' || errno != EIO) {
+        return 100;
+    }
+    locale_state.__count = 0U;
+    locale_state.__value = 0U;
+    if (mbrtowc(&locale_wide[0], locale_euro, 1U, &locale_state) != (size_t)-2 ||
+        mbsinit(&locale_state) ||
+        mbrtowc(&locale_wide[0], locale_euro + 1, 2U, &locale_state) != 2U ||
+        locale_wide[0] != (wchar_t)0x20ac || !mbsinit(&locale_state)) {
+        return 101;
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0 ||
+        fputwc((wchar_t)0x20ac, stream) != (wint_t)0x20ac ||
+        ftell(stream) != 3L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 102;
+    }
+    rewind(stream);
+    if (fgetwc(stream) != (wint_t)0x20ac || fclose(stream) != 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0 || MB_CUR_MAX != 1) {
+        return 103;
     }
     errno = EIO;
 
