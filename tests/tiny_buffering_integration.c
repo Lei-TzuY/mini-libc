@@ -338,12 +338,20 @@ int main(int argc, char **argv)
     utf8_scan_wide[0] = 0;
     utf8_scan_char = 0;
     if (tiny_vswscanf(utf8_scanset_input, utf8_scanset_format,
-                     utf8_scan_wide, &utf8_scan_char) != 2 ||
-        utf8_scan_wide[0] != (wchar_t)0x03b2 ||
-        utf8_scan_wide[1] != (wchar_t)0x03b3 ||
-        utf8_scan_wide[2] != 0 ||
-        utf8_scan_char != (wchar_t)0x03b4) {
+                     utf8_scan_wide, &utf8_scan_char) != 2) {
         return 28;
+    }
+    if (utf8_scan_wide[0] != (wchar_t)0x03b2) {
+        return 29;
+    }
+    if (utf8_scan_wide[1] != (wchar_t)0x03b3) {
+        return 30;
+    }
+    if (utf8_scan_wide[2] != 0) {
+        return 31;
+    }
+    if (utf8_scan_char != (wchar_t)0x03b4) {
+        return 32;
     }
 
     wide_scan_value = 0;
