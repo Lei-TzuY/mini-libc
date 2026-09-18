@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <wctype.h>
 
 static int file_equals(const char *path, const char *expected, size_t length)
 {
@@ -246,6 +247,11 @@ int main(int argc, char **argv)
     }
 
     if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 ||
+        !iswalpha((wint_t)'A') || iswalpha((wint_t)0x03b1U) ||
+        towupper((wint_t)'q') != (wint_t)'Q' ||
+        towlower((wint_t)0x03b1U) != (wint_t)0x03b1U ||
+        !iswctype((wint_t)'7', wctype("digit")) ||
+        towctrans((wint_t)'Z', wctrans("tolower")) != (wint_t)'z' ||
         tiny_vswprintf(wide_format, 32U, utf8_format, utf8_value) != 3 ||
         wcscmp(wide_format, utf8_expected) != 0 ||
         snprintf(utf8_narrow, sizeof(utf8_narrow), "%ls", utf8_value) != 2 ||
@@ -320,6 +326,24 @@ int main(int argc, char **argv)
         utf8_scan_char != (wchar_t)0x1f600 ||
         fwide(stream, 0) <= 0 || fclose(stream) != 0) {
         return 27;
+    }
+
+    utf8_scan_wide[0] = 0;
+    utf8_scan_char = 0;
+    if (tiny_vswscanf(
+            (const wchar_t[]){
+                (wchar_t)0x03b2, (wchar_t)0x03b3, (wchar_t)0x03b4, 0
+            },
+            (const wchar_t[]){
+                '%', '3', 'l', '[', (wchar_t)0x03b1, '-',
+                (wchar_t)0x03b3, ']', '%', 'l', 'c', 0
+            },
+            utf8_scan_wide, &utf8_scan_char) != 2 ||
+        utf8_scan_wide[0] != (wchar_t)0x03b2 ||
+        utf8_scan_wide[1] != (wchar_t)0x03b3 ||
+        utf8_scan_wide[2] != 0 ||
+        utf8_scan_char != (wchar_t)0x03b4) {
+        return 28;
     }
 
     wide_scan_value = 0;
