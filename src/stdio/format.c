@@ -1,7 +1,11 @@
 #include <errno.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <wchar.h>
 
+#include "../locale/locale_internal.h"
+#include "../wchar/wchar_internal.h"
 #include "stdio_internal.h"
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
@@ -46,6 +50,8 @@ struct mini_format_sink {
     char *buffer;
     size_t size;
     size_t stored;
+    int utf8;
+    int wide_semantics;
 };
 
 struct mini_format_spec {
@@ -444,30 +450,67 @@ static int emit_character(struct mini_format_sink *sink,
     return 0;
 }
 
-static int wide_code_to_c_byte(unsigned int value, char *byte)
+static size_t encode_wide_value(wchar_t value, int utf8, char bytes[4])
 {
-    if (value > 0x7fU) {
+    mbstate_t state = {0U, 0U};
+
+    return __mini_wcrtomb_mode(bytes, value, &state, utf8);
+}
+
+static int decode_multibyte_character(const char *value, int utf8,
+                                      size_t *length)
+{
+    mbstate_t state = {0U, 0U};
+    wchar_t wc = 0;
+    size_t used = 0U;
+
+    if (value == (const char *)0 || length == (size_t *)0 ||
+        value[0] == '\0') {
         errno = EILSEQ;
         return 0;
     }
-    *byte = (char)value;
-    return 1;
+
+    for (;;) {
+        size_t converted;
+
+        converted = __mini_mbrtowc_mode(&wc, value + used, 1U, &state, utf8);
+        ++used;
+        if (converted == (size_t)-1) {
+            return 0;
+        }
+        if (converted != (size_t)-2) {
+            *length = used;
+            return 1;
+        }
+        if (value[used] == '\0') {
+            errno = EILSEQ;
+            return 0;
+        }
+    }
 }
 
 static int emit_wide_character(struct mini_format_sink *sink,
                                const struct mini_format_spec *spec, int value,
                                unsigned int *count)
 {
-    char byte;
-    unsigned int padding = spec->width > 1U ? spec->width - 1U : 0U;
+    char bytes[4];
+    size_t length;
+    unsigned int units;
+    unsigned int padding = 0U;
 
-    if (!wide_code_to_c_byte((unsigned int)value, &byte)) {
+    length = encode_wide_value((wchar_t)value, sink->utf8, bytes);
+    if (length == (size_t)-1) {
         return EOF;
+    }
+
+    units = sink->wide_semantics ? 1U : (unsigned int)length;
+    if (spec->width > units) {
+        padding = spec->width - units;
     }
     if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    if (emit_bytes(sink, &byte, 1U, count) == EOF) {
+    if (emit_bytes(sink, bytes, length, count) == EOF) {
         return EOF;
     }
     if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
@@ -481,45 +524,103 @@ static int emit_wide_string(struct mini_format_sink *sink,
                             const wchar_t *value, unsigned int *count)
 {
     static const wchar_t null_text[] = {'(', 'n', 'u', 'l', 'l', ')', 0};
-    char bytes[MINI_FORMAT_PAD_CHUNK];
-    size_t length = 0U;
-    size_t offset;
+    size_t characters = 0U;
+    size_t bytes_total = 0U;
+    size_t i;
+    unsigned int units;
     unsigned int padding = 0U;
 
     if (value == (const wchar_t *)0) {
         value = null_text;
     }
-    while (value[length] != 0 &&
-           (!spec->precision_set || length < (size_t)spec->precision)) {
-        char byte;
 
-        if (!wide_code_to_c_byte((unsigned int)value[length], &byte)) {
+    while (value[characters] != 0) {
+        char bytes[4];
+        size_t length = encode_wide_value(value[characters], sink->utf8, bytes);
+
+        if (length == (size_t)-1) {
             return EOF;
         }
-        ++length;
-    }
-    if ((size_t)spec->width > length) {
-        padding = spec->width - (unsigned int)length;
+        if (sink->wide_semantics) {
+            if (spec->precision_set &&
+                characters >= (size_t)spec->precision) {
+                break;
+            }
+        } else if (spec->precision_set &&
+                   bytes_total + length > (size_t)spec->precision) {
+            break;
+        }
+        if (bytes_total > (size_t)-1 - length) {
+            errno = EINVAL;
+            return EOF;
+        }
+        bytes_total += length;
+        ++characters;
     }
 
+    units = sink->wide_semantics ? (unsigned int)characters :
+                                  (unsigned int)bytes_total;
+    if (spec->width > units) {
+        padding = spec->width - units;
+    }
     if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    offset = 0U;
-    while (offset < length) {
-        size_t chunk = length - offset;
-        size_t i;
+    for (i = 0U; i < characters; ++i) {
+        char bytes[4];
+        size_t length = encode_wide_value(value[i], sink->utf8, bytes);
 
-        if (chunk > MINI_FORMAT_PAD_CHUNK) {
-            chunk = MINI_FORMAT_PAD_CHUNK;
-        }
-        for (i = 0U; i < chunk; ++i) {
-            bytes[i] = (char)(unsigned int)value[offset + i];
-        }
-        if (emit_bytes(sink, bytes, chunk, count) == EOF) {
+        if (length == (size_t)-1 ||
+            emit_bytes(sink, bytes, length, count) == EOF) {
             return EOF;
         }
-        offset += chunk;
+    }
+    if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    return 0;
+}
+
+static int emit_multibyte_string_wide(struct mini_format_sink *sink,
+                                      const struct mini_format_spec *spec,
+                                      const char *value, unsigned int *count)
+{
+    static const char null_text[] = "(null)";
+    const char *cursor;
+    size_t characters = 0U;
+    size_t bytes_total = 0U;
+    unsigned int padding = 0U;
+
+    if (value == (const char *)0) {
+        value = null_text;
+    }
+
+    cursor = value;
+    while (*cursor != '\0' &&
+           (!spec->precision_set ||
+            characters < (size_t)spec->precision)) {
+        size_t length;
+
+        if (!decode_multibyte_character(cursor, sink->utf8, &length)) {
+            return EOF;
+        }
+        if (bytes_total > (size_t)-1 - length) {
+            errno = EINVAL;
+            return EOF;
+        }
+        bytes_total += length;
+        cursor += length;
+        ++characters;
+    }
+
+    if ((size_t)spec->width > characters) {
+        padding = spec->width - (unsigned int)characters;
+    }
+    if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
+        return EOF;
+    }
+    if (emit_bytes(sink, value, bytes_total, count) == EOF) {
+        return EOF;
     }
     if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
@@ -1142,6 +1243,9 @@ static int emit_conversion(struct mini_format_sink *sink,
         if (spec->length == MINI_LEN_NONE) {
             const char *value = (const char *)next_word(args);
 
+            if (sink->wide_semantics) {
+                return emit_multibyte_string_wide(sink, spec, value, count);
+            }
             return emit_string(sink, spec, value, count);
         }
         if (spec->length == MINI_LEN_L) {
@@ -1159,6 +1263,11 @@ static int emit_conversion(struct mini_format_sink *sink,
         }
         value = word_to_int(next_word(args));
         if (spec->length == MINI_LEN_NONE) {
+            if (sink->wide_semantics &&
+                (unsigned int)(unsigned char)value > 0x7fU) {
+                errno = EILSEQ;
+                return EOF;
+            }
             return emit_character(sink, spec, value, count);
         }
         if (spec->length == MINI_LEN_L) {
@@ -1245,6 +1354,13 @@ static int format_dispatch(struct mini_format_sink *sink, const char *format,
     return (int)count;
 }
 
+static void set_sink_mode(struct mini_format_sink *sink, int utf8,
+                          int wide_semantics)
+{
+    sink->utf8 = utf8 != 0;
+    sink->wide_semantics = wide_semantics != 0;
+}
+
 int __mini_format_dispatch(FILE *stream, const char *format,
                            struct mini_format_args *args)
 {
@@ -1259,11 +1375,14 @@ int __mini_format_dispatch(FILE *stream, const char *format,
     sink.buffer = (char *)0;
     sink.size = 0U;
     sink.stored = 0U;
+    set_sink_mode(&sink, __mini_locale_is_utf8(), 0);
     return format_dispatch(&sink, format, args);
 }
 
-int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
-                             struct mini_format_args *args)
+static int snprintf_dispatch_mode(char *buffer, size_t size,
+                                  const char *format,
+                                  struct mini_format_args *args,
+                                  int utf8, int wide_semantics)
 {
     struct mini_format_sink sink;
 
@@ -1276,9 +1395,84 @@ int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
     sink.buffer = buffer;
     sink.size = size;
     sink.stored = 0U;
+    set_sink_mode(&sink, utf8, wide_semantics);
     if (size != 0U) {
         buffer[0] = '\0';
     }
 
     return format_dispatch(&sink, format, args);
+}
+
+int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
+                             struct mini_format_args *args)
+{
+    return snprintf_dispatch_mode(buffer, size, format, args,
+                                  __mini_locale_is_utf8(), 0);
+}
+
+struct mini_public_va_list_state {
+    unsigned int gp_offset;
+    unsigned int fp_offset;
+    void *overflow_arg_area;
+    void *reg_save_area;
+};
+
+static unsigned long load_public_word(const unsigned char *source)
+{
+    unsigned long value = 0UL;
+    unsigned char *out = (unsigned char *)&value;
+    size_t i;
+
+    for (i = 0U; i < sizeof(value); ++i) {
+        out[i] = source[i];
+    }
+    return value;
+}
+
+static void normalize_public_va_list(struct mini_format_args *args, va_list ap)
+{
+    const struct mini_public_va_list_state *state =
+        (const struct mini_public_va_list_state *)(const void *)ap;
+    const unsigned char *save =
+        (const unsigned char *)state->reg_save_area;
+    unsigned int i;
+
+    args->gp_index = 0U;
+    args->fp_index = 0U;
+    args->overflow = (unsigned long *)state->overflow_arg_area;
+
+    if (state->gp_offset < 48U) {
+        args->gp_count = (48U - state->gp_offset) / 8U;
+        if (args->gp_count > 5U) {
+            args->gp_count = 5U;
+        }
+        for (i = 0U; i < args->gp_count; ++i) {
+            args->gp[i] = load_public_word(
+                save + state->gp_offset + (size_t)i * 8U);
+        }
+    } else {
+        args->gp_count = 0U;
+    }
+
+    if (state->fp_offset < 176U) {
+        args->fp_count = (176U - state->fp_offset) / 16U;
+        if (args->fp_count > 8U) {
+            args->fp_count = 8U;
+        }
+        for (i = 0U; i < args->fp_count; ++i) {
+            args->fp[i] = load_public_word(
+                save + state->fp_offset + (size_t)i * 16U);
+        }
+    } else {
+        args->fp_count = 0U;
+    }
+}
+
+int __mini_vsnprintf_wide_mode(char *buffer, size_t size,
+                               const char *format, va_list ap, int utf8)
+{
+    struct mini_format_args args;
+
+    normalize_public_va_list(&args, ap);
+    return snprintf_dispatch_mode(buffer, size, format, &args, utf8, 1);
 }
