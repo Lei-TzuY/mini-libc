@@ -1,4 +1,3 @@
-#include <errno.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -12,11 +11,7 @@ int mblen(const char *s, size_t n)
         return 0;
     }
     result = mbrtowc((wchar_t *)0, s, n, &state);
-    if (result == (size_t)-2) {
-        errno = EILSEQ;
-        return -1;
-    }
-    if (result == (size_t)-1) {
+    if (result == (size_t)-1 || result == (size_t)-2) {
         return -1;
     }
     return (int)result;
@@ -31,11 +26,7 @@ int mbtowc(wchar_t *restrict pwc, const char *restrict s, size_t n)
         return 0;
     }
     result = mbrtowc(pwc, s, n, &state);
-    if (result == (size_t)-2) {
-        errno = EILSEQ;
-        return -1;
-    }
-    if (result == (size_t)-1) {
+    if (result == (size_t)-1 || result == (size_t)-2) {
         return -1;
     }
     return (int)result;
