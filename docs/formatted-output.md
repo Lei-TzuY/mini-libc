@@ -167,6 +167,31 @@ sink therefore do not know whether an argument came from ordinary `...`, public
 The exact public `va_list` layout and compiler-primitive policy are documented in
 `docs/variadic-abi.md`.
 
+## C/C.UTF-8 wide conversion integration
+
+The same formatter core now carries two private text-mode properties in addition
+to its FILE/memory sink: the selected C-vs-C.UTF-8 encoding and whether the
+caller belongs to the narrow or wide formatted-output family. Parsing, numeric
+formatting, variadic transport, and sink storage remain shared.
+
+For narrow `printf`/`fprintf`/`snprintf`, `%lc` and `%ls` convert
+`wchar_t` values through the active `LC_CTYPE` encoding. Under C.UTF-8,
+field width and `%ls` precision retain the narrow-family byte semantics;
+precision never emits a partial UTF-8 sequence.
+
+The wide family uses the same parser with wide-character field/precision units.
+A private mode-aware `va_list` entry lets `fwprintf` render according to the
+wide stream's orientation-time encoding rather than consulting mutable global
+locale state. `swprintf` uses the active `LC_CTYPE` mode. UTF-8 rendered
+bytes are decoded back into wide characters for wide-memory results and for
+wide-character return counts, while FILE output keeps the exact validated
+stream-encoding bytes.
+
+This means non-ASCII wide format literals plus wide/multibyte string and
+character arguments are executable in C.UTF-8 without introducing a second
+format grammar. C-locale calls retain the earlier `EILSEQ` boundary for
+unrepresentable wide values or invalid multibyte strings.
+
 ## Executable evidence
 
 The freestanding stdio probe keeps every established integer/string/fixed-float
@@ -184,28 +209,24 @@ ninth floating argument onto the overflow stack.
 
 The pinned tiny-c integration independently compiles and executes ordinary
 `snprintf` and caller-created `va_list` `vsnprintf` calls containing `%e`, `%g`,
-and `%a`. The same executable runs through GNU `ld` and the pinned
-`mini-elf-toolchain`. GCC and Clang run the complete freestanding/runtime suite
-and host-libc-independence inspection.
+and `%a`. It also executes C.UTF-8 `snprintf("%ls")`, `vswprintf`, and
+orientation-bound `vfwprintf` with non-ASCII wide values. The same executable
+runs through GNU `ld` and the pinned `mini-elf-toolchain`. GCC and Clang run the
+complete freestanding/runtime suite and host-libc-independence inspection.
 
 ## Phase boundary and next frontier
 
-Floating formatted output breadth is now executable rather than a roadmap item:
-all targeted binary64 notation families share the established formatter parser,
-XMM/public-`va_list` argument transport, FILE/memory sinks, and common
-classification/sign/padding layer. Decimal precision bounds and the stronger
-bit-derived hexadecimal contract are explicit, so this phase closes without a
-false general dtoa conformance claim.
+Formatted output now spans integer and bounded binary64 notation, ordinary and
+public-`va_list` entry paths, FILE and bounded-memory sinks, narrow/wide
+families, and C/C.UTF-8 wide-argument conversion through one parser/conversion
+engine. Stream-bound wide encoding and wide-character return/precision units are
+executable rather than wrapper-only claims.
 
-The next higher architectural frontier is **configurable stream buffering and
-buffer ownership**. The current `FILE` layout hard-codes private 256-byte read and
-write arrays and exposes no `setvbuf`/`setbuf` policy surface. A coherent next
-slice should make full, line, and unbuffered modes executable; define
-caller-provided versus libc-owned buffer lifetime; preserve update-stream
-read/write barriers, logical positioning, `fflush`, `fclose`, and normal-exit
-flush invariants across mode changes; and prove the behavior through deterministic
-fake I/O, real owned streams, and the pinned tiny-c/mini-elf path.
+Long-double formatting, positional arguments, locale-specific numeric grouping,
+and a broader internationalized locale model remain outside this contract.
+Those are separate semantic expansions, not reasons to duplicate the formatter.
 
-`%p`/`%n`, `tmpfile`, C11 exclusive-create modes, wide-character I/O,
-locale-sensitive behavior, threading/TLS, long-double formatting, and allocator
-tuning remain separate later phases.
+The immediate text-runtime frontier is now on the **input** side: C.UTF-8 wide
+formatted scanning should lift the remaining ASCII wide-format adapter while
+reusing the established scanner/source/conversion machinery and preserving its
+matching/input-failure and rollback contracts.

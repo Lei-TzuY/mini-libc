@@ -1,177 +1,119 @@
-# C locale, multibyte, and wide-character baseline
+# C and C.UTF-8 locale, multibyte, and wide-character runtime
 
-mini-libc currently implements one deliberate locale: the ISO C `"C"` locale.
-The text runtime includes locale selection/querying, a single-byte C-locale
-multibyte model, restartable wide-character conversions, a basic wide-string
-core, oriented wide stream character/line I/O, and bounded wide formatted
-input/output baselines without claiming a locale database, UTF-8 locale, or
-stateful encoding.
+mini-libc exposes the ISO C `"C"` locale plus a bounded `"C.UTF-8"` /
+`"C.utf8"` `LC_CTYPE` mode. The text runtime shares one restartable
+multibyte/wide-character conversion core across legacy conversion APIs,
+wide-string helpers, oriented wide streams, and formatted I/O. C.UTF-8 supports
+1-4 byte UTF-8 for valid Unicode scalar values without claiming locale
+databases, collation, Unicode character properties, or stateful encodings.
 
 ## Public locale surface
 
 `<locale.h>` exposes the standard locale categories used by the x86-64 Linux
 target, `struct lconv`, `setlocale`, and `localeconv`.
 
-The process starts in the C locale and this phase never leaves it:
+The process starts in `"C"`. `LC_CTYPE` and `LC_ALL` additionally accept
+`"C.UTF-8"` and `"C.utf8"`; querying those categories reports the selected
+mode. The empty locale string selects mini-libc's implementation-native
+`"C"` mode. Other categories retain the C-locale contract and reject named
+non-C locales. Unsupported category values fail without changing the active
+mode.
 
-- `setlocale(category, NULL)` queries the current locale and returns `"C"` for
-  every supported category.
-- `setlocale(category, "C")` succeeds and returns `"C"`.
-- `setlocale(category, "")` selects mini-libc's implementation-native locale,
-  which is deliberately the same C locale in this phase.
-- unsupported category values and named locales other than `"C"` fail by
-  returning null without changing the existing locale.
+`localeconv()` remains process-lifetime C-locale data: decimal point `"."`,
+empty grouping/currency/sign strings, and `CHAR_MAX` for unavailable monetary
+placement/precision fields. The C.UTF-8 promotion changes character encoding,
+not numeric or monetary conventions.
 
-`localeconv()` returns process-lifetime static C-locale data. The decimal point
-is `"."`; grouping, thousands separators, currency strings, and sign strings
-are empty; unavailable monetary placement and precision fields use `CHAR_MAX`
-for the target, currently 127.
+There is still no environment-variable locale selection, locale archive,
+per-thread locale object, collation database, or mutable locale-specific
+numeric/monetary data.
 
-There is no environment-variable locale selection, locale archive, per-thread
-locale, or mutable locale state yet.
+## C and C.UTF-8 multibyte model
 
-## Single-byte multibyte model
+`MB_CUR_MAX` is dynamic: 1 in `"C"` and 4 in `"C.UTF-8"`. In the C locale,
+ASCII bytes `0x00..0x7f` are the complete valid multibyte character set and
+higher standalone bytes report `EILSEQ`.
 
-`MB_CUR_MAX` is 1. In the C locale mini-libc treats ASCII bytes `0x00` through
-`0x7f` as the complete valid multibyte character set. Bytes `0x80` through
-`0xff` are not accepted as standalone multibyte characters and report `EILSEQ`.
-The public Linux x86-64 errno value for `EILSEQ` is 84, and `strerror(EILSEQ)`
-returns the fixed C-locale-style message `Invalid or incomplete multibyte or
-wide character`.
+C.UTF-8 accepts canonical 1-4 byte UTF-8 sequences representing Unicode scalar
+values through U+10FFFF. Invalid lead/continuation bytes, overlong forms,
+surrogates, values above U+10FFFF, and incomplete sequences are rejected through
+the restartable conversion contract. The public Linux x86-64 `EILSEQ` value is
+84 and `strerror(EILSEQ)` returns `Invalid or incomplete multibyte or wide
+character`.
 
-The legacy `<stdlib.h>` surface remains available:
-
-- `mblen`
-- `mbtowc`
-- `wctomb`
-- `mbstowcs`
-- `wcstombs`
-
-Those entry points delegate to the restartable wide-character core instead of
-maintaining a second decoder/encoder. The C-locale ASCII/EILSEQ rules therefore
-have one production source of truth.
-
-The conversion is stateless. `mblen(NULL, ...)`, `mbtowc(..., NULL, ...)`, and
-`wctomb(NULL, ...)` therefore report an initial-state result of zero. For a
-non-null input with a zero byte limit, the legacy byte-reading operations return
-`-1` without fabricating `EILSEQ` because no input byte was examined.
-
-`wchar_t` is the existing signed 32-bit mini-libc target type. Valid C-locale
-characters map directly between their unsigned ASCII byte value and the same
-`wchar_t` value. A wide value outside `0..0x7f` is not representable in the
-current multibyte encoding and causes the applicable conversion to report
-`EILSEQ`.
+The legacy `mblen`, `mbtowc`, `wctomb`, `mbstowcs`, and `wcstombs`
+entry points delegate to the same restartable core. Reset/query operations stay
+in the initial state because both supported encodings are stateless between
+completed characters.
 
 ## Restartable wide-character surface
 
-`<wchar.h>` exposes a concrete `mbstate_t` plus:
+`<wchar.h>` exposes `mbstate_t`, `mbsinit`, `mbrtowc`, `wcrtomb`,
+`mbsrtowcs`, `wcsrtombs`, and the basic wide-string helpers.
 
-- `mbsinit`
-- `mbrtowc`
-- `wcrtomb`
-- `mbsrtowcs`
-- `wcsrtombs`
-- `wcslen`
-- `wcscmp`
-- `wcscpy`
+Caller-owned conversion state tracks incomplete UTF-8 sequences across
+`mbrtowc` calls. Completed conversions reset to the initial state; a null
+state pointer uses the implementation's restartable contract without requiring
+callers to share an object. C-locale nonzero ASCII consumes one byte. C.UTF-8
+may consume one through four bytes and returns `(size_t)-2` while a valid
+sequence remains incomplete. Invalid input reports `(size_t)-1/EILSEQ`.
+`wcrtomb` emits one C-locale byte or a canonical 1-4 byte UTF-8 sequence.
 
-The current C-locale encoding is stateless, so every valid conversion begins and
-ends in the initial state. Caller-owned `mbstate_t` objects are normalized back
-to zero state after each conversion. A null state pointer does not require or
-mutate process-global conversion storage, which keeps independent callers free
-of an unnecessary shared-state race.
-
-`mbrtowc` returns `1` for a nonzero ASCII byte, `0` for the null character,
-`(size_t)-2` when the byte limit is zero, and `(size_t)-1` plus `EILSEQ` for a
-byte above `0x7f`. A null source performs the standard reset/query operation and
-does not modify the output wide-character object. `wcrtomb(NULL, ..., ps)` is a
-reset/query and returns the one-byte length of the C-locale null character.
-
-`mbsrtowcs` and `wcsrtombs` support bounded destination conversion and null
-sizing destinations. In sizing mode the source pointer is not modified. In
-bounded mode reaching the terminator sets `*src` to null; exhausting the output
-bound leaves `*src` at the first unconverted element. An illegal source returns
-`(size_t)-1`, leaves already converted output intact, and points `*src` at the
-offending byte or wide character.
-
-The basic wide-string functions are allocation-free and independent of locale
-state. `wcscmp` guarantees the usual negative/zero/positive ordering contract
-rather than a specific magnitude.
+`mbsrtowcs` and `wcsrtombs` support sizing and bounded conversion while
+preserving source-pointer progress. Illegal input leaves already converted
+output intact and identifies the offending source position. Wide-string
+comparison/copy/length helpers remain allocation-free and locale-independent.
 
 ## Oriented wide stream I/O
 
-`<wchar.h>` exposes the C-locale wide stream baseline:
+`<wchar.h>` exposes `fwide`, wide character/line/string I/O, and `ungetwc`.
+An unoriented stream binds its wide encoding when it first becomes
+wide-oriented. In `"C"` that encoding is single-byte ASCII; under
+`"C.UTF-8"` it is UTF-8. Later process-locale changes do not mutate an already
+wide-oriented stream's encoding.
 
-- `fwide`
-- `fgetwc`, `getwc`, `getwchar`
-- `fputwc`, `putwc`, `putwchar`
-- `fgetws`, `fputws`
-- `ungetwc`
-- `fwprintf`, `wprintf`, `swprintf`
-- `vfwprintf`, `vwprintf`, `vswprintf`
+Wide I/O continues through the shared buffered `FILE` state machine rather
+than raw descriptor side paths. UTF-8 reads may consume multiple underlying
+bytes per wide character; UTF-8 writes emit canonical multibyte sequences.
+`ungetwc` pushes back the complete encoded sequence and logical positioning
+accounts for all of its bytes. Invalid or incomplete stream data reports
+`EILSEQ` and sets the stream error indicator.
 
-An unoriented stream becomes wide-oriented on its first successful wide I/O
-operation or through `fwide(stream, positive_mode)`. Byte-oriented streams reject
-wide operations with `EINVAL` and a sticky stream error; wide-oriented streams
-likewise reject byte, block, and byte-formatted I/O. Positioning and buffering
-preserve orientation. A successful `freopen` rebind resets the stream to the
-unoriented state so the rebound stream can establish a fresh orientation.
-
-Wide character and wide line/string APIs share the same private conversion and
-buffered `FILE` path rather than issuing parallel raw-descriptor I/O. In the
-current single-byte C locale each successful wide character maps through
-`mbrtowc`/`wcrtomb` to exactly one ASCII byte. Invalid input bytes or
-unrepresentable wide values report `EILSEQ` and set the stream error indicator.
-
-`fgetws` validates orientation, readability, and the update-stream write-to-read
-synchronization barrier before any transfer, including the `n == 1` boundary.
-It stores at most `n - 1` wide characters, retains an encountered newline, and
-always terminates a successful result with a wide null. EOF after at least one
-character returns the partial line; immediate EOF returns null. `n == 1`
-returns an empty wide string without advancing the logical file position.
-
-`fputws` validates wide orientation and writability even for an empty source,
-then emits source characters through the same wide write core as `fputwc`; the
-terminating wide null is not written. Non-empty output continues to inherit the
-existing buffered/update-stream write contract from `FILE`.
-
-`ungetwc` uses the existing guaranteed one-byte pushback slot. A successful
-pushback clears EOF and updates the logical position; a second pending pushback
-or an incompatible update-stream state is rejected deterministically.
+Byte-oriented streams still reject wide I/O and wide-oriented streams reject
+byte/block/byte-formatted I/O. Positioning and buffering preserve orientation;
+successful `freopen` resets the rebound stream to unoriented state so it can
+bind a fresh encoding.
 
 ## Wide formatted output baseline
 
-Wide formatted output deliberately reuses the existing narrow formatter parser,
-integer/floating conversion engine, public `va_list` ABI, and FILE/memory sink
-contracts instead of maintaining a second format grammar. A wide format string
-is first validated and mapped through the C-locale ASCII encoding, rendered by
-the proven formatter, then converted back through the wide-character layer for
-a wide-oriented FILE or `wchar_t` memory destination.
+Wide formatted output reuses the existing formatter parser, integer/floating
+conversion engine, public `va_list` ABI, and FILE/memory sink contracts. It
+does not maintain a second format grammar.
 
-`fwprintf`/`vfwprintf` require a writable wide-oriented stream. An unoriented
-stream becomes wide-oriented; a byte-oriented stream is rejected with `EINVAL`
-and a sticky stream error. Successful bytes are emitted through the same
-buffered `FILE` core as `fputwc` after C-locale conversion, so positioning,
-line/full buffering, flush, update-stream synchronization, and close/exit
-lifecycle remain shared.
+The formatter now carries explicit encoding and narrow-vs-wide-family semantics.
+Narrow `printf`/`fprintf`/`snprintf` use the active `LC_CTYPE` encoding
+for `%lc` and `%ls`. In C.UTF-8 those conversions emit canonical UTF-8;
+narrow `%ls` precision remains a byte bound and never splits a multibyte
+character.
 
-`wprintf`/`vwprintf` are the stdout counterparts. `swprintf`/`vswprintf` render
-to a bounded wide destination. On success they return the number of generated
-wide characters excluding the terminator and preserve the caller's `errno`.
-When the result does not fit, this baseline stores a deterministic terminated
-prefix when space permits, returns `EOF`, and reports `ERANGE`; a zero-sized
-destination likewise returns `EOF`/`ERANGE` without dereferencing a null buffer.
+Wide `fwprintf`/`vfwprintf` encode the wide format through the stream's
+orientation-time encoding, render through the same formatter, then validate and
+count the rendered multibyte text as wide characters before writing the exact
+encoded bytes. This keeps a C.UTF-8-oriented stream UTF-8 even if the process
+locale later returns to `"C"`.
 
-The baseline inherits the already executable formatter conversions for integer,
-floating, narrow `%s`, narrow `%c`, wide `%ls`, wide `%lc`, `%%`, flags, field
-width, precision, ordinary variadics, and public `va_list`. `%ls` and `%lc` are
-implemented in the shared formatter itself rather than as wide-wrapper casts, so
-they are available consistently to narrow `printf`/`snprintf` and wide
-`fwprintf`/`swprintf` callers. In the current single-byte C locale each emitted
-wide argument character must be representable as one ASCII byte; an
-unrepresentable wide value reports `EILSEQ`. `%ls` precision therefore bounds
-emitted bytes and never inspects a later wide element past that bound. A
-non-ASCII wide format character is rejected for the same C-locale reason.
+`swprintf`/`vswprintf` use the current `LC_CTYPE` mode and decode the
+shared formatter result back into `wchar_t`. Wide-family field widths and
+string precisions count wide characters, while the corresponding narrow-family
+`%ls` precision continues to count emitted bytes. Non-ASCII wide format
+literals, `%lc`, `%ls`, and multibyte `%s` are therefore executable in
+C.UTF-8. The C-locale behavior remains strict: unrepresentable wide values or
+invalid multibyte strings report `EILSEQ`.
+
+Wide-memory truncation retains the existing deterministic mini-libc contract:
+a terminated prefix is stored when space permits, the call returns `EOF`, and
+`ERANGE` is reported. Successful calls return the number of generated wide
+characters, not the number of underlying UTF-8 bytes.
 
 ## Wide formatted input baseline
 
@@ -211,9 +153,10 @@ wide-string core.
 wide character and line/string I/O, bounded/newline `fgetws`, `ungetwc`, EOF and
 `EILSEQ` propagation, positioning, `freopen` orientation reset, stdin/stdout
 wide paths, ordinary and `v*` wide formatted FILE/stdout output, bounded
-`swprintf`/`vswprintf`, truncation, invalid C-locale format/data, integer and
-floating formatter reuse, direct narrow `%ls`/`%lc`, wide-memory width/precision,
-genuine wide-argument FILE round trips, and wide formatted input through
+`swprintf`/`vswprintf`, truncation, C-locale rejection, C.UTF-8 non-ASCII wide
+format literals, byte-bounded narrow `%ls`, wide-character-bounded `%s`/`%ls`,
+stream-bound encoding across later locale changes, integer/floating formatter
+reuse, genuine wide-argument FILE round trips, and wide formatted input through
 `fwscanf`/`vfwscanf`, `wscanf`/`vwscanf`, and `swscanf`/`vswscanf`. The scan
 coverage mixes integer, floating, narrow/wide string and character destinations,
 scansets, FILE/stdin/wide-memory sources, orientation checks, and `EILSEQ` in the
@@ -239,20 +182,20 @@ freestanding probes cover the public behavior.
 
 ## Phase boundary and next frontier
 
-This remains a C-locale text runtime, not a Unicode or internationalization
-claim. It does not implement UTF-8 decoding/encoding, stateful multibyte
-encodings, locale databases, per-thread locales, collation, locale-aware ctype,
-or non-C numeric/monetary formatting.
+The C.UTF-8 conversion runtime and formatted-output integration are now one
+executable baseline: restartable conversion, orientation-bound stream encoding,
+narrow `%lc`/`%ls`, wide format literals, wide `%s`/`%lc`/`%ls`, FILE
+output, bounded wide memory, ordinary variadics, and public `va_list` all reuse
+the established formatter and buffered FILE machinery.
 
-Wide formatted output transport, genuine `%lc`/`%ls` argument conversion, and
-wide formatted input are now executable across FILE, stdin/stdout, bounded wide
-memory, ordinary variadics, and public `va_list` while sharing the existing
-formatter/scanner engines. This closes the current C-locale wide formatted-I/O
-parity milestone without introducing a parallel parser or descriptor path.
+This remains a deliberately bounded internationalization model. There is no
+locale database, collation, Unicode character-property/case mapping,
+per-thread locale object, stateful multibyte encoding, or locale-sensitive
+numeric/monetary formatting beyond the C conventions.
 
-The next text-runtime promotion should therefore move above wrapper parity:
-either broaden the encoding/locale model beyond the one-byte C locale, or extend
-a different stdio subsystem whose current live roadmap has higher architectural
-priority. UTF-8, broader locale data, collation, locale-aware ctype, and
-per-thread locale state remain separate encoding/internationalization
-milestones and must not be implied by this C-locale baseline.
+The next coherent text-runtime frontier is **C.UTF-8 formatted input
+integration**. Wide input still uses the proven shared scanner, but its wide
+format adapter retains the older ASCII-format boundary. A follow-on should make
+non-ASCII wide literal directives and multibyte/wide string conversions obey
+the selected or stream-bound encoding without creating a second scanner, and
+must preserve matching-vs-input-failure and one-lookahead rollback semantics.
