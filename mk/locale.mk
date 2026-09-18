@@ -32,7 +32,8 @@ $(BUILD)/stdio_scan_test: $(BUILD)/wide_stdio.o $(BUILD)/wchar.o
 
 $(BUILD)/wide_format.o: src/wchar/wide_format.c include/wchar.h include/stdio.h \
                         include/stdarg.h include/stdlib.h include/errno.h \
-                        src/stdio/stdio_internal.h | $(BUILD)
+                        src/stdio/format_internal.h src/stdio/stdio_internal.h \
+                        src/locale/locale_internal.h src/wchar/wchar_internal.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wide_scan.o: src/wchar/wide_scan.c include/wchar.h include/stdio.h \
