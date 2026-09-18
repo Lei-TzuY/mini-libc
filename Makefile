@@ -119,7 +119,10 @@ $(BUILD)/getenv.o: src/stdlib/getenv.c include/stdlib.h include/stddef.h | $(BUI
 $(BUILD)/stdio.o: src/stdio/stdio.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/format.o: src/stdio/format.c src/stdio/stdio_internal.h include/stdio.h include/stddef.h include/errno.h | $(BUILD)
+$(BUILD)/format.o: src/stdio/format.c src/stdio/format_internal.h \
+                   src/stdio/stdio_internal.h src/locale/locale_internal.h \
+                   src/wchar/wchar_internal.h include/stdio.h include/stdarg.h \
+                   include/stddef.h include/wchar.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/format_entry.o: src/stdio/format_entry.S | $(BUILD)
