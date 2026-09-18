@@ -414,8 +414,8 @@ int fclose(FILE *stream)
         stream->write_length = 0;
         stream->read_offset = 0;
         stream->read_length = 0;
-        stream->pushback_valid = 0U;
-        stream->pushback_byte = 0U;
+        stream->pushback_offset = 0U;
+        stream->pushback_length = 0U;
     }
 
     if (first_error != 0) {
