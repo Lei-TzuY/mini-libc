@@ -880,38 +880,24 @@ static int scan_characters(struct mini_scan_source *source,
 static int decode_scanset_codepoint(const char **cursor, const char *end,
                                     int utf8, int *value)
 {
-    const char *p = *cursor;
-    mbstate_t state = {0U, 0U};
-    wchar_t wc = 0;
-    size_t used = 0U;
+    const char *decoded;
 
-    if (p >= end) {
+    if (*cursor >= end) {
         return 0;
     }
     if (!utf8) {
-        *value = (int)(unsigned char)*p;
-        *cursor = p + 1;
+        *value = (int)(unsigned char)**cursor;
+        ++*cursor;
         return 1;
     }
 
-    while (p + used < end && used < 4U) {
-        char byte = p[used];
-        size_t converted = __mini_mbrtowc_mode(&wc, &byte, 1U, &state, 1);
-
-        ++used;
-        if (converted == (size_t)-1) {
-            errno = EILSEQ;
-            return -1;
-        }
-        if (converted != (size_t)-2) {
-            *value = (int)wc;
-            *cursor = p + used;
-            return 1;
-        }
+    decoded = *cursor;
+    if (!decode_format_literal(&decoded, 1, value) || decoded > end) {
+        errno = EILSEQ;
+        return -1;
     }
-
-    errno = EILSEQ;
-    return -1;
+    *cursor = decoded;
+    return 1;
 }
 
 static int scanset_contains_bytes(const struct mini_scan_spec *spec, int c)
