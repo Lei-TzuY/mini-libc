@@ -3,6 +3,7 @@
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <wchar.h>
+#include <wctype.h>
 
 int main(int argc, char **argv, char **envp)
 {
@@ -146,6 +147,22 @@ int main(int argc, char **argv, char **envp)
         return 18;
     }
 
+    {
+        wctype_t alpha = wctype("alpha");
+        wctrans_t lower = wctrans("tolower");
+
+        if (!iswalpha((wint_t)'A') || !iswdigit((wint_t)'7') ||
+            !iswspace((wint_t)'\n') || !iswpunct((wint_t)'!') ||
+            towlower((wint_t)'Q') != (wint_t)'q' ||
+            towupper((wint_t)'q') != (wint_t)'Q' ||
+            alpha == 0UL || !iswctype((wint_t)'Z', alpha) ||
+            lower == 0UL || towctrans((wint_t)'R', lower) != (wint_t)'r' ||
+            wctype("not-a-class") != 0UL || wctrans("not-a-map") != 0UL ||
+            iswalpha((wint_t)0x03b1) || iswprint((wint_t)0x20ac)) {
+            return 36;
+        }
+    }
+
     if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
         return 19;
     }
@@ -233,6 +250,25 @@ int main(int argc, char **argv, char **envp)
             if ((unsigned char)bytes[i] != (unsigned char)utf8_text[i]) {
                 return 33;
             }
+        }
+    }
+
+    {
+        wctype_t alpha = wctype("alpha");
+        wctrans_t upper = wctrans("toupper");
+
+        if (!iswalpha((wint_t)0x00e9) || !iswalpha((wint_t)0x03b1) ||
+            !iswalpha((wint_t)0x0416) || !iswalpha((wint_t)0x4e2d) ||
+            !iswupper((wint_t)0x03a3) || !iswlower((wint_t)0x03c2) ||
+            towupper((wint_t)0x03c2) != (wint_t)0x03a3 ||
+            towlower((wint_t)0x0416) != (wint_t)0x0436 ||
+            !iswspace((wint_t)0x3000) || !iswblank((wint_t)0x00a0) ||
+            !iswprint((wint_t)0x1f600) || !iswgraph((wint_t)0x1f600) ||
+            !iswpunct((wint_t)0x20ac) || alpha == 0UL ||
+            !iswctype((wint_t)0x4e2d, alpha) || upper == 0UL ||
+            towctrans((wint_t)0x03c2, upper) != (wint_t)0x03a3 ||
+            iswalpha(WEOF) || iswprint(WEOF)) {
+            return 37;
         }
     }
 
