@@ -3,6 +3,7 @@
 #include <mini/syscall.h>
 #include <stddef.h>
 #include <wchar.h>
+#include <wctype.h>
 
 int main(int argc, char **argv, char **envp)
 {
@@ -240,8 +241,48 @@ int main(int argc, char **argv, char **envp)
         return 34;
     }
 
+    {
+        wctype_t alpha = wctype("alpha");
+        wctype_t digit = wctype("digit");
+        wctrans_t lower = wctrans("tolower");
+        wctrans_t upper = wctrans("toupper");
+
+        if (!iswalpha((wint_t)'A') || !iswalnum((wint_t)'7') ||
+            !iswblank((wint_t)'\t') || !iswcntrl((wint_t)'\n') ||
+            !iswdigit((wint_t)'9') || !iswgraph((wint_t)'!') ||
+            !iswlower((wint_t)'q') || !iswprint((wint_t)' ') ||
+            !iswpunct((wint_t)'!') || !iswspace((wint_t)'\r') ||
+            !iswupper((wint_t)'Q') || !iswxdigit((wint_t)'f') ||
+            towlower((wint_t)'Q') != (wint_t)'q' ||
+            towupper((wint_t)'q') != (wint_t)'Q') {
+            return 35;
+        }
+        if (alpha == (wctype_t)0 || digit == (wctype_t)0 ||
+            lower == (wctrans_t)0 || upper == (wctrans_t)0 ||
+            !iswctype((wint_t)'Z', alpha) ||
+            !iswctype((wint_t)'4', digit) ||
+            towctrans((wint_t)'Z', lower) != (wint_t)'z' ||
+            towctrans((wint_t)'z', upper) != (wint_t)'Z' ||
+            wctype("unknown") != (wctype_t)0 ||
+            wctrans("unknown") != (wctrans_t)0) {
+            return 36;
+        }
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return 37;
+    }
+    if (iswalpha((wint_t)0x03b1U) || iswprint((wint_t)0x20acU) ||
+        towlower((wint_t)0x03b1U) != (wint_t)0x03b1U ||
+        towupper((wint_t)0x03b1U) != (wint_t)0x03b1U) {
+        return 38;
+    }
+    if (setlocale(LC_CTYPE, "C") == (char *)0) {
+        return 39;
+    }
+
     if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
-        return 35;
+        return 40;
     }
     return 0;
 }

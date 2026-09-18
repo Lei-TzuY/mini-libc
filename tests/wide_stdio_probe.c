@@ -668,6 +668,75 @@ int main(void)
         return fail((FILE *)0, 79);
     }
 
+    {
+        static const wchar_t greek_input[] = {
+            (wchar_t)0x03b2, (wchar_t)0x03b3, (wchar_t)0x03b4, 'Q', 0
+        };
+        static const wchar_t greek_format[] = {
+            '%', '3', 'l', '[', (wchar_t)0x03b1, '-', (wchar_t)0x03b3, ']',
+            '%', 'l', 'c', 0
+        };
+        static const wchar_t negated_input[] = {
+            (wchar_t)0x1f600, (wchar_t)0x4e2d, 'Z', 0
+        };
+        static const wchar_t negated_format[] = {
+            '%', '2', 'l', '[', '^', (wchar_t)0x4e2d, ']', '%', 'l', 'c', 0
+        };
+        static const wchar_t suppress_input[] = {
+            (wchar_t)0x03b1, (wchar_t)0x03b2, (wchar_t)0x03b3, '!', 0
+        };
+        static const wchar_t suppress_format[] = {
+            '%', '*', '2', 'l', '[', (wchar_t)0x03b1, '-',
+            (wchar_t)0x03b3, ']', '%', 'l', 'c', 0
+        };
+        static const wchar_t rollback_input[] = {
+            (wchar_t)0x03b4, 'Q', 0
+        };
+        wchar_t codepoints[8] = {0};
+        wchar_t next = 0;
+
+        if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+            return fail((FILE *)0, 80);
+        }
+        if (swscanf(greek_input, greek_format, codepoints, &next) != 2 ||
+            codepoints[0] != (wchar_t)0x03b2 ||
+            codepoints[1] != (wchar_t)0x03b3 || codepoints[2] != 0 ||
+            next != (wchar_t)0x03b4) {
+            return fail((FILE *)0, 81);
+        }
+
+        codepoints[0] = 0;
+        next = 0;
+        if (swscanf(negated_input, negated_format, codepoints, &next) != 2 ||
+            codepoints[0] != (wchar_t)0x1f600 || codepoints[1] != 0 ||
+            next != (wchar_t)0x4e2d) {
+            return fail((FILE *)0, 82);
+        }
+
+        next = 0;
+        if (swscanf(suppress_input, suppress_format, &next) != 1 ||
+            next != (wchar_t)0x03b3) {
+            return fail((FILE *)0, 83);
+        }
+
+        stream = tmpfile();
+        if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+            fputws(rollback_input, stream) < 0 ||
+            setlocale(LC_CTYPE, "C") == (char *)0) {
+            return fail(stream, 84);
+        }
+        rewind(stream);
+        codepoints[0] = (wchar_t)'?';
+        if (fwscanf(stream, (const wchar_t[]){
+                '%', 'l', '[', (wchar_t)0x03b1, '-', (wchar_t)0x03b3, ']', 0
+            }, codepoints) != 0 ||
+            codepoints[0] != (wchar_t)'?' ||
+            fgetwc(stream) != (wint_t)0x03b4 ||
+            fgetwc(stream) != (wint_t)'Q' || fclose(stream) != 0) {
+            return fail((FILE *)0, 85);
+        }
+    }
+
     (void)remove(path);
     if (mini_sys_write(1, marker, sizeof(marker) - 1U) !=
         (long)(sizeof(marker) - 1U)) {
