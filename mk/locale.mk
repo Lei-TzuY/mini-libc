@@ -28,6 +28,8 @@ $(BUILD)/wide_stdio.o: src/wchar/wide_stdio.c include/wchar.h include/stdio.h \
                        include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/stdio_scan_test: $(BUILD)/wide_stdio.o $(BUILD)/wchar.o
+
 $(BUILD)/wide_format.o: src/wchar/wide_format.c include/wchar.h include/stdio.h \
                         include/stdarg.h include/stdlib.h include/errno.h \
                         src/stdio/stdio_internal.h | $(BUILD)
