@@ -119,6 +119,24 @@ int main(void)
     static const wchar_t utf8_narrow_expected[] = {
         '[', (wchar_t)0x00a2, ']', 0
     };
+    static const wchar_t utf8_scan_input[] = {
+        (wchar_t)0x4e2d, ':', (wchar_t)0x00a2, (wchar_t)0x20ac, ' ',
+        (wchar_t)0x1f600, ' ', (wchar_t)0x00a2, (wchar_t)0x20ac, 0
+    };
+    static const wchar_t utf8_scan_format[] = {
+        (wchar_t)0x4e2d, ':', '%', '2', 's', ' ', '%', 'l', 'c', ' ',
+        '%', '2', 'l', 's', 0
+    };
+    static const wchar_t utf8_scan_file_format[] = {
+        (wchar_t)0x4e2d, ':', '%', '2', 's', ' ', '%', 'l', 'c', 0
+    };
+    static const char utf8_scan_bytes[] = {
+        (char)0xc2, (char)0xa2, (char)0xe2, (char)0x82, (char)0xac, 0
+    };
+    static const char utf8_scan_narrow_input[] = {
+        (char)0xc2, (char)0xa2, (char)0xe2, (char)0x82, (char)0xac, ' ',
+        (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 0
+    };
     static const wchar_t scan_memory[] = {'4', '2', ' ', 'O', 'K', ' ', '2', '.', '5', ' ', 'W', 'X', 0};
     static const wchar_t scan_memory_v[] = {'0', 'x', '2', 'a', ' ', 'A', 'B', 'C', ' ', 'Q', 0};
     static const wchar_t scan_file_first[] = {'1', '7', ' ', 'W', 'X', ' ', '3', '.', '5', ' ', 'Q', '\n', 0};
@@ -401,6 +419,10 @@ int main(void)
         errno != EILSEQ) {
         return fail((FILE *)0, 47);
     }
+    errno = ERANGE;
+    if (swscanf(invalid_wide + 1, L"%*1s") != 0 || errno != ERANGE) {
+        return fail((FILE *)0, 73);
+    }
 
     stream = tmpfile();
     if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
@@ -585,6 +607,65 @@ int main(void)
     if (snprintf(narrow, sizeof(narrow), "%ls", utf8_wide_text) != EOF ||
         errno != EILSEQ) {
         return fail((FILE *)0, 70);
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return fail((FILE *)0, 74);
+    }
+    scan_narrow[0] = '\0';
+    scan_char = 0;
+    scan_wide[0] = 0;
+    errno = ERANGE;
+    if (call_vswscanf(utf8_scan_input, utf8_scan_format, scan_narrow,
+                      &scan_char, scan_wide) != 3 ||
+        (unsigned char)scan_narrow[0] != 0xc2U ||
+        (unsigned char)scan_narrow[1] != 0xa2U ||
+        (unsigned char)scan_narrow[2] != 0xe2U ||
+        (unsigned char)scan_narrow[3] != 0x82U ||
+        (unsigned char)scan_narrow[4] != 0xacU ||
+        scan_narrow[5] != '\0' || scan_char != (wchar_t)0x1f600 ||
+        scan_wide[0] != (wchar_t)0x00a2 ||
+        scan_wide[1] != (wchar_t)0x20ac || scan_wide[2] != 0 ||
+        errno != ERANGE) {
+        return fail((FILE *)0, 75);
+    }
+
+    scan_wide[0] = 0;
+    scan_char = 0;
+    if (sscanf(utf8_scan_narrow_input, "%2ls %lc", scan_wide,
+               &scan_char) != 2 ||
+        scan_wide[0] != (wchar_t)0x00a2 ||
+        scan_wide[1] != (wchar_t)0x20ac || scan_wide[2] != 0 ||
+        scan_char != (wchar_t)0x1f600) {
+        return fail((FILE *)0, 76);
+    }
+    errno = 0;
+    if (sscanf(invalid_utf8_text, "%ls", scan_wide) != EOF ||
+        errno != EILSEQ) {
+        return fail((FILE *)0, 77);
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fputws((const wchar_t[]){
+            (wchar_t)0x4e2d, ':', (wchar_t)0x00a2, (wchar_t)0x20ac, ' ',
+            (wchar_t)0x1f600, 0
+        }, stream) < 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0) {
+        return fail(stream, 78);
+    }
+    rewind(stream);
+    scan_narrow[0] = '\0';
+    scan_char = 0;
+    if (fwscanf(stream, utf8_scan_file_format, scan_narrow, &scan_char) != 2 ||
+        (unsigned char)scan_narrow[0] != (unsigned char)utf8_scan_bytes[0] ||
+        (unsigned char)scan_narrow[1] != (unsigned char)utf8_scan_bytes[1] ||
+        (unsigned char)scan_narrow[2] != (unsigned char)utf8_scan_bytes[2] ||
+        (unsigned char)scan_narrow[3] != (unsigned char)utf8_scan_bytes[3] ||
+        (unsigned char)scan_narrow[4] != (unsigned char)utf8_scan_bytes[4] ||
+        scan_narrow[5] != '\0' || scan_char != (wchar_t)0x1f600 ||
+        fwide(stream, 0) <= 0 || fclose(stream) != 0) {
+        return fail((FILE *)0, 79);
     }
 
     (void)remove(path);

@@ -128,7 +128,9 @@ $(BUILD)/format.o: src/stdio/format.c src/stdio/format_internal.h \
 $(BUILD)/format_entry.o: src/stdio/format_entry.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
-$(BUILD)/scan.o: src/stdio/scan.c src/stdio/stdio_internal.h src/internal/float_parse.h include/stdio.h include/errno.h | $(BUILD)
+$(BUILD)/scan.o: src/stdio/scan.c src/stdio/stdio_internal.h src/internal/float_parse.h \
+                 src/locale/locale_internal.h src/wchar/wchar_internal.h \
+                 src/wchar/wide_internal.h include/stdio.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/float_parse.o: src/internal/float_parse.c src/internal/float_parse.h include/errno.h | $(BUILD)

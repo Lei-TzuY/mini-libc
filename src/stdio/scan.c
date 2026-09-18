@@ -3,6 +3,8 @@
 #include <wchar.h>
 
 #include "../internal/float_parse.h"
+#include "../locale/locale_internal.h"
+#include "../wchar/wchar_internal.h"
 #include "../wchar/wide_internal.h"
 #include "stdio_internal.h"
 
@@ -61,6 +63,7 @@ struct mini_scan_source {
     const unsigned char *string_cursor;
     const wchar_t *wide_begin;
     const wchar_t *wide_cursor;
+    int utf8;
 };
 
 static int invalid_stream(FILE *stream)
@@ -203,6 +206,45 @@ static int float_source_get(void *context)
 static int float_source_unget(int c, void *context)
 {
     return source_unget(c, (struct mini_scan_source *)context);
+}
+
+static int decode_format_literal(const char **cursor, int utf8, int *value)
+{
+    mbstate_t state = {0U, 0U};
+    wchar_t wc = 0;
+    size_t used = 0U;
+
+    if (cursor == (const char **)0 || *cursor == (const char *)0 ||
+        value == (int *)0) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    for (;;) {
+        char byte = (*cursor)[used];
+        size_t converted;
+
+        if (byte == '\0') {
+            errno = EILSEQ;
+            return 0;
+        }
+
+        converted = __mini_mbrtowc_mode(&wc, &byte, 1U, &state, utf8);
+        ++used;
+        if (converted == (size_t)-1) {
+            errno = EILSEQ;
+            return 0;
+        }
+        if (converted != (size_t)-2) {
+            *cursor += used;
+            *value = (int)wc;
+            return 1;
+        }
+        if (used == 4U) {
+            errno = EILSEQ;
+            return 0;
+        }
+    }
 }
 
 static int skip_input_space(struct mini_scan_source *source)
@@ -657,46 +699,89 @@ static int scan_floating(struct mini_scan_source *source,
     return MINI_SCAN_SUCCESS;
 }
 
+static int read_wide_character(struct mini_scan_source *source, int first,
+                               mbstate_t *state, wchar_t *wide_out)
+{
+    int c = first;
+
+    if (source_is_wide(source)) {
+        *wide_out = (wchar_t)c;
+        return 1;
+    }
+
+    for (;;) {
+        char byte = (char)(unsigned char)c;
+        size_t converted = __mini_mbrtowc_mode(wide_out, &byte, 1U, state,
+                                               source->utf8);
+
+        if (converted == (size_t)-1) {
+            errno = EILSEQ;
+            return 0;
+        }
+        if (converted != (size_t)-2) {
+            return 1;
+        }
+
+        c = source_get(source);
+        if (c == EOF) {
+            errno = EILSEQ;
+            return 0;
+        }
+    }
+}
+
 static int store_character(struct mini_scan_source *source,
                            enum mini_scan_length length, void *destination,
-                           unsigned int index, int c, mbstate_t *state)
+                           size_t *destination_index, int c,
+                           mbstate_t *state)
 {
-    if (length == MINI_SCAN_LEN_L) {
-        wchar_t wc;
+    if (destination == (void *)0) {
+        if (length == MINI_SCAN_LEN_L && !source_is_wide(source)) {
+            wchar_t ignored;
 
-        if (source_is_wide(source)) {
-            wc = (wchar_t)c;
-        } else {
-            char byte = (char)(unsigned char)c;
-            size_t converted = mbrtowc(&wc, &byte, 1U, state);
-
-            if (converted == (size_t)-1 || converted == (size_t)-2) {
-                errno = EILSEQ;
+            if (!read_wide_character(source, c, state, &ignored)) {
                 return 0;
             }
         }
-        ((wchar_t *)destination)[index] = wc;
+        return 1;
+    }
+
+    if (length == MINI_SCAN_LEN_L) {
+        wchar_t wc;
+
+        if (!read_wide_character(source, c, state, &wc)) {
+            return 0;
+        }
+        ((wchar_t *)destination)[*destination_index] = wc;
+        ++*destination_index;
         return 1;
     }
 
     if (source_is_wide(source)) {
-        char byte;
-        size_t converted = wcrtomb(&byte, (wchar_t)c, state);
+        char bytes[4];
+        size_t converted = __mini_wcrtomb_mode(bytes, (wchar_t)c, state,
+                                               source->utf8);
+        size_t i;
 
-        if (converted == (size_t)-1 || converted != 1U) {
+        if (converted == (size_t)-1) {
             errno = EILSEQ;
             return 0;
         }
-        ((char *)destination)[index] = byte;
+        for (i = 0U; i < converted; ++i) {
+            ((char *)destination)[*destination_index + i] = bytes[i];
+        }
+        *destination_index += converted;
     } else {
-        ((char *)destination)[index] = (char)(unsigned char)c;
+        ((char *)destination)[*destination_index] =
+            (char)(unsigned char)c;
+        ++*destination_index;
     }
     return 1;
 }
 
 static void terminate_character_sequence(enum mini_scan_length length,
                                          void *destination,
-                                         unsigned int count)
+                                         size_t count)
 {
     if (length == MINI_SCAN_LEN_L) {
         ((wchar_t *)destination)[count] = 0;
@@ -712,7 +797,7 @@ static int scan_string(struct mini_scan_source *source,
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
     void *destination = (void *)0;
     mbstate_t state = {0U, 0U};
-    unsigned int count = 0;
+    size_t destination_count = 0U;
     int c;
 
     if (skip_input_space(source) < 0) {
@@ -735,12 +820,10 @@ static int scan_string(struct mini_scan_source *source,
     }
 
     for (;;) {
-        if (!spec->suppress &&
-            !store_character(source, spec->length, destination, count, c,
-                             &state)) {
+        if (!store_character(source, spec->length, destination,
+                             &destination_count, c, &state)) {
             return MINI_SCAN_INPUT_FAIL;
         }
-        ++count;
         --remaining;
         if (remaining == 0U) {
             break;
@@ -759,7 +842,8 @@ static int scan_string(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        terminate_character_sequence(spec->length, destination, count);
+        terminate_character_sequence(spec->length, destination,
+                                     destination_count);
     }
     return MINI_SCAN_SUCCESS;
 }
@@ -771,21 +855,21 @@ static int scan_characters(struct mini_scan_source *source,
     unsigned int width = spec->width_set ? spec->width : 1U;
     void *destination = (void *)0;
     mbstate_t state = {0U, 0U};
+    size_t destination_count = 0U;
     unsigned int count;
 
     if (!spec->suppress) {
         destination = (void *)next_word(args);
     }
 
-    for (count = 0; count < width; ++count) {
+    for (count = 0U; count < width; ++count) {
         int c = source_get(source);
 
         if (c == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
-        if (!spec->suppress &&
-            !store_character(source, spec->length, destination, count, c,
-                             &state)) {
+        if (!store_character(source, spec->length, destination,
+                             &destination_count, c, &state)) {
             return MINI_SCAN_INPUT_FAIL;
         }
     }
@@ -833,7 +917,7 @@ static int scan_scanset(struct mini_scan_source *source,
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
     void *destination = (void *)0;
     mbstate_t state = {0U, 0U};
-    unsigned int count = 0;
+    size_t destination_count = 0U;
     int c = source_get(source);
 
     if (c == EOF) {
@@ -851,12 +935,10 @@ static int scan_scanset(struct mini_scan_source *source,
     }
 
     for (;;) {
-        if (!spec->suppress &&
-            !store_character(source, spec->length, destination, count, c,
-                             &state)) {
+        if (!store_character(source, spec->length, destination,
+                             &destination_count, c, &state)) {
             return MINI_SCAN_INPUT_FAIL;
         }
-        ++count;
         --remaining;
         if (remaining == 0U) {
             break;
@@ -875,7 +957,8 @@ static int scan_scanset(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        terminate_character_sequence(spec->length, destination, count);
+        terminate_character_sequence(spec->length, destination,
+                                     destination_count);
     }
     return MINI_SCAN_SUCCESS;
 }
@@ -924,11 +1007,21 @@ static int scan_dispatch(struct mini_scan_source *source, const char *format,
         }
 
         if (*cursor != '%') {
-            status = match_literal(source, (unsigned char)*cursor);
+            int expected;
+
+            if (source_is_wide(source)) {
+                if (!decode_format_literal(&cursor, source->utf8, &expected)) {
+                    return EOF;
+                }
+            } else {
+                expected = (unsigned char)*cursor;
+                ++cursor;
+            }
+
+            status = match_literal(source, expected);
             if (status != MINI_SCAN_SUCCESS) {
                 return handle_status(status, assignments);
             }
-            ++cursor;
             continue;
         }
 
@@ -992,6 +1085,7 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
     source.string_cursor = (const unsigned char *)0;
     source.wide_begin = (const wchar_t *)0;
     source.wide_cursor = (const wchar_t *)0;
+    source.utf8 = __mini_locale_is_utf8();
     return scan_dispatch(&source, format, args);
 }
 
@@ -1011,6 +1105,7 @@ int __mini_sscan_dispatch(const char *input, const char *format,
     source.string_cursor = (const unsigned char *)input;
     source.wide_begin = (const wchar_t *)0;
     source.wide_cursor = (const wchar_t *)0;
+    source.utf8 = __mini_locale_is_utf8();
     return scan_dispatch(&source, format, args);
 }
 
@@ -1032,6 +1127,7 @@ int __mini_wscan_dispatch_unlocked(FILE *stream, const char *format,
     source.string_cursor = (const unsigned char *)0;
     source.wide_begin = (const wchar_t *)0;
     source.wide_cursor = (const wchar_t *)0;
+    source.utf8 = (stream->state & MINI_FILE_WIDE_UTF8) != 0U;
     return scan_dispatch(&source, format, args);
 }
 
@@ -1051,5 +1147,6 @@ int __mini_wsscan_dispatch(const wchar_t *input, const char *format,
     source.string_cursor = (const unsigned char *)0;
     source.wide_begin = input;
     source.wide_cursor = input;
+    source.utf8 = __mini_locale_is_utf8();
     return scan_dispatch(&source, format, args);
 }
