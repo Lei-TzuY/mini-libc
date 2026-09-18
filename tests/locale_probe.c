@@ -39,10 +39,18 @@ int main(int argc, char **argv, char **envp)
 {
     static const char ok[] = "locale-ok\n";
     static const char invalid_mb[] = {'A', (char)0x80, '\0'};
-    wchar_t wide[8] = {9, 9, 9, 9, 9, 9, 9, 9};
+    static const char euro_utf8[] = {(char)0xe2, (char)0x82, (char)0xac, '\0'};
+    static const char utf8_text[] = {
+        'A', (char)0xe2, (char)0x82, (char)0xac,
+        (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 'B', '\0'
+    };
+    static const char overlong[] = {(char)0xc0, (char)0x80, '\0'};
+    static const wchar_t utf8_wide[] = {'A', (wchar_t)0x20ac,
+                                        (wchar_t)0x1f600, 'B', 0};
+    wchar_t wide[16] = {9, 9, 9, 9, 9, 9, 9, 9};
     wchar_t invalid_wide[] = {'A', 0x80, 0};
     wchar_t wc = 999;
-    char bytes[8] = {'?', '?', '?', '?', '?', '?', '?', '?'};
+    char bytes[16] = {'?', '?', '?', '?', '?', '?', '?', '?'};
 
     (void)argc;
     (void)argv;
@@ -130,8 +138,58 @@ int main(int argc, char **argv, char **envp)
         return 13;
     }
 
-    if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
+    errno = EIO;
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 ||
+        !same_string(setlocale(LC_CTYPE, (const char *)0), "C.UTF-8") ||
+        MB_CUR_MAX != 4 || setlocale(LC_NUMERIC, "C.UTF-8") != (char *)0 ||
+        errno != EIO) {
         return 14;
+    }
+    if (!same_string(setlocale(LC_CTYPE, "C.utf8"), "C.UTF-8") ||
+        MB_CUR_MAX != 4) {
+        return 15;
+    }
+
+    errno = EIO;
+    wc = 999;
+    if (mbtowc(&wc, euro_utf8, 3U) != 3 || wc != (wchar_t)0x20ac ||
+        errno != EIO || wctomb(bytes, (wchar_t)0x20ac) != 3 ||
+        (unsigned char)bytes[0] != 0xe2U ||
+        (unsigned char)bytes[1] != 0x82U ||
+        (unsigned char)bytes[2] != 0xacU || errno != EIO) {
+        return 16;
+    }
+
+    if (mbstowcs((wchar_t *)0, utf8_text, 0U) != 4U ||
+        mbstowcs(wide, utf8_text, 16U) != 4U ||
+        wide[0] != utf8_wide[0] || wide[1] != utf8_wide[1] ||
+        wide[2] != utf8_wide[2] || wide[3] != utf8_wide[3] ||
+        wide[4] != 0 || wcstombs((char *)0, utf8_wide, 0U) != 9U ||
+        wcstombs(bytes, utf8_wide, sizeof(bytes)) != 9U ||
+        bytes[9] != '\0' || errno != EIO) {
+        return 17;
+    }
+    {
+        size_t i;
+        for (i = 0U; i < 10U; ++i) {
+            if ((unsigned char)bytes[i] != (unsigned char)utf8_text[i]) {
+                return 18;
+            }
+        }
+    }
+
+    if (mblen(overlong, 2U) != -1 || errno != EILSEQ) {
+        return 19;
+    }
+
+    errno = EIO;
+    if (!same_string(setlocale(LC_ALL, "C"), "C") || MB_CUR_MAX != 1 ||
+        wctomb(bytes, (wchar_t)0x20ac) != -1 || errno != EILSEQ) {
+        return 20;
+    }
+
+    if (mini_sys_write(1, ok, sizeof(ok) - 1U) != (long)(sizeof(ok) - 1U)) {
+        return 21;
     }
     return 0;
 }
