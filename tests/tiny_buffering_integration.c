@@ -338,32 +338,42 @@ int main(int argc, char **argv)
 
     utf8_scan_wide[0] = 0;
     utf8_scan_char = 0;
+    errno = 0;
     utf8_scanset_result = tiny_vswscanf(utf8_scanset_input,
                                          utf8_scanset_format,
                                          utf8_scan_wide, &utf8_scan_char);
     if (utf8_scanset_result == EOF) {
-        return 28;
-    }
-    if (utf8_scanset_result == 0) {
-        return 29;
-    }
-    if (utf8_scanset_result == 1) {
-        return 30;
-    }
-    if (utf8_scanset_result != 2) {
+        if (errno == EILSEQ) {
+            return 28;
+        }
+        if (errno == EINVAL) {
+            return 29;
+        }
+        if (errno == ENOMEM) {
+            return 30;
+        }
         return 31;
     }
-    if (utf8_scan_wide[0] != (wchar_t)0x03b2) {
+    if (utf8_scanset_result == 0) {
         return 32;
     }
-    if (utf8_scan_wide[1] != (wchar_t)0x03b3) {
+    if (utf8_scanset_result == 1) {
         return 33;
     }
-    if (utf8_scan_wide[2] != 0) {
+    if (utf8_scanset_result != 2) {
         return 34;
     }
-    if (utf8_scan_char != (wchar_t)0x03b4) {
+    if (utf8_scan_wide[0] != (wchar_t)0x03b2) {
         return 35;
+    }
+    if (utf8_scan_wide[1] != (wchar_t)0x03b3) {
+        return 36;
+    }
+    if (utf8_scan_wide[2] != 0) {
+        return 37;
+    }
+    if (utf8_scan_char != (wchar_t)0x03b4) {
+        return 38;
     }
 
     wide_scan_value = 0;
