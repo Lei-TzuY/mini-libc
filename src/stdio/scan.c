@@ -734,15 +734,24 @@ static int store_character(struct mini_scan_source *source,
                            size_t *destination_index, int c,
                            mbstate_t *state)
 {
+    if (destination == (void *)0) {
+        if (length == MINI_SCAN_LEN_L && !source_is_wide(source)) {
+            wchar_t ignored;
+
+            if (!read_wide_character(source, c, state, &ignored)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+
     if (length == MINI_SCAN_LEN_L) {
         wchar_t wc;
 
         if (!read_wide_character(source, c, state, &wc)) {
             return 0;
         }
-        if (destination != (void *)0) {
-            ((wchar_t *)destination)[*destination_index] = wc;
-        }
+        ((wchar_t *)destination)[*destination_index] = wc;
         ++*destination_index;
         return 1;
     }
@@ -757,17 +766,13 @@ static int store_character(struct mini_scan_source *source,
             errno = EILSEQ;
             return 0;
         }
-        if (destination != (void *)0) {
-            for (i = 0U; i < converted; ++i) {
-                ((char *)destination)[*destination_index + i] = bytes[i];
-            }
+        for (i = 0U; i < converted; ++i) {
+            ((char *)destination)[*destination_index + i] = bytes[i];
         }
         *destination_index += converted;
     } else {
-        if (destination != (void *)0) {
-            ((char *)destination)[*destination_index] =
-                (char)(unsigned char)c;
-        }
+        ((char *)destination)[*destination_index] =
+            (char)(unsigned char)c;
         ++*destination_index;
     }
     return 1;
