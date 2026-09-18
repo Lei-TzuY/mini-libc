@@ -4,6 +4,7 @@
 
 #include "../internal/float_parse.h"
 #include "../locale/locale_internal.h"
+#include "../wchar/wchar_internal.h"
 #include "../wchar/wide_internal.h"
 #include "stdio_internal.h"
 
