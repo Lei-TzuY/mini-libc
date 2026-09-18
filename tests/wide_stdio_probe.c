@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <locale.h>
 #include <mini/syscall.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -431,6 +432,82 @@ int main(void)
         call_vwprintf(L":%.1f", 2.5) != 4 || fwide(stdout, 0) <= 0 ||
         fflush(stdout) != 0) {
         return fail((FILE *)0, 33);
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return fail((FILE *)0, 51);
+    }
+    stream = fopen(path, "w+");
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0) {
+        return fail(stream, 52);
+    }
+    if (setlocale(LC_CTYPE, "C") == (char *)0 ||
+        fputwc((wchar_t)0x20ac, stream) != (wint_t)0x20ac ||
+        fputws((const wchar_t[]){(wchar_t)0x1f600, '\n', 0}, stream) < 0 ||
+        ftell(stream) != 8L) {
+        return fail(stream, 53);
+    }
+    rewind(stream);
+    if (fgetwc(stream) != (wint_t)0x20ac || ftell(stream) != 3L ||
+        ungetwc((wint_t)0x20ac, stream) != (wint_t)0x20ac ||
+        ftell(stream) != 0L || fgetwc(stream) != (wint_t)0x20ac ||
+        ftell(stream) != 3L ||
+        fgetws(line, 8, stream) != line ||
+        line[0] != (wchar_t)0x1f600 || line[1] != (wchar_t)'\n' ||
+        line[2] != 0 || ftell(stream) != 8L || fclose(stream) != 0) {
+        return fail((FILE *)0, 54);
+    }
+
+    stream = fopen(path, "r");
+    if (stream == (FILE *)0 ||
+        fread(narrow, 1U, 8U, stream) != 8U ||
+        (unsigned char)narrow[0] != 0xe2U ||
+        (unsigned char)narrow[1] != 0x82U ||
+        (unsigned char)narrow[2] != 0xacU ||
+        (unsigned char)narrow[3] != 0xf0U ||
+        (unsigned char)narrow[4] != 0x9fU ||
+        (unsigned char)narrow[5] != 0x98U ||
+        (unsigned char)narrow[6] != 0x80U ||
+        narrow[7] != '\n' || fclose(stream) != 0) {
+        return fail((FILE *)0, 55);
+    }
+
+    stream = fopen(path, "w");
+    if (stream == (FILE *)0 ||
+        fwrite((const char[]){(char)0xe2, (char)0x82}, 1U, 2U, stream) != 2U ||
+        fclose(stream) != 0) {
+        return fail((FILE *)0, 56);
+    }
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return fail((FILE *)0, 57);
+    }
+    stream = fopen(path, "r");
+    errno = ERANGE;
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fgetwc(stream) != WEOF || errno != EILSEQ || !ferror(stream)) {
+        return fail(stream, 58);
+    }
+    clearerr(stream);
+    if (fclose(stream) != 0) {
+        return fail((FILE *)0, 59);
+    }
+
+    if (setlocale(LC_CTYPE, "C") == (char *)0) {
+        return fail((FILE *)0, 60);
+    }
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return fail(stream, 61);
+    }
+    errno = ERANGE;
+    if (fputwc((wchar_t)0x20ac, stream) != WEOF ||
+        errno != EILSEQ || !ferror(stream)) {
+        return fail(stream, 62);
+    }
+    clearerr(stream);
+    if (fclose(stream) != 0 || setlocale(LC_CTYPE, "C") == (char *)0) {
+        return fail((FILE *)0, 63);
     }
 
     (void)remove(path);
