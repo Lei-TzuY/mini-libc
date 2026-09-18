@@ -25,7 +25,7 @@ $(BUILD)/wchar.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale
 
 $(BUILD)/wide_stdio.o: src/wchar/wide_stdio.c include/wchar.h include/stdio.h \
                        src/stdio/stdio_internal.h src/wchar/wide_internal.h \
-                       include/errno.h | $(BUILD)
+                       src/wchar/wchar_internal.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/stdio_scan_test: $(BUILD)/wide_stdio.o $(BUILD)/wchar.o
