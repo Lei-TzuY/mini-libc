@@ -80,7 +80,7 @@ $(BUILD)/locale_differential: $(BUILD)/locale_differential.o $(BUILD)/locale_tes
 $(BUILD)/wchar_differential.o: tests/wchar_differential.c | $(BUILD)
 	$(CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(BUILD)/wchar_differential: $(BUILD)/wchar_differential.o $(BUILD)/wchar_test_impl.o $(BUILD)/errno.o
+$(BUILD)/wchar_differential: $(BUILD)/wchar_differential.o $(BUILD)/wchar_test_impl.o $(BUILD)/locale_test_impl.o $(BUILD)/errno.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
 locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_differential \
