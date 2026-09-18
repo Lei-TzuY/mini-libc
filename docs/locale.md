@@ -126,16 +126,30 @@ public `va_list` argument cursor.
 Wide FILE scanning requires or establishes wide stream orientation and consumes
 characters through the existing buffered wide read/unget helpers. Wide-memory
 scanning advances a private `wchar_t` cursor and supports the same single
-lookahead rollback invariant. The C-locale format is validated as ASCII before
-dispatch; an unrepresentable format character reports `EILSEQ`.
+lookahead rollback invariant. A wide format is encoded before dispatch using the
+FILE stream's orientation-time encoding or, for wide-memory scanning, the current
+`LC_CTYPE` mode. The shared scanner decodes non-ASCII literal directives back
+to code points before matching wide input. This keeps a stream bound to C.UTF-8
+even if the process locale later returns to `"C"`; an unrepresentable C-locale
+format character still reports `EILSEQ`.
 
-For character-sequence conversions, the source and destination width are
-independent. A byte source with `%ls`, `%lc`, or `%l[` converts through
-`mbrtowc`; a wide source with ordinary `%s`, `%c`, or `%[` converts
-through `wcrtomb`; an `l` destination from a wide source stores `wchar_t`
-directly. Invalid C-locale data reports `EILSEQ`. Field width, suppression,
-integer/floating conversions, scansets, and matching-versus-input-failure
+For character-sequence conversions, input field width and destination storage
+width are independent. A byte source with `%ls` or `%lc` consumes complete
+multibyte characters through the mode-aware restartable decoder, so one field
+character may require one through four UTF-8 bytes. A wide source with ordinary
+`%s` or `%c` emits each source code point through the selected stream or
+memory encoding and advances the destination by the actual encoded byte count.
+An `l` destination from a wide source stores `wchar_t` directly. Suppressed
+wide-to-narrow conversions consume the input item without inventing a destination
+encoding failure, while suppressed byte-to-wide conversions still decode enough
+bytes to preserve multibyte character boundaries. Invalid encoded input reports
+`EILSEQ`. Integer/floating conversions and matching-versus-input-failure
 semantics remain those of the shared scanner rather than wrapper-specific rules.
+
+The scanset grammar remains byte-oriented after format encoding. Existing ASCII
+scansets therefore retain their executable semantics, but non-ASCII wide scanset
+members/ranges are deliberately outside this C.UTF-8 input baseline rather than
+being misreported as codepoint-aware.
 
 ## Executable evidence
 
@@ -174,28 +188,34 @@ on an oriented buffered `tmpfile`, mixes the result with the existing
 `fgetwc`/`ungetwc` coverage, and compiles and executes ordinary `swprintf` and
 `fwprintf` together with caller-owned-`va_list` `vswprintf` and `vfwprintf`.
 It also passes genuine `wchar_t *` and wide character arguments through
-`%ls`/`%lc`, then executes wide formatted input over FILE and memory sources
-through ordinary and public-`va_list` entry points. The same binary is linked
-and executed through the pinned mini-elf-toolchain, so both wide formatted
-output and input retain the three-repo executable gate while GCC/Clang
-freestanding probes cover the public behavior.
+`%ls`/`%lc`, then executes C.UTF-8 wide formatted input over wide-memory,
+narrow-memory, and orientation-bound FILE sources. The integration covers a
+non-ASCII wide literal, wide-to-narrow UTF-8 `%s`, narrow-to-wide `%ls`/`%lc`,
+and caller-owned-`va_list` `vfwscanf`/`vswscanf`. The same binary is linked and
+executed through the pinned mini-elf-toolchain, so both wide formatted output and
+input retain the three-repo executable gate while GCC/Clang freestanding probes
+cover the public behavior.
 
 ## Phase boundary and next frontier
 
-The C.UTF-8 conversion runtime and formatted-output integration are now one
-executable baseline: restartable conversion, orientation-bound stream encoding,
-narrow `%lc`/`%ls`, wide format literals, wide `%s`/`%lc`/`%ls`, FILE
-output, bounded wide memory, ordinary variadics, and public `va_list` all reuse
-the established formatter and buffered FILE machinery.
+The C.UTF-8 conversion runtime plus formatted input/output integration are now
+one executable baseline: restartable conversion, orientation-bound stream
+encoding, non-ASCII wide format literals, narrow/wide character-sequence
+conversion, FILE and wide-memory formatted I/O, ordinary variadics, and public
+`va_list` all reuse the established formatter/scanner and buffered FILE
+machinery. Process-locale changes no longer mutate the encoding semantics of an
+already wide-oriented FILE on either the output or input side.
 
 This remains a deliberately bounded internationalization model. There is no
 locale database, collation, Unicode character-property/case mapping,
 per-thread locale object, stateful multibyte encoding, or locale-sensitive
-numeric/monetary formatting beyond the C conventions.
+numeric/monetary formatting beyond the C conventions. Non-ASCII scanset members
+and ranges also remain outside the current scanner contract.
 
-The next coherent text-runtime frontier is **C.UTF-8 formatted input
-integration**. Wide input still uses the proven shared scanner, but its wide
-format adapter retains the older ASCII-format boundary. A follow-on should make
-non-ASCII wide literal directives and multibyte/wide string conversions obey
-the selected or stream-bound encoding without creating a second scanner, and
-must preserve matching-vs-input-failure and one-lookahead rollback semantics.
+The next coherent text-runtime promotion is a **codepoint-aware wide
+classification and scanset layer**. It should remove the remaining byte-set
+assumption from wide scansets, define non-ASCII member/range behavior over decoded
+wide format code points, and provide reusable wide-character classification/case
+primitives rather than growing one-off UTF-8 tests inside the scanner. That work
+must preserve field-width units, matching/input-failure semantics, one-lookahead
+rollback, and the C-locale behavior already locked by this baseline.
