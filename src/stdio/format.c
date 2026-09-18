@@ -6,6 +6,7 @@
 
 #include "../locale/locale_internal.h"
 #include "../wchar/wchar_internal.h"
+#include "format_internal.h"
 #include "stdio_internal.h"
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
