@@ -877,7 +877,44 @@ static int scan_characters(struct mini_scan_source *source,
     return MINI_SCAN_SUCCESS;
 }
 
-static int scanset_contains(const struct mini_scan_spec *spec, int c)
+static int decode_scanset_codepoint(const char **cursor, const char *end,
+                                    int utf8, int *value)
+{
+    const char *p = *cursor;
+    mbstate_t state = {0U, 0U};
+    wchar_t wc = 0;
+    size_t used = 0U;
+
+    if (p >= end) {
+        return 0;
+    }
+    if (!utf8) {
+        *value = (int)(unsigned char)*p;
+        *cursor = p + 1;
+        return 1;
+    }
+
+    while (p + used < end && used < 4U) {
+        char byte = p[used];
+        size_t converted = __mini_mbrtowc_mode(&wc, &byte, 1U, &state, 1);
+
+        ++used;
+        if (converted == (size_t)-1) {
+            errno = EILSEQ;
+            return -1;
+        }
+        if (converted != (size_t)-2) {
+            *value = (int)wc;
+            *cursor = p + used;
+            return 1;
+        }
+    }
+
+    errno = EILSEQ;
+    return -1;
+}
+
+static int scanset_contains_bytes(const struct mini_scan_spec *spec, int c)
 {
     const char *p = spec->set_begin;
     unsigned int byte;
@@ -910,6 +947,66 @@ static int scanset_contains(const struct mini_scan_spec *spec, int c)
     return spec->set_negated ? !matched : matched;
 }
 
+static int scanset_contains_wide(const struct mini_scan_source *source,
+                                 const struct mini_scan_spec *spec, int c)
+{
+    const char *p = spec->set_begin;
+    int matched = 0;
+
+    while (p < spec->set_end) {
+        const char *after_first = p;
+        const char *after_dash;
+        const char *after_last;
+        int first;
+        int dash;
+        int last;
+        int decoded;
+
+        decoded = decode_scanset_codepoint(&after_first, spec->set_end,
+                                           source->utf8, &first);
+        if (decoded <= 0) {
+            return -1;
+        }
+
+        after_dash = after_first;
+        decoded = decode_scanset_codepoint(&after_dash, spec->set_end,
+                                           source->utf8, &dash);
+        if (decoded > 0 && dash == '-') {
+            after_last = after_dash;
+            decoded = decode_scanset_codepoint(&after_last, spec->set_end,
+                                               source->utf8, &last);
+            if (decoded > 0 && first <= last) {
+                if (c >= first && c <= last) {
+                    matched = 1;
+                }
+                p = after_last;
+                continue;
+            }
+            if (decoded < 0) {
+                return -1;
+            }
+        } else if (decoded < 0) {
+            return -1;
+        }
+
+        if (c == first) {
+            matched = 1;
+        }
+        p = after_first;
+    }
+
+    return spec->set_negated ? !matched : matched;
+}
+
+static int scanset_contains(const struct mini_scan_source *source,
+                            const struct mini_scan_spec *spec, int c)
+{
+    if (source_is_wide(source)) {
+        return scanset_contains_wide(source, spec, c);
+    }
+    return scanset_contains_bytes(spec, c);
+}
+
 static int scan_scanset(struct mini_scan_source *source,
                         const struct mini_scan_spec *spec,
                         struct mini_scan_args *args)
@@ -919,11 +1016,16 @@ static int scan_scanset(struct mini_scan_source *source,
     mbstate_t state = {0U, 0U};
     size_t destination_count = 0U;
     int c = source_get(source);
+    int contains;
 
     if (c == EOF) {
         return MINI_SCAN_INPUT_FAIL;
     }
-    if (!scanset_contains(spec, c)) {
+    contains = scanset_contains(source, spec, c);
+    if (contains < 0) {
+        return MINI_SCAN_INPUT_FAIL;
+    }
+    if (!contains) {
         if (source_unget(c, source) == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
@@ -948,7 +1050,11 @@ static int scan_scanset(struct mini_scan_source *source,
         if (c == EOF) {
             break;
         }
-        if (!scanset_contains(spec, c)) {
+        contains = scanset_contains(source, spec, c);
+        if (contains < 0) {
+            return MINI_SCAN_INPUT_FAIL;
+        }
+        if (!contains) {
             if (source_unget(c, source) == EOF) {
                 return MINI_SCAN_INPUT_FAIL;
             }
