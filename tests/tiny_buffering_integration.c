@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <locale.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <wchar.h>
@@ -89,10 +90,18 @@ int main(int argc, char **argv)
     static const wchar_t wide_scan_format[] = {'%', 'd', ' ', '%', '2', 'l', 's', ' ', '%', 'l', 'f', 0};
     static const wchar_t wide_scan_file[] = {'9', ' ', 'Q', '\n', 0};
     static const wchar_t wide_scan_file_format[] = {'%', 'd', ' ', '%', 'l', 'c', 0};
+    static const wchar_t utf8_format[] = {
+        (wchar_t)0x4e2d, ':', '%', 'l', 's', 0
+    };
+    static const wchar_t utf8_value[] = {(wchar_t)0x00a2, 0};
+    static const wchar_t utf8_expected[] = {
+        (wchar_t)0x4e2d, ':', (wchar_t)0x00a2, 0
+    };
     char full[4];
     char line[8];
     char standard[BUFSIZ];
     char temporary[4];
+    char utf8_narrow[8];
     wchar_t wide_read[16] = {0};
     wchar_t wide_format[32] = {0};
     wchar_t wide_scan_text[4] = {0};
@@ -220,6 +229,31 @@ int main(int argc, char **argv)
         fgetws(wide_read, 16, stream) != wide_read ||
         wcscmp(wide_read, wide_file_third) != 0 || fclose(stream) != 0) {
         return 15;
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 ||
+        tiny_vswprintf(wide_format, 32U, utf8_format, utf8_value) != 3 ||
+        wcscmp(wide_format, utf8_expected) != 0 ||
+        snprintf(utf8_narrow, sizeof(utf8_narrow), "%ls", utf8_value) != 2 ||
+        (unsigned char)utf8_narrow[0] != 0xc2U ||
+        (unsigned char)utf8_narrow[1] != 0xa2U ||
+        utf8_narrow[2] != '\0') {
+        return 20;
+    }
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0 ||
+        tiny_vfwprintf(stream, utf8_format, utf8_value) != 3 ||
+        ftell(stream) != 6L) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 21;
+    }
+    rewind(stream);
+    if (fgetws(wide_read, 16, stream) != wide_read ||
+        wcscmp(wide_read, utf8_expected) != 0 || fclose(stream) != 0) {
+        return 22;
     }
 
     wide_scan_value = 0;
