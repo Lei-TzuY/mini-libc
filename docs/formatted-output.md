@@ -226,10 +226,10 @@ Long-double formatting, positional arguments, locale-specific numeric grouping,
 and a broader internationalized locale model remain outside this contract.
 Those are separate semantic expansions, not reasons to duplicate the formatter.
 
-C.UTF-8 formatted input has now caught up with the output side: wide formats
-are encoded with the selected or stream-bound mode, non-ASCII literal directives
-match decoded wide input, and narrow/wide character-sequence destinations reuse
-the shared conversion runtime. The remaining text-runtime gap is no longer the
-basic input/output bridge but codepoint-aware wide scansets/classification;
-non-ASCII scanset members and ranges are intentionally not claimed by this
-formatter/input baseline.
+C.UTF-8 formatted input has caught up with the output side: wide formats are
+encoded with the selected or stream-bound mode, non-ASCII literal directives
+match decoded wide input, narrow/wide character-sequence destinations reuse the
+shared conversion runtime, and wide scansets now match decoded Unicode scalar
+members/ranges. The locale layer also supplies the Unicode 15.1 wide
+classification/simple-case substrate, so formatter/scanner code no longer owns
+the remaining character-property gap.
