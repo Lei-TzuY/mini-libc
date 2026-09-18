@@ -190,6 +190,6 @@ positioning semantics, and error indicators. Caller-provided versus libc-owned
 buffer lifetime must be explicit and executable before higher-level stdio grows
 further.
 
-`long double`, wide-character scanning, locale-sensitive behavior, `%n`, pointer
-formatting, `tmpfile`, threading/TLS, C11 exclusive-create modes, and allocator
-tuning remain separate later phases.
+`long double`, `%n`, positional arguments, locale-sensitive numeric
+grouping/collation, and broader locale-state ownership remain separate semantic
+phases rather than reasons to fork the shared scanner.
