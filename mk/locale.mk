@@ -17,10 +17,10 @@ test: locale_test_run
 
 .PHONY: locale_inspect locale_test_run
 
-$(BUILD)/locale.o: src/locale/locale.c include/locale.h | $(BUILD)
+$(BUILD)/locale.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/wchar.o: src/wchar/wchar.c include/wchar.h include/stddef.h include/errno.h | $(BUILD)
+$(BUILD)/wchar.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wide_stdio.o: src/wchar/wide_stdio.c include/wchar.h include/stdio.h \
@@ -62,10 +62,10 @@ $(BUILD)/wide_stdio_probe.o: tests/wide_stdio_probe.c include/wchar.h include/st
 $(BUILD)/wide_stdio_probe: $(BUILD)/wide_stdio_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/wide_stdio_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/locale_test_impl.o: src/locale/locale.c include/locale.h | $(BUILD)
+$(BUILD)/locale_test_impl.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LOCALE_RENAMES) -c $< -o $@
 
-$(BUILD)/wchar_test_impl.o: src/wchar/wchar.c include/wchar.h include/stddef.h include/errno.h | $(BUILD)
+$(BUILD)/wchar_test_impl.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WCHAR_RENAMES) -c $< -o $@
 
 $(BUILD)/multibyte_test_impl.o: src/stdlib/multibyte.c include/stdlib.h include/wchar.h include/stddef.h | $(BUILD)
