@@ -97,11 +97,25 @@ int main(int argc, char **argv)
     static const wchar_t utf8_expected[] = {
         (wchar_t)0x4e2d, ':', (wchar_t)0x00a2, 0
     };
+    static const wchar_t utf8_scan_input[] = {
+        (wchar_t)0x4e2d, ':', (wchar_t)0x00a2, (wchar_t)0x20ac, ' ',
+        (wchar_t)0x1f600, 0
+    };
+    static const wchar_t utf8_scan_format[] = {
+        (wchar_t)0x4e2d, ':', '%', '2', 's', ' ', '%', 'l', 'c', 0
+    };
+    static const char utf8_scan_narrow_input[] = {
+        (char)0xc2, (char)0xa2, (char)0xe2, (char)0x82, (char)0xac, ' ',
+        (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 0
+    };
     char full[4];
     char line[8];
     char standard[BUFSIZ];
     char temporary[4];
     char utf8_narrow[8];
+    char utf8_scan_narrow[8];
+    wchar_t utf8_scan_wide[4] = {0};
+    wchar_t utf8_scan_char = 0;
     wchar_t wide_read[16] = {0};
     wchar_t wide_format[32] = {0};
     wchar_t wide_scan_text[4] = {0};
@@ -254,6 +268,58 @@ int main(int argc, char **argv)
     if (fgetws(wide_read, 16, stream) != wide_read ||
         wcscmp(wide_read, utf8_expected) != 0 || fclose(stream) != 0) {
         return 22;
+    }
+
+    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        return 23;
+    }
+    utf8_scan_narrow[0] = '\0';
+    utf8_scan_char = 0;
+    if (tiny_vswscanf(utf8_scan_input, utf8_scan_format, utf8_scan_narrow,
+                      &utf8_scan_char) != 2 ||
+        (unsigned char)utf8_scan_narrow[0] != 0xc2U ||
+        (unsigned char)utf8_scan_narrow[1] != 0xa2U ||
+        (unsigned char)utf8_scan_narrow[2] != 0xe2U ||
+        (unsigned char)utf8_scan_narrow[3] != 0x82U ||
+        (unsigned char)utf8_scan_narrow[4] != 0xacU ||
+        utf8_scan_narrow[5] != '\0' ||
+        utf8_scan_char != (wchar_t)0x1f600) {
+        return 24;
+    }
+    utf8_scan_wide[0] = 0;
+    utf8_scan_char = 0;
+    if (sscanf(utf8_scan_narrow_input, "%2ls %lc", utf8_scan_wide,
+               &utf8_scan_char) != 2 ||
+        utf8_scan_wide[0] != (wchar_t)0x00a2 ||
+        utf8_scan_wide[1] != (wchar_t)0x20ac ||
+        utf8_scan_wide[2] != 0 ||
+        utf8_scan_char != (wchar_t)0x1f600) {
+        return 25;
+    }
+
+    stream = tmpfile();
+    if (stream == (FILE *)0 || fwide(stream, 1) <= 0 ||
+        fputws(utf8_scan_input, stream) < 0 ||
+        setlocale(LC_CTYPE, "C") == (char *)0) {
+        if (stream != (FILE *)0) {
+            fclose(stream);
+        }
+        return 26;
+    }
+    rewind(stream);
+    utf8_scan_narrow[0] = '\0';
+    utf8_scan_char = 0;
+    if (tiny_vfwscanf(stream, utf8_scan_format, utf8_scan_narrow,
+                      &utf8_scan_char) != 2 ||
+        (unsigned char)utf8_scan_narrow[0] != 0xc2U ||
+        (unsigned char)utf8_scan_narrow[1] != 0xa2U ||
+        (unsigned char)utf8_scan_narrow[2] != 0xe2U ||
+        (unsigned char)utf8_scan_narrow[3] != 0x82U ||
+        (unsigned char)utf8_scan_narrow[4] != 0xacU ||
+        utf8_scan_narrow[5] != '\0' ||
+        utf8_scan_char != (wchar_t)0x1f600 ||
+        fwide(stream, 0) <= 0 || fclose(stream) != 0) {
+        return 27;
     }
 
     wide_scan_value = 0;
