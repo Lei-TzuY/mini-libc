@@ -38,11 +38,18 @@ int fwprintf(FILE *restrict stream, const wchar_t *restrict format, ...);
 int wprintf(const wchar_t *restrict format, ...);
 int swprintf(wchar_t *restrict buffer, size_t size,
              const wchar_t *restrict format, ...);
-int vfwprintf(FILE *restrict stream, const wchar_t *restrict format,
-              va_list ap);
+int vfwprintf(FILE *restrict stream, const wchar_t *restrict format, va_list ap);
 int vwprintf(const wchar_t *restrict format, va_list ap);
 int vswprintf(wchar_t *restrict buffer, size_t size,
               const wchar_t *restrict format, va_list ap);
+
+int fwscanf(FILE *restrict stream, const wchar_t *restrict format, ...);
+int wscanf(const wchar_t *restrict format, ...);
+int swscanf(const wchar_t *restrict input, const wchar_t *restrict format, ...);
+int vfwscanf(FILE *restrict stream, const wchar_t *restrict format, va_list ap);
+int vwscanf(const wchar_t *restrict format, va_list ap);
+int vswscanf(const wchar_t *restrict input, const wchar_t *restrict format,
+             va_list ap);
 
 size_t wcslen(const wchar_t *s);
 int wcscmp(const wchar_t *left, const wchar_t *right);

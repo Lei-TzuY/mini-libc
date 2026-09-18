@@ -1,7 +1,9 @@
 #include <errno.h>
 #include <stdio.h>
+#include <wchar.h>
 
 #include "../internal/float_parse.h"
+#include "../wchar/wide_internal.h"
 #include "stdio_internal.h"
 
 #define MINI_SCAN_WIDTH_MAX (~0U)
@@ -47,7 +49,9 @@ enum mini_scan_status {
 
 enum mini_scan_source_kind {
     MINI_SCAN_SOURCE_FILE,
-    MINI_SCAN_SOURCE_STRING
+    MINI_SCAN_SOURCE_STRING,
+    MINI_SCAN_SOURCE_WIDE_FILE,
+    MINI_SCAN_SOURCE_WIDE_STRING
 };
 
 struct mini_scan_source {
@@ -55,6 +59,8 @@ struct mini_scan_source {
     FILE *stream;
     const unsigned char *string_begin;
     const unsigned char *string_cursor;
+    const wchar_t *wide_begin;
+    const wchar_t *wide_cursor;
 };
 
 static int invalid_stream(FILE *stream)
@@ -118,10 +124,31 @@ static int digit_value(int c)
     return -1;
 }
 
+static int source_is_wide(const struct mini_scan_source *source)
+{
+    return source->kind == MINI_SCAN_SOURCE_WIDE_FILE ||
+           source->kind == MINI_SCAN_SOURCE_WIDE_STRING;
+}
+
 static int source_get(struct mini_scan_source *source)
 {
     if (source->kind == MINI_SCAN_SOURCE_FILE) {
         return fgetc(source->stream);
+    }
+    if (source->kind == MINI_SCAN_SOURCE_WIDE_FILE) {
+        wint_t wc = __mini_wide_read_character_unlocked(source->stream);
+
+        return wc == WEOF ? EOF : (int)wc;
+    }
+    if (source->kind == MINI_SCAN_SOURCE_WIDE_STRING) {
+        int value;
+
+        if (*source->wide_cursor == 0) {
+            return EOF;
+        }
+        value = (int)*source->wide_cursor;
+        ++source->wide_cursor;
+        return value;
     }
 
     if (*source->string_cursor == '\0') {
@@ -139,6 +166,22 @@ static int source_unget(int c, struct mini_scan_source *source)
 {
     if (source->kind == MINI_SCAN_SOURCE_FILE) {
         return ungetc(c, source->stream);
+    }
+    if (source->kind == MINI_SCAN_SOURCE_WIDE_FILE) {
+        wint_t result = __mini_wide_unget_character_unlocked((wint_t)c,
+                                                              source->stream);
+
+        return result == WEOF ? EOF : (int)result;
+    }
+    if (source->kind == MINI_SCAN_SOURCE_WIDE_STRING) {
+        if (c == EOF || source->wide_cursor == source->wide_begin) {
+            return EOF;
+        }
+        if (source->wide_cursor[-1] != (wchar_t)c) {
+            return EOF;
+        }
+        --source->wide_cursor;
+        return c;
     }
 
     if (c == EOF || source->string_cursor == source->string_begin) {
@@ -276,7 +319,8 @@ static int parse_spec(const char **cursor, struct mini_scan_spec *spec)
     }
 
     if (*p == '[') {
-        if (spec->length != MINI_SCAN_LEN_NONE) {
+        if (spec->length != MINI_SCAN_LEN_NONE &&
+            spec->length != MINI_SCAN_LEN_L) {
             return 0;
         }
         spec->conversion = '[';
@@ -309,7 +353,8 @@ static int parse_spec(const char **cursor, struct mini_scan_spec *spec)
         return 1;
     }
     if (spec->conversion == 'c' || spec->conversion == 's') {
-        if (spec->length != MINI_SCAN_LEN_NONE) {
+        if (spec->length != MINI_SCAN_LEN_NONE &&
+            spec->length != MINI_SCAN_LEN_L) {
             return 0;
         }
         *cursor = p;
@@ -612,12 +657,61 @@ static int scan_floating(struct mini_scan_source *source,
     return MINI_SCAN_SUCCESS;
 }
 
+static int store_character(struct mini_scan_source *source,
+                           enum mini_scan_length length, void *destination,
+                           unsigned int index, int c, mbstate_t *state)
+{
+    if (length == MINI_SCAN_LEN_L) {
+        wchar_t wc;
+
+        if (source_is_wide(source)) {
+            wc = (wchar_t)c;
+        } else {
+            char byte = (char)(unsigned char)c;
+            size_t converted = mbrtowc(&wc, &byte, 1U, state);
+
+            if (converted == (size_t)-1 || converted == (size_t)-2) {
+                errno = EILSEQ;
+                return 0;
+            }
+        }
+        ((wchar_t *)destination)[index] = wc;
+        return 1;
+    }
+
+    if (source_is_wide(source)) {
+        char byte;
+        size_t converted = wcrtomb(&byte, (wchar_t)c, state);
+
+        if (converted == (size_t)-1 || converted != 1U) {
+            errno = EILSEQ;
+            return 0;
+        }
+        ((char *)destination)[index] = byte;
+    } else {
+        ((char *)destination)[index] = (char)(unsigned char)c;
+    }
+    return 1;
+}
+
+static void terminate_character_sequence(enum mini_scan_length length,
+                                         void *destination,
+                                         unsigned int count)
+{
+    if (length == MINI_SCAN_LEN_L) {
+        ((wchar_t *)destination)[count] = 0;
+    } else {
+        ((char *)destination)[count] = '\0';
+    }
+}
+
 static int scan_string(struct mini_scan_source *source,
                        const struct mini_scan_spec *spec,
                        struct mini_scan_args *args)
 {
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
-    char *destination = (char *)0;
+    void *destination = (void *)0;
+    mbstate_t state = {0U, 0U};
     unsigned int count = 0;
     int c;
 
@@ -637,12 +731,14 @@ static int scan_string(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        destination = (char *)next_word(args);
+        destination = (void *)next_word(args);
     }
 
     for (;;) {
-        if (!spec->suppress) {
-            destination[count] = (char)(unsigned char)c;
+        if (!spec->suppress &&
+            !store_character(source, spec->length, destination, count, c,
+                             &state)) {
+            return MINI_SCAN_INPUT_FAIL;
         }
         ++count;
         --remaining;
@@ -663,7 +759,7 @@ static int scan_string(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        destination[count] = '\0';
+        terminate_character_sequence(spec->length, destination, count);
     }
     return MINI_SCAN_SUCCESS;
 }
@@ -673,11 +769,12 @@ static int scan_characters(struct mini_scan_source *source,
                            struct mini_scan_args *args)
 {
     unsigned int width = spec->width_set ? spec->width : 1U;
-    char *destination = (char *)0;
+    void *destination = (void *)0;
+    mbstate_t state = {0U, 0U};
     unsigned int count;
 
     if (!spec->suppress) {
-        destination = (char *)next_word(args);
+        destination = (void *)next_word(args);
     }
 
     for (count = 0; count < width; ++count) {
@@ -686,8 +783,10 @@ static int scan_characters(struct mini_scan_source *source,
         if (c == EOF) {
             return MINI_SCAN_INPUT_FAIL;
         }
-        if (!spec->suppress) {
-            destination[count] = (char)(unsigned char)c;
+        if (!spec->suppress &&
+            !store_character(source, spec->length, destination, count, c,
+                             &state)) {
+            return MINI_SCAN_INPUT_FAIL;
         }
     }
 
@@ -697,8 +796,13 @@ static int scan_characters(struct mini_scan_source *source,
 static int scanset_contains(const struct mini_scan_spec *spec, int c)
 {
     const char *p = spec->set_begin;
-    unsigned int byte = (unsigned int)(unsigned char)c;
+    unsigned int byte;
     int matched = 0;
+
+    if (c < 0 || (unsigned int)c > 0xffU) {
+        return spec->set_negated;
+    }
+    byte = (unsigned int)(unsigned char)c;
 
     while (p < spec->set_end) {
         unsigned int first = (unsigned int)(unsigned char)p[0];
@@ -727,7 +831,8 @@ static int scan_scanset(struct mini_scan_source *source,
                         struct mini_scan_args *args)
 {
     unsigned int remaining = spec->width_set ? spec->width : MINI_SCAN_WIDTH_MAX;
-    char *destination = (char *)0;
+    void *destination = (void *)0;
+    mbstate_t state = {0U, 0U};
     unsigned int count = 0;
     int c = source_get(source);
 
@@ -742,12 +847,14 @@ static int scan_scanset(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        destination = (char *)next_word(args);
+        destination = (void *)next_word(args);
     }
 
     for (;;) {
-        if (!spec->suppress) {
-            destination[count] = (char)(unsigned char)c;
+        if (!spec->suppress &&
+            !store_character(source, spec->length, destination, count, c,
+                             &state)) {
+            return MINI_SCAN_INPUT_FAIL;
         }
         ++count;
         --remaining;
@@ -768,7 +875,7 @@ static int scan_scanset(struct mini_scan_source *source,
     }
 
     if (!spec->suppress) {
-        destination[count] = '\0';
+        terminate_character_sequence(spec->length, destination, count);
     }
     return MINI_SCAN_SUCCESS;
 }
@@ -883,6 +990,8 @@ int __mini_scan_dispatch(FILE *stream, const char *format,
     source.stream = stream;
     source.string_begin = (const unsigned char *)0;
     source.string_cursor = (const unsigned char *)0;
+    source.wide_begin = (const wchar_t *)0;
+    source.wide_cursor = (const wchar_t *)0;
     return scan_dispatch(&source, format, args);
 }
 
@@ -900,5 +1009,47 @@ int __mini_sscan_dispatch(const char *input, const char *format,
     source.stream = (FILE *)0;
     source.string_begin = (const unsigned char *)input;
     source.string_cursor = (const unsigned char *)input;
+    source.wide_begin = (const wchar_t *)0;
+    source.wide_cursor = (const wchar_t *)0;
+    return scan_dispatch(&source, format, args);
+}
+
+int __mini_wscan_dispatch_unlocked(FILE *stream, const char *format,
+                                   struct mini_scan_args *args)
+{
+    struct mini_scan_source source;
+
+    if (stream == (FILE *)0 || (stream->mode & MINI_FILE_READABLE) == 0U) {
+        return invalid_stream(stream);
+    }
+    if (format == (const char *)0 || args == (struct mini_scan_args *)0) {
+        return invalid_format();
+    }
+
+    source.kind = MINI_SCAN_SOURCE_WIDE_FILE;
+    source.stream = stream;
+    source.string_begin = (const unsigned char *)0;
+    source.string_cursor = (const unsigned char *)0;
+    source.wide_begin = (const wchar_t *)0;
+    source.wide_cursor = (const wchar_t *)0;
+    return scan_dispatch(&source, format, args);
+}
+
+int __mini_wsscan_dispatch(const wchar_t *input, const char *format,
+                           struct mini_scan_args *args)
+{
+    struct mini_scan_source source;
+
+    if (input == (const wchar_t *)0 || format == (const char *)0 ||
+        args == (struct mini_scan_args *)0) {
+        return invalid_format();
+    }
+
+    source.kind = MINI_SCAN_SOURCE_WIDE_STRING;
+    source.stream = (FILE *)0;
+    source.string_begin = (const unsigned char *)0;
+    source.string_cursor = (const unsigned char *)0;
+    source.wide_begin = input;
+    source.wide_cursor = input;
     return scan_dispatch(&source, format, args);
 }
