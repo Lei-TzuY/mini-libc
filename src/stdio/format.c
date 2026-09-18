@@ -2,6 +2,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "../locale/locale_internal.h"
+#include "../wchar/wchar_internal.h"
 #include "stdio_internal.h"
 
 #define MINI_PRINTF_INT_MAX ((unsigned int)(~0U >> 1))
@@ -46,6 +48,7 @@ struct mini_format_sink {
     char *buffer;
     size_t size;
     size_t stored;
+    int wide_utf8;
 };
 
 struct mini_format_spec {
@@ -444,13 +447,16 @@ static int emit_character(struct mini_format_sink *sink,
     return 0;
 }
 
-static int wide_code_to_c_byte(unsigned int value, char *byte)
+static int encode_wide_character(int utf8, wchar_t wc,
+                                 char bytes[4], size_t *length)
 {
-    if (value > 0x7fU) {
-        errno = EILSEQ;
+    mbstate_t state = {0U, 0U};
+    size_t converted = __mini_wcrtomb_mode(bytes, wc, &state, utf8);
+
+    if (converted == (size_t)-1) {
         return 0;
     }
-    *byte = (char)value;
+    *length = converted;
     return 1;
 }
 
@@ -458,16 +464,21 @@ static int emit_wide_character(struct mini_format_sink *sink,
                                const struct mini_format_spec *spec, int value,
                                unsigned int *count)
 {
-    char byte;
-    unsigned int padding = spec->width > 1U ? spec->width - 1U : 0U;
+    char bytes[4];
+    size_t length;
+    unsigned int padding;
 
-    if (!wide_code_to_c_byte((unsigned int)value, &byte)) {
+    if (!encode_wide_character(sink->wide_utf8, (wchar_t)value,
+                               bytes, &length)) {
         return EOF;
     }
+    padding = (size_t)spec->width > length ?
+                  spec->width - (unsigned int)length : 0U;
+
     if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    if (emit_bytes(sink, &byte, 1U, count) == EOF) {
+    if (emit_bytes(sink, bytes, length, count) == EOF) {
         return EOF;
     }
     if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
@@ -481,46 +492,59 @@ static int emit_wide_string(struct mini_format_sink *sink,
                             const wchar_t *value, unsigned int *count)
 {
     static const wchar_t null_text[] = {'(', 'n', 'u', 'l', 'l', ')', 0};
-    char bytes[MINI_FORMAT_PAD_CHUNK];
-    size_t length = 0U;
-    size_t offset;
+    size_t byte_length = 0U;
+    size_t character_count = 0U;
     unsigned int padding = 0U;
+    size_t i;
 
     if (value == (const wchar_t *)0) {
         value = null_text;
     }
-    while (value[length] != 0 &&
-           (!spec->precision_set || length < (size_t)spec->precision)) {
-        char byte;
 
-        if (!wide_code_to_c_byte((unsigned int)value[length], &byte)) {
+    while (value[character_count] != 0) {
+        char bytes[4];
+        size_t converted;
+
+        if (!encode_wide_character(sink->wide_utf8, value[character_count],
+                                   bytes, &converted)) {
             return EOF;
         }
-        ++length;
-    }
-    if ((size_t)spec->width > length) {
-        padding = spec->width - (unsigned int)length;
+        if (spec->precision_set &&
+            converted > (size_t)spec->precision -
+                            (byte_length < (size_t)spec->precision ?
+                                 byte_length : (size_t)spec->precision)) {
+            break;
+        }
+        if (spec->precision_set &&
+            byte_length + converted > (size_t)spec->precision) {
+            break;
+        }
+        if (byte_length > (size_t)-1 - converted) {
+            errno = EINVAL;
+            return EOF;
+        }
+        byte_length += converted;
+        ++character_count;
     }
 
+    if ((size_t)spec->width > byte_length) {
+        padding = spec->width - (unsigned int)byte_length;
+    }
     if (!spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
-    offset = 0U;
-    while (offset < length) {
-        size_t chunk = length - offset;
-        size_t i;
 
-        if (chunk > MINI_FORMAT_PAD_CHUNK) {
-            chunk = MINI_FORMAT_PAD_CHUNK;
-        }
-        for (i = 0U; i < chunk; ++i) {
-            bytes[i] = (char)(unsigned int)value[offset + i];
-        }
-        if (emit_bytes(sink, bytes, chunk, count) == EOF) {
+    for (i = 0U; i < character_count; ++i) {
+        char bytes[4];
+        size_t converted;
+
+        if (!encode_wide_character(sink->wide_utf8, value[i],
+                                   bytes, &converted) ||
+            emit_bytes(sink, bytes, converted, count) == EOF) {
             return EOF;
         }
-        offset += chunk;
     }
+
     if (spec->left && emit_repeat(sink, ' ', padding, count) == EOF) {
         return EOF;
     }
@@ -1259,11 +1283,13 @@ int __mini_format_dispatch(FILE *stream, const char *format,
     sink.buffer = (char *)0;
     sink.size = 0U;
     sink.stored = 0U;
+    sink.wide_utf8 = __mini_locale_is_utf8();
     return format_dispatch(&sink, format, args);
 }
 
-int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
-                             struct mini_format_args *args)
+int __mini_snprintf_dispatch_mode(char *buffer, size_t size,
+                                  const char *format,
+                                  struct mini_format_args *args, int utf8)
 {
     struct mini_format_sink sink;
 
@@ -1276,9 +1302,17 @@ int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
     sink.buffer = buffer;
     sink.size = size;
     sink.stored = 0U;
+    sink.wide_utf8 = utf8 != 0;
     if (size != 0U) {
         buffer[0] = '\0';
     }
 
     return format_dispatch(&sink, format, args);
+}
+
+int __mini_snprintf_dispatch(char *buffer, size_t size, const char *format,
+                             struct mini_format_args *args)
+{
+    return __mini_snprintf_dispatch_mode(buffer, size, format, args,
+                                         __mini_locale_is_utf8());
 }
