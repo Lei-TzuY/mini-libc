@@ -254,11 +254,17 @@ int main(int argc, char **argv)
     }
 
     if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 ||
-        !iswalpha((wint_t)'A') || iswalpha((wint_t)0x03b1U) ||
+        !iswalpha((wint_t)'A') || !iswalpha((wint_t)0x03b1U) ||
+        !iswlower((wint_t)0x03b1U) ||
         towupper((wint_t)'q') != (wint_t)'Q' ||
-        towlower((wint_t)0x03b1U) != (wint_t)0x03b1U ||
-        !iswctype((wint_t)'7', wctype("digit")) ||
-        towctrans((wint_t)'Z', wctrans("tolower")) != (wint_t)'z' ||
+        towupper((wint_t)0x03b1U) != (wint_t)0x0391U ||
+        towlower((wint_t)0x0416U) != (wint_t)0x0436U ||
+        !iswdigit((wint_t)0x0665U) ||
+        !iswspace((wint_t)0x00a0U) ||
+        !iswpunct((wint_t)0x2014U) ||
+        !iswgraph((wint_t)0x1f600U) ||
+        !iswctype((wint_t)0x03b1U, wctype("alpha")) ||
+        towctrans((wint_t)0x03b1U, wctrans("toupper")) != (wint_t)0x0391U ||
         tiny_vswprintf(wide_format, 32U, utf8_format, utf8_value) != 3 ||
         wcscmp(wide_format, utf8_expected) != 0 ||
         snprintf(utf8_narrow, sizeof(utf8_narrow), "%ls", utf8_value) != 2 ||

@@ -3,9 +3,11 @@
 mini-libc exposes the ISO C `"C"` locale plus a bounded `"C.UTF-8"` /
 `"C.utf8"` `LC_CTYPE` mode. The text runtime shares one restartable
 multibyte/wide-character conversion core across legacy conversion APIs,
-wide-string helpers, oriented wide streams, and formatted I/O. C.UTF-8 supports
-1-4 byte UTF-8 for valid Unicode scalar values without claiming locale
-databases, collation, Unicode character properties, or stateful encodings.
+wide-string helpers, oriented wide streams, formatted I/O, and wide-character
+classification. C.UTF-8 supports 1-4 byte UTF-8 for valid Unicode scalar values
+plus a pinned Unicode 15.1 classification/simple-case layer, without claiming a
+locale database, collation, locale-tailored full case mappings, normalization,
+or stateful encodings.
 
 ## Public locale surface
 
@@ -27,6 +29,30 @@ not numeric or monetary conventions.
 There is still no environment-variable locale selection, locale archive,
 per-thread locale object, collation database, or mutable locale-specific
 numeric/monetary data.
+
+## Unicode 15.1 wide classification and simple case mapping
+
+`<wctype.h>` exposes the ISO C wide classification, descriptor, and case
+transformation surface. In the `"C"` locale it deliberately retains the
+ASCII-only contract. Under `"C.UTF-8"`, the same APIs switch to a generated
+Unicode Character Database 15.1.0 substrate pinned to
+`unicode-org/unicodetools@1882e4cca24a298184d685e6a3820428749d050d`.
+
+The generated table uses `UnicodeData.txt` general categories plus
+`PropList.txt` `White_Space`. mini-libc defines C.UTF-8 properties as:
+letters plus `Nl` for `alpha`, `Nd` for `digit`, `Ll`/`Lu` for
+lower/upper, `Cc` for control, `P*` for punctuation, Unicode
+`White_Space` for space, HT plus `Zs` for blank, `L|M|N|P|S` for graph,
+and graph plus `Zs` for print. `xdigit` intentionally remains the portable
+ASCII hexadecimal set. `towlower`/`towupper` use UnicodeData simple
+one-code-point mappings; locale/context-sensitive multi-code-point special
+casing is outside this bounded contract.
+
+The tables are compressed into property ranges plus simple mapping pairs and are
+queried by binary search. Invalid scalar values and `WEOF` never acquire a
+Unicode property and case transforms leave them unchanged. Locale switching is
+observable: a non-ASCII code point classified in C.UTF-8 immediately returns to
+the ASCII-only behavior after switching `LC_CTYPE` back to `"C"`.
 
 ## C and C.UTF-8 multibyte model
 
@@ -146,10 +172,11 @@ bytes to preserve multibyte character boundaries. Invalid encoded input reports
 `EILSEQ`. Integer/floating conversions and matching-versus-input-failure
 semantics remain those of the shared scanner rather than wrapper-specific rules.
 
-The scanset grammar remains byte-oriented after format encoding. Existing ASCII
-scansets therefore retain their executable semantics, but non-ASCII wide scanset
-members/ranges are deliberately outside this C.UTF-8 input baseline rather than
-being misreported as codepoint-aware.
+Wide scansets are now codepoint-aware. Narrow scansets retain byte semantics,
+while a wide FILE/string source decodes C/C.UTF-8 scanset members and ranges from
+the wide format and compares decoded code points. Non-ASCII member/range,
+negation, suppression, rollback, and stream-bound encoding behavior therefore
+reuse the same scanner rather than falling back to encoded-byte membership.
 
 ## Executable evidence
 
@@ -198,24 +225,22 @@ cover the public behavior.
 
 ## Phase boundary and next frontier
 
-The C.UTF-8 conversion runtime plus formatted input/output integration are now
-one executable baseline: restartable conversion, orientation-bound stream
-encoding, non-ASCII wide format literals, narrow/wide character-sequence
-conversion, FILE and wide-memory formatted I/O, ordinary variadics, and public
-`va_list` all reuse the established formatter/scanner and buffered FILE
-machinery. Process-locale changes no longer mutate the encoding semantics of an
-already wide-oriented FILE on either the output or input side.
+The C/C.UTF-8 text runtime now closes the basic encoding, formatted-I/O,
+codepoint-wide scanset, and wide classification/case baseline. Restartable UTF-8
+conversion, stream-bound orientation encoding, narrow/wide formatted
+input/output, Unicode-scalar scansets, and Unicode 15.1 `wctype` behavior all
+execute through shared runtime state rather than wrapper-local special cases.
 
-This remains a deliberately bounded internationalization model. There is no
-locale database, collation, Unicode character-property/case mapping,
-per-thread locale object, stateful multibyte encoding, or locale-sensitive
-numeric/monetary formatting beyond the C conventions. Non-ASCII scanset members
-and ranges also remain outside the current scanner contract.
+This is still intentionally not a general locale database. There is no
+collation database, normalization engine, locale-tailored multi-code-point case
+mapping, locale-sensitive numeric/monetary data, stateful encoding, or
+per-thread locale object.
 
-The next coherent text-runtime promotion is a **codepoint-aware wide
-classification and scanset layer**. It should remove the remaining byte-set
-assumption from wide scansets, define non-ASCII member/range behavior over decoded
-wide format code points, and provide reusable wide-character classification/case
-primitives rather than growing one-off UTF-8 tests inside the scanner. That work
-must preserve field-width units, matching/input-failure semantics, one-lookahead
-rollback, and the C-locale behavior already locked by this baseline.
+The next coherent locale promotion is **locale state ownership and
+environment-driven selection**, not more isolated character ranges.
+`setlocale(category, "")` should resolve the supported `"C"` /
+`"C.UTF-8"` choice from `LC_ALL`, the category-specific environment
+variable, and `LANG`, while keeping category state explicit enough to support
+later reentrant/per-thread locale work. That slice must preserve the current
+rule that an already wide-oriented FILE retains its orientation-time encoding
+even when process locale selection later changes.

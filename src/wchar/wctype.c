@@ -1,6 +1,9 @@
 #include <ctype.h>
 #include <wctype.h>
 
+#include "../locale/locale_internal.h"
+#include "unicode_props.h"
+
 enum {
     MINI_WCTYPE_ALNUM = 1,
     MINI_WCTYPE_ALPHA,
@@ -38,58 +41,96 @@ static int same_name(const char *left, const char *right)
     return *left == *right;
 }
 
+static int unicode_property(wint_t wc, unsigned int property)
+{
+    return __mini_unicode_has((unsigned int)wc, property);
+}
+
 int iswalpha(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_ALPHA);
+    }
     return is_ascii(wc) && isalpha((int)wc);
 }
 
 int iswblank(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_BLANK);
+    }
     return is_ascii(wc) && isblank((int)wc);
 }
 
 int iswdigit(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_DIGIT);
+    }
     return is_ascii(wc) && isdigit((int)wc);
 }
 
 int iswalnum(wint_t wc)
 {
-    return iswalpha(wc) || iswdigit(wc);
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_ALPHA | MINI_UNICODE_DIGIT);
+    }
+    return is_ascii(wc) && isalnum((int)wc);
 }
 
 int iswcntrl(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_CNTRL);
+    }
     return is_ascii(wc) && iscntrl((int)wc);
 }
 
 int iswgraph(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_GRAPH);
+    }
     return is_ascii(wc) && isgraph((int)wc);
 }
 
 int iswlower(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_LOWER);
+    }
     return is_ascii(wc) && islower((int)wc);
 }
 
 int iswprint(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_PRINT);
+    }
     return is_ascii(wc) && isprint((int)wc);
 }
 
 int iswpunct(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_PUNCT);
+    }
     return is_ascii(wc) && ispunct((int)wc);
 }
 
 int iswspace(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_SPACE);
+    }
     return is_ascii(wc) && isspace((int)wc);
 }
 
 int iswupper(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return unicode_property(wc, MINI_UNICODE_UPPER);
+    }
     return is_ascii(wc) && isupper((int)wc);
 }
 
@@ -100,11 +141,17 @@ int iswxdigit(wint_t wc)
 
 wint_t towlower(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return (wint_t)__mini_unicode_tolower((unsigned int)wc);
+    }
     return is_ascii(wc) ? (wint_t)tolower((int)wc) : wc;
 }
 
 wint_t towupper(wint_t wc)
 {
+    if (__mini_locale_is_utf8()) {
+        return (wint_t)__mini_unicode_toupper((unsigned int)wc);
+    }
     return is_ascii(wc) ? (wint_t)toupper((int)wc) : wc;
 }
 
@@ -178,4 +225,3 @@ wint_t towctrans(wint_t wc, wctrans_t desc)
     }
     return wc;
 }
-
