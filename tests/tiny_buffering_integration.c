@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <wchar.h>
+#include <wctype.h>
 
 static int file_equals(const char *path, const char *expected, size_t length)
 {
@@ -108,6 +109,13 @@ int main(int argc, char **argv)
         (char)0xc2, (char)0xa2, (char)0xe2, (char)0x82, (char)0xac, ' ',
         (char)0xf0, (char)0x9f, (char)0x98, (char)0x80, 0
     };
+    static const wchar_t utf8_set_input[] = {
+        (wchar_t)0x00a2, (wchar_t)0x20ac, (wchar_t)0x4e2d, '!', 0
+    };
+    static const wchar_t utf8_set_format[] = {
+        '%', 'l', '[', (wchar_t)0x00a2, '-', (wchar_t)0x4e2d, ']',
+        '%', 'l', 'c', 0
+    };
     char full[4];
     char line[8];
     char standard[BUFSIZ];
@@ -116,6 +124,8 @@ int main(int argc, char **argv)
     char utf8_scan_narrow[8];
     wchar_t utf8_scan_wide[4] = {0};
     wchar_t utf8_scan_char = 0;
+    wchar_t utf8_set_wide[8] = {0};
+    wchar_t utf8_set_tail = 0;
     wchar_t wide_read[16] = {0};
     wchar_t wide_format[32] = {0};
     wchar_t wide_scan_text[4] = {0};
@@ -295,6 +305,18 @@ int main(int argc, char **argv)
         utf8_scan_wide[2] != 0 ||
         utf8_scan_char != (wchar_t)0x1f600) {
         return 25;
+    }
+
+    if (!iswalpha((wint_t)0x4e2d) || !iswalpha((wint_t)0x03b1) ||
+        towupper((wint_t)0x03c2) != (wint_t)0x03a3 ||
+        !iswspace((wint_t)0x3000) ||
+        tiny_vswscanf(utf8_set_input, utf8_set_format, utf8_set_wide,
+                      &utf8_set_tail) != 2 ||
+        utf8_set_wide[0] != (wchar_t)0x00a2 ||
+        utf8_set_wide[1] != (wchar_t)0x20ac ||
+        utf8_set_wide[2] != (wchar_t)0x4e2d ||
+        utf8_set_wide[3] != 0 || utf8_set_tail != (wchar_t)'!') {
+        return 28;
     }
 
     stream = tmpfile();
