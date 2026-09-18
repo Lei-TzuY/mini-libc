@@ -3,9 +3,9 @@
 mini-libc currently implements one deliberate locale: the ISO C `"C"` locale.
 The text runtime includes locale selection/querying, a single-byte C-locale
 multibyte model, restartable wide-character conversions, a basic wide-string
-core, oriented wide stream character/line I/O, and a bounded wide formatted
-output baseline without claiming a locale database, UTF-8 locale, or stateful
-encoding.
+core, oriented wide stream character/line I/O, and bounded wide formatted
+input/output baselines without claiming a locale database, UTF-8 locale, or
+stateful encoding.
 
 ## Public locale surface
 
@@ -173,9 +173,27 @@ unrepresentable wide value reports `EILSEQ`. `%ls` precision therefore bounds
 emitted bytes and never inspects a later wide element past that bound. A
 non-ASCII wide format character is rejected for the same C-locale reason.
 
-Wide formatted input remains a separate scanner integration surface; this phase
-does not introduce `fwscanf`, `vfwscanf`, `wscanf`, `vwscanf`, `swscanf`, or
-`vswscanf`.
+## Wide formatted input baseline
+
+`<wchar.h>` now exposes `fwscanf`/`vfwscanf`, `wscanf`/`vwscanf`, and
+`swscanf`/`vswscanf`. The implementation does not maintain a second scanner:
+wide FILE and wide-string sources feed the existing scanner parser, integer and
+floating conversion core, scanset machinery, matching/input-failure model, and
+public `va_list` argument cursor.
+
+Wide FILE scanning requires or establishes wide stream orientation and consumes
+characters through the existing buffered wide read/unget helpers. Wide-memory
+scanning advances a private `wchar_t` cursor and supports the same single
+lookahead rollback invariant. The C-locale format is validated as ASCII before
+dispatch; an unrepresentable format character reports `EILSEQ`.
+
+For character-sequence conversions, the source and destination width are
+independent. A byte source with `%ls`, `%lc`, or `%l[` converts through
+`mbrtowc`; a wide source with ordinary `%s`, `%c`, or `%[` converts
+through `wcrtomb`; an `l` destination from a wide source stores `wchar_t`
+directly. Invalid C-locale data reports `EILSEQ`. Field width, suppression,
+integer/floating conversions, scansets, and matching-versus-input-failure
+semantics remain those of the shared scanner rather than wrapper-specific rules.
 
 ## Executable evidence
 
@@ -195,7 +213,11 @@ wide character and line/string I/O, bounded/newline `fgetws`, `ungetwc`, EOF and
 wide paths, ordinary and `v*` wide formatted FILE/stdout output, bounded
 `swprintf`/`vswprintf`, truncation, invalid C-locale format/data, integer and
 floating formatter reuse, direct narrow `%ls`/`%lc`, wide-memory width/precision,
-and genuine wide-argument FILE round trips in a freestanding executable.
+genuine wide-argument FILE round trips, and wide formatted input through
+`fwscanf`/`vfwscanf`, `wscanf`/`vwscanf`, and `swscanf`/`vswscanf`. The scan
+coverage mixes integer, floating, narrow/wide string and character destinations,
+scansets, FILE/stdin/wide-memory sources, orientation checks, and `EILSEQ` in the
+same freestanding executable.
 
 `tests/locale_differential.c` runs the host libc under `setlocale(LC_ALL, "C")`
 and compares the directly comparable locale and legacy conversion behavior
@@ -208,10 +230,11 @@ The pinned tiny-c buffering integration directly executes `fputws` and `fgetws`
 on an oriented buffered `tmpfile`, mixes the result with the existing
 `fgetwc`/`ungetwc` coverage, and compiles and executes ordinary `swprintf` and
 `fwprintf` together with caller-owned-`va_list` `vswprintf` and `vfwprintf`.
-It now also passes genuine `wchar_t *` and wide character arguments through
-`%ls`/`%lc` in both bounded memory and wide-oriented FILE paths. The same binary
-is linked and executed through the pinned mini-elf-toolchain, so wide formatted
-argument parity retains the three-repo executable gate while GCC/Clang
+It also passes genuine `wchar_t *` and wide character arguments through
+`%ls`/`%lc`, then executes wide formatted input over FILE and memory sources
+through ordinary and public-`va_list` entry points. The same binary is linked
+and executed through the pinned mini-elf-toolchain, so both wide formatted
+output and input retain the three-repo executable gate while GCC/Clang
 freestanding probes cover the public behavior.
 
 ## Phase boundary and next frontier
@@ -221,14 +244,15 @@ claim. It does not implement UTF-8 decoding/encoding, stateful multibyte
 encodings, locale databases, per-thread locales, collation, locale-aware ctype,
 or non-C numeric/monetary formatting.
 
-Wide formatted output transport and genuine `%lc`/`%ls` argument conversion are
-now executable across FILE, stdout, bounded memory, ordinary variadics, and
-public `va_list` while sharing the existing formatter engine. The strongest next
-text-runtime frontier is **wide formatted input**. A coherent next slice should
-introduce `fwscanf`/`vfwscanf`/`wscanf`/`vwscanf` plus bounded-memory
-`swscanf`/`vswscanf` by adapting the existing scanner source/parser and wide
-conversion layer rather than building a second scanner. That phase must preserve
-stream orientation, buffered logical positioning, matching-vs-input-failure
-semantics, C-locale `EILSEQ`, field-width rules, and pinned
-GCC/Clang/tiny-c/mini-elf execution. UTF-8 or broader locale data remains a
-separate encoding milestone.
+Wide formatted output transport, genuine `%lc`/`%ls` argument conversion, and
+wide formatted input are now executable across FILE, stdin/stdout, bounded wide
+memory, ordinary variadics, and public `va_list` while sharing the existing
+formatter/scanner engines. This closes the current C-locale wide formatted-I/O
+parity milestone without introducing a parallel parser or descriptor path.
+
+The next text-runtime promotion should therefore move above wrapper parity:
+either broaden the encoding/locale model beyond the one-byte C locale, or extend
+a different stdio subsystem whose current live roadmap has higher architectural
+priority. UTF-8, broader locale data, collation, locale-aware ctype, and
+per-thread locale state remain separate encoding/internationalization
+milestones and must not be implied by this C-locale baseline.
