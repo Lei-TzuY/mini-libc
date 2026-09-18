@@ -32,7 +32,7 @@ int main(int argc, char **argv, char **envp)
     wchar_t wc = 999;
     wchar_t wide[8] = {9, 9, 9, 9, 9, 9, 9, 9};
     wchar_t copy[8] = {9, 9, 9, 9, 9, 9, 9, 9};
-    char bytes[8] = {'?', '?', '?', '?', '?', '?', '?', '?'};
+    char bytes[10] = {'?', '?', '?', '?', '?', '?', '?', '?', '?', '?'};
     const char *mbsrc;
     const wchar_t *wcsrc;
     size_t result;
