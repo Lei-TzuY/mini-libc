@@ -196,6 +196,54 @@ mini_sys_getpid:
     ret
     .size mini_sys_getpid, .-mini_sys_getpid
 
+    .globl mini_sys_getuid
+    .type mini_sys_getuid, @function
+mini_sys_getuid:
+    movl $102, %eax
+    syscall
+    ret
+    .size mini_sys_getuid, .-mini_sys_getuid
+
+    .globl mini_sys_getgid
+    .type mini_sys_getgid, @function
+mini_sys_getgid:
+    movl $104, %eax
+    syscall
+    ret
+    .size mini_sys_getgid, .-mini_sys_getgid
+
+    .globl mini_sys_setuid
+    .type mini_sys_setuid, @function
+mini_sys_setuid:
+    movl $105, %eax
+    syscall
+    ret
+    .size mini_sys_setuid, .-mini_sys_setuid
+
+    .globl mini_sys_setgid
+    .type mini_sys_setgid, @function
+mini_sys_setgid:
+    movl $106, %eax
+    syscall
+    ret
+    .size mini_sys_setgid, .-mini_sys_setgid
+
+    .globl mini_sys_geteuid
+    .type mini_sys_geteuid, @function
+mini_sys_geteuid:
+    movl $107, %eax
+    syscall
+    ret
+    .size mini_sys_geteuid, .-mini_sys_geteuid
+
+    .globl mini_sys_getegid
+    .type mini_sys_getegid, @function
+mini_sys_getegid:
+    movl $108, %eax
+    syscall
+    ret
+    .size mini_sys_getegid, .-mini_sys_getegid
+
     .globl mini_sys_kill
     .type mini_sys_kill, @function
 mini_sys_kill:
