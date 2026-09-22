@@ -14,6 +14,7 @@ char *strerror(int errnum)
     static char enotdir[] = "Not a directory";
     static char eisdir[] = "Is a directory";
     static char einval[] = "Invalid argument";
+    static char efbig[] = "File too large";
     static char epipe[] = "Broken pipe";
     static char edom[] = "Numerical argument out of domain";
     static char erange[] = "Numerical result out of range";
@@ -43,6 +44,8 @@ char *strerror(int errnum)
         return eisdir;
     case EINVAL:
         return einval;
+    case EFBIG:
+        return efbig;
     case EPIPE:
         return epipe;
     case EDOM:
