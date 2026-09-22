@@ -36,7 +36,7 @@ empty grouping/currency/sign strings, and `CHAR_MAX` for unavailable monetary
 placement/precision fields. The C.UTF-8 promotion changes character encoding,
 not numeric or monetary conventions.
 
-There is still no locale archive, public/per-thread locale object, collation
+There is still no locale archive, public `locale_t` object, collation
 database, or mutable locale-specific numeric/monetary data. Environment lookup
 is allocation-free and reuses the startup-backed `getenv` state; it does not
 implicitly apply a locale until `setlocale(category, "")` is called.
@@ -44,10 +44,18 @@ implicitly apply a locale until `setlocale(category, "")` is called.
 Internally, locale ownership is no longer tied to the process-global object.
 `mini_locale_state` has reentrant init/copy/query/apply helpers, and apply
 validates into a candidate state before committing it. The public
-`setlocale` path is now a thin wrapper over those helpers plus environment
-resolution. This boundary allows an isolated state to select C.UTF-8 and drive
-the existing explicit-mode multibyte conversion core without changing the
-process locale.
+`setlocale` path remains process-global. Locale-sensitive conversion and wide
+classification now consult an active-state provider: freestanding thread
+runtime binds that provider to the current TCB, while hosted differential tests
+retain the process-global fallback.
+
+Each TCB owns an optional locale override value. A thread with no override
+continues to observe the process-global locale; a thread with an override uses
+its private state for `MB_CUR_MAX`, multibyte conversion, formatted text
+encoding, and wide classification/case behavior. `thrd_create` copies a
+parent override into the child, but a parent using the global locale creates a
+child that also follows the global locale. Clearing an override returns that
+thread to global tracking without changing process state.
 
 ## Unicode 15.1 wide classification and simple case mapping
 
@@ -207,6 +215,11 @@ and `EILSEQ` failures. `tests/locale_state_probe.c` separately proves the
 reentrant internal boundary: independent C and C.UTF-8 states, copy/query/apply,
 transactional failure, isolated UTF-8 decode/encode through the existing
 restartable conversion core, and unchanged process-global C behavior.
+`tests/thread_locale_probe.c` exercises the TCB adoption layer with real C11
+threads: override inheritance, child clear-to-global behavior, global-mode
+children, UTF-8 conversion, Unicode classification, and unchanged parent state.
+The same probe is compiled by pinned tiny-c-compiler and linked/executed through
+both GNU ld and mini-elf-toolchain.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -261,17 +274,18 @@ mapping, locale-sensitive numeric/monetary data, stateful encoding, or
 per-thread locale object.
 
 Environment-driven selection, explicit per-category ownership, composite
-`LC_ALL` query/restore, and reentrant locale-state operations are now part of
-the executable baseline. A C.UTF-8 `LC_CTYPE` no longer causes `LC_ALL` to
-misreport unsupported numeric/time/collation/monetary data, and an isolated
-locale state can drive C.UTF-8 conversion without mutating the process locale.
-An already wide-oriented FILE still retains its orientation-time encoding across
-later process-locale changes.
+`LC_ALL` query/restore, reentrant locale-state operations, and TCB-backed
+thread-local locale adoption are now part of the executable baseline. A
+C.UTF-8 override can remain private to one thread and is inherited by children;
+threads without overrides continue to follow process-global `setlocale`.
+Locale-sensitive conversion and Unicode wide classification use the same active
+state, while already oriented FILE objects still retain their orientation-time
+encoding.
 
-The next coherent locale promotion is **thread-local locale adoption over the
-existing TLS runtime**, not a second locale parser. That phase should give each
-thread an optional active locale-state reference/value, make locale-sensitive
-conversion/classification consult it, and define inheritance/lifetime behavior
-before any public `locale_t`/POSIX API is exposed. Collation and
+The next coherent locale promotion is **a bounded public locale-object lifecycle
+over this proven runtime**, not a second state machine. That phase may introduce
+a small `locale_t` / `newlocale` / `duplocale` / `freelocale` /
+`uselocale` subset only after ownership, global-locale sentinel behavior,
+copy/lifetime rules, and thread adoption are executable. Collation and
 locale-sensitive numeric/monetary data remain outside the contract until they
-have real implementation and executable evidence.
+have real implementation and evidence.
