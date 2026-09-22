@@ -30,6 +30,8 @@ long mini_sys_nanosleep(const void *request, void *remaining);
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,
                            unsigned long sigsetsize);
 long mini_sys_getpid(void);
+long mini_sys_getppid(void);
+long mini_sys_kill(int pid, int sig);
 long mini_sys_arch_prctl(int code, unsigned long address);
 long mini_sys_gettid(void);
 long mini_sys_futex(volatile int *uaddr, int op, int value,

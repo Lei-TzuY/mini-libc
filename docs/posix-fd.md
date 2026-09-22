@@ -230,6 +230,22 @@ multithreaded child to stay on async-signal-safe operations until `execve`;
 `posix_spawn()` makes that discipline an implementation invariant instead of
 leaving it to the caller.
 
+`getpid`, `getppid`, and `kill` add an explicit process-identity and
+control layer on top of the existing fork/wait runtime. Successful identity
+queries and signal delivery preserve caller `errno`; failed `kill` translates
+the raw kernel error and exposes `ESRCH`. `<sys/wait.h>` now distinguishes
+normal exits from signal termination through `WIFSIGNALED` and `WTERMSIG`.
+
+`tests/process_control_probe.c` uses two pipes to avoid scheduling guesses.
+The child reports `{getpid(), getppid()}` to the parent and then blocks on a
+control pipe whose writer remains open. The parent proves the reported child
+pid matches the `fork` result and the child's parent pid matches the parent's
+own `getpid`, checks liveness with `kill(pid, 0)`, sends `SIGTERM`, and reaps
+the exact child. The resulting wait status must be signal-terminated rather
+than normally exited, with `WTERMSIG(status) == SIGTERM`. A Linux-impossible
+pid value also locks the `ESRCH` boundary. The same executable runs through
+pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -241,10 +257,10 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, filesystem namespace state, pipe IPC, deterministic `poll`,
-fork/wait, explicit `execve`, and bounded multithread-safe `posix_spawn`
-launch now form one executable Unix process baseline. The next promotion
-should move to a genuinely new process capability—such as process identity/
-signaling or an explicit atfork architecture—rather than grow spawn/exec name
-variants without new behavior. Arbitrary post-fork libc use in a multithreaded
-child remains outside the supported contract.
+Descriptor I/O, filesystem namespace state, IPC/readiness, fork/wait,
+`execve`, multithread-safe `posix_spawn`, and explicit process identity/signal
+termination now form one executable Unix process baseline. The next promotion
+should add a genuinely new topology/control capability—such as process-group
+membership and group signaling, or a separately justified atfork architecture—
+rather than farm more single-process signal wrappers. Arbitrary post-fork libc
+use in a multithreaded child remains outside the supported contract.

@@ -1,8 +1,32 @@
 #include <errno.h>
 #include <mini/syscall.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+pid_t getpid(void)
+{
+    return (pid_t)mini_sys_getpid();
+}
+
+pid_t getppid(void)
+{
+    return (pid_t)mini_sys_getppid();
+}
+
+int kill(pid_t pid, int sig)
+{
+    int saved_errno = errno;
+    long result = mini_sys_kill((int)pid, sig);
+
+    if (result < 0L) {
+        errno = (int)-result;
+        return -1;
+    }
+    errno = saved_errno;
+    return 0;
+}
 
 pid_t fork(void)
 {

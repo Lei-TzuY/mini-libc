@@ -57,6 +57,8 @@ done
     -o "$OUT/spawn-child.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_spawn_probe.c \
     -o "$OUT/posix-spawn.o"
+"$MINICC" -nostdinc -Iinclude -c tests/process_control_probe.c \
+    -o "$OUT/process-control.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -119,6 +121,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/spawn-child.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-spawn" \
         "$OUT/posix-spawn.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/process-control" \
+        "$OUT/process-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -181,6 +185,8 @@ else
         "$OUT/spawn-child.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-spawn" \
         "$OUT/posix-spawn.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/process-control" \
+        "$OUT/process-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -342,6 +348,12 @@ fi
 spawn_output=$("$OUT/posix-spawn" "$OUT/spawn-child")
 if [ "$spawn_output" != "posix-spawn-ok" ]; then
     echo "unexpected tiny-c posix spawn output: $spawn_output" >&2
+    exit 1
+fi
+
+control_output=$("$OUT/process-control")
+if [ "$control_output" != "process-control-ok" ]; then
+    echo "unexpected tiny-c process control output: $control_output" >&2
     exit 1
 fi
 
@@ -546,6 +558,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/exec-transition"
 ./tests/verify-no-host-libc.sh "$OUT/spawn-child"
 ./tests/verify-no-host-libc.sh "$OUT/posix-spawn"
+./tests/verify-no-host-libc.sh "$OUT/process-control"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"

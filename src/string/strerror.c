@@ -4,6 +4,7 @@
 char *strerror(int errnum)
 {
     static char enoent[] = "No such file or directory";
+    static char esrch[] = "No such process";
     static char eio[] = "Input/output error";
     static char echild[] = "No child processes";
     static char eagain[] = "Resource temporarily unavailable";
@@ -21,6 +22,8 @@ char *strerror(int errnum)
     switch (errnum) {
     case ENOENT:
         return enoent;
+    case ESRCH:
+        return esrch;
     case EIO:
         return eio;
     case ECHILD:
