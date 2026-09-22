@@ -3,8 +3,8 @@ CONDITION_RENAMES := -Dmini_sys_futex=mini_test_futex \
                      -Dmtx_unlock=mini_test_mtx_unlock
 SLEEP_RENAMES := -Dmini_sys_nanosleep=mini_test_nanosleep
 
-$(LIBC): $(BUILD)/condition.o $(BUILD)/mutex.o $(BUILD)/sleep.o $(BUILD)/yield.o $(BUILD)/once.o $(BUILD)/tss.o $(BUILD)/tls.o $(BUILD)/thread_runtime.o $(BUILD)/lifecycle.o $(BUILD)/thread_entry.o
-all: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe $(BUILD)/condition_test $(BUILD)/mutex_test $(BUILD)/once_tss_test $(BUILD)/tls_test
+$(LIBC): $(BUILD)/condition.o $(BUILD)/mutex.o $(BUILD)/sleep.o $(BUILD)/yield.o $(BUILD)/once.o $(BUILD)/tss.o $(BUILD)/tls.o $(BUILD)/thread_runtime.o $(BUILD)/thread_locale.o $(BUILD)/lifecycle.o $(BUILD)/thread_entry.o
+all: $(BUILD)/thread_probe $(BUILD)/thread_locale_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe $(BUILD)/condition_test $(BUILD)/mutex_test $(BUILD)/once_tss_test $(BUILD)/tls_test
 inspect: thread_inspect
 test: thread_test_run
 
@@ -31,7 +31,10 @@ $(BUILD)/tss.o: src/thread/tss.c src/internal/thread_runtime.h include/threads.h
 $(BUILD)/tls.o: src/thread/tls.c src/internal/thread_runtime.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/thread_runtime.o: src/thread/runtime.c src/internal/thread_runtime.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/thread_runtime.o: src/thread/runtime.c src/internal/thread_runtime.h src/locale/locale_internal.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/thread_locale.o: src/locale/thread_locale.c src/locale/locale_internal.h src/internal/thread_runtime.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/lifecycle.o: src/thread/lifecycle.c src/internal/thread_runtime.h include/threads.h include/mini/syscall.h | $(BUILD)
@@ -45,6 +48,12 @@ $(BUILD)/thread_probe.o: tests/thread_probe.c include/threads.h include/stdatomi
 
 $(BUILD)/thread_probe: $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/thread_locale_probe.o: tests/thread_locale_probe.c include/threads.h include/locale.h include/stdlib.h include/wchar.h include/wctype.h include/errno.h include/mini/syscall.h src/locale/locale_internal.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/thread_locale_probe: $(BUILD)/thread_locale_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/thread_locale_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/thread_exit_group_probe.o: tests/thread_exit_group_probe.c include/threads.h include/stdatomic.h include/stdlib.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
@@ -121,8 +130,9 @@ $(BUILD)/tls_test.o: tests/tls_test.c src/internal/thread_runtime.h | $(BUILD)
 $(BUILD)/tls_test: $(BUILD)/tls_test.o $(BUILD)/tls.o
 	$(CC) $(HOST_LDFLAGS) -o $@ $^
 
-thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe $(BUILD)/condition_test $(BUILD)/mutex_test $(BUILD)/once_tss_test $(BUILD)/tls_test
+thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_locale_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe $(BUILD)/condition_test $(BUILD)/mutex_test $(BUILD)/once_tss_test $(BUILD)/tls_test
 	@test "$$($(BUILD)/thread_probe)" = "threads-ok"
+	@test "$$($(BUILD)/thread_locale_probe)" = "thread-locale-ok"
 	@output="$$($(BUILD)/thread_exit_group_probe)"; status=$$?; \
 		test "$$status" -eq 37 && test -z "$$output"
 	@test "$$($(BUILD)/condition_probe)" = "conditions-ok"
@@ -135,7 +145,7 @@ thread_test_run: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)
 	@$(BUILD)/once_tss_test
 	@$(BUILD)/tls_test
 
-thread_inspect: $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe
-	./tests/verify-no-host-libc.sh $(BUILD)/thread_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe
+thread_inspect: $(BUILD)/thread_probe $(BUILD)/thread_locale_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/thread_probe $(BUILD)/thread_locale_probe $(BUILD)/thread_exit_group_probe $(BUILD)/condition_probe $(BUILD)/mutex_probe $(BUILD)/once_tss_probe $(BUILD)/tls_probe $(BUILD)/atomic_probe
 
 include mk/stdio-sync.mk
