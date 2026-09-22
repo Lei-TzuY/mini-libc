@@ -25,6 +25,8 @@ int __mini_locale_state_apply_name(struct mini_locale_state *state,
                                    int category, const char *locale);
 int __mini_locale_state_is_utf8(const struct mini_locale_state *state);
 size_t __mini_locale_state_mb_cur_max(const struct mini_locale_state *state);
+int __mini_locale_object_copy_state(locale_t handle,
+                                    struct mini_locale_state *state);
 struct mini_locale_state *__mini_locale_process_state(void);
 struct mini_locale_state *__mini_locale_current_state(void);
 void __mini_locale_set_state_provider(mini_locale_state_provider_t provider);
