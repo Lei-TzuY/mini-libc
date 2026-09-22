@@ -33,6 +33,8 @@ pid_t getpgid(pid_t pid);
 int setpgid(pid_t pid, pid_t pgid);
 pid_t getsid(pid_t pid);
 pid_t setsid(void);
+pid_t tcgetpgrp(int fd);
+int tcsetpgrp(int fd, pid_t pgrp);
 pid_t fork(void);
 pid_t _Fork(void);
 int execve(const char *path, char *const argv[], char *const envp[]);
