@@ -14,6 +14,7 @@
 long mini_sys_read(int fd, void *buf, unsigned long count);
 long mini_sys_write(int fd, const void *buf, unsigned long count);
 long mini_sys_close(int fd);
+long mini_sys_fstat(int fd, void *statbuf);
 long mini_sys_lseek(int fd, long offset, int whence);
 long mini_sys_sched_yield(void);
 long mini_sys_nanosleep(const void *request, void *remaining);
@@ -25,7 +26,9 @@ long mini_sys_gettid(void);
 long mini_sys_futex(volatile int *uaddr, int op, int value,
                     const void *timeout, volatile int *uaddr2, int value3);
 long mini_sys_tgkill(int tgid, int tid, int sig);
+long mini_sys_ftruncate(int fd, long length);
 long mini_sys_openat(int dirfd, const char *path, int flags, unsigned int mode);
+long mini_sys_newfstatat(int dirfd, const char *path, void *statbuf, int flags);
 long mini_sys_unlinkat(int dirfd, const char *path, int flags);
 long mini_sys_renameat(int olddirfd, const char *oldpath,
                        int newdirfd, const char *newpath);
