@@ -84,9 +84,14 @@ without changing process state.
 ## Unicode 15.1 wide classification and simple case mapping
 
 `<wctype.h>` exposes the ISO C wide classification, descriptor, and case
-transformation surface. In the `"C"` locale it deliberately retains the
-ASCII-only contract. Under `"C.UTF-8"`, the same APIs switch to a generated
-Unicode Character Database 15.1.0 substrate pinned to
+transformation surface plus the POSIX explicit-locale variants
+`isw*_l`, `wctype_l`/`iswctype_l`, `wctrans_l`/`towctrans_l`, and
+`towlower_l`/`towupper_l`. Ordinary calls use the calling thread's active
+locale state; the `_l` family snapshots the supplied registered `locale_t` and
+does not modify or depend on the calling thread locale. In the `"C"` locale the
+shared core deliberately retains the ASCII-only contract. Under `"C.UTF-8"`,
+the same core switches to a generated Unicode Character Database 15.1.0
+substrate pinned to
 `unicode-org/unicodetools@1882e4cca24a298184d685e6a3820428749d050d`.
 
 The generated table uses `UnicodeData.txt` general categories plus
@@ -246,8 +251,13 @@ object installation, UTF-8 conversion, Unicode classification, and unchanged
 parent state. `tests/newlocale_probe.c` separately exercises category masks,
 C/POSIX aliases, C.UTF-8 CTYPE construction, zero-mask/default-C creation,
 existing-base mutation, transactional rollback, invalid masks/handles, and
-isolated environment-driven empty-name construction. Both paths are compiled by
-pinned tiny-c-compiler and linked/executed through GNU ld and mini-elf-toolchain.
+isolated environment-driven empty-name construction. `tests/wctype_locale_probe.c`
+then proves explicit-object CTYPE consumption without thread switching: C and
+C.UTF-8 objects can disagree with the calling thread while direct
+classification, descriptors, simple case conversion, and transformation
+descriptors continue to use the supplied object. All three paths are compiled
+by pinned tiny-c-compiler and linked/executed through GNU ld and
+mini-elf-toolchain.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -303,17 +313,18 @@ per-thread locale object.
 
 Environment-driven selection, explicit per-category ownership, composite
 `LC_ALL` query/restore, reentrant locale-state operations, TCB-backed
-thread-local adoption, public object lifecycle, and transactional
-`newlocale` category-mask construction are now part of the executable baseline.
-Object-backed overrides remain private to the calling thread; new threads start
-against the process-global locale; switching to `LC_GLOBAL_LOCALE` resumes
-tracking later global changes. Locale-sensitive conversion and Unicode wide
-classification use the same active state, while already oriented FILE objects
-retain their orientation-time encoding.
+thread-local adoption, public object lifecycle, transactional `newlocale`
+construction, and explicit-locale wide CTYPE consumers are now part of the
+executable baseline. Object-backed overrides remain private to the calling
+thread; direct `isw*_l`/case/descriptor calls can instead consume a locale
+object without installing it. Both paths share the same Unicode 15.1 substrate,
+while already oriented FILE objects retain their orientation-time encoding.
 
-The next coherent promotion is **explicit locale-object CTYPE consumers**, not a
-broader locale database. That phase should let callers use a `locale_t`
-directly for the already implemented wide classification/simple-case surface
-without first mutating thread state, while preserving object validity and
-Unicode 15.1 behavior. Collation and locale-sensitive numeric/monetary data
-remain outside the contract until they have real implementation and evidence.
+The next coherent promotion is **narrow CTYPE explicit-locale parity and phase
+closure**, not low-value expansion of Unicode corner cases. That slice should
+route the POSIX `is*_l`/`tolower_l`/`toupper_l` byte-classification surface
+through explicit locale objects, verify that UTF-8 continuation bytes do not
+become standalone characters, and then audit whether the locale subsystem is
+mature enough to promote to a different libc frontier. Collation and
+locale-sensitive numeric/monetary data remain outside the contract until they
+have real implementation and evidence.

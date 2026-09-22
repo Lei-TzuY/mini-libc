@@ -24,8 +24,8 @@ static void locale_object_unlock(void)
     mini_futex_lock_release(&mini_locale_object_lock_word);
 }
 
-static int copy_registered_state(locale_t handle,
-                                 struct mini_locale_state *state)
+int __mini_locale_object_copy_state(locale_t handle,
+                                    struct mini_locale_state *state)
 {
     struct mini_locale_object *cursor;
     int found = 0;
@@ -125,7 +125,7 @@ locale_t newlocale(int category_mask, const char *locale, locale_t base)
 
     if (base == (locale_t)0) {
         __mini_locale_state_init(&candidate);
-    } else if (!copy_registered_state(base, &candidate)) {
+    } else if (!__mini_locale_object_copy_state(base, &candidate)) {
         errno = EINVAL;
         return (locale_t)0;
     }
@@ -160,7 +160,7 @@ locale_t duplocale(locale_t locobj)
 
     if (locobj == LC_GLOBAL_LOCALE) {
         __mini_locale_state_copy(&snapshot, __mini_locale_process_state());
-    } else if (!copy_registered_state(locobj, &snapshot)) {
+    } else if (!__mini_locale_object_copy_state(locobj, &snapshot)) {
         errno = EINVAL;
         return (locale_t)0;
     }
@@ -220,7 +220,7 @@ locale_t uselocale(locale_t newloc)
         return previous;
     }
 
-    if (!copy_registered_state(newloc, &snapshot) ||
+    if (!__mini_locale_object_copy_state(newloc, &snapshot) ||
         !__mini_locale_thread_install(newloc, &snapshot)) {
         errno = EINVAL;
         return (locale_t)0;
