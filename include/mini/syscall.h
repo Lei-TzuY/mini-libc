@@ -23,6 +23,7 @@ long mini_sys_getcwd(char *buf, unsigned long size);
 long mini_sys_chdir(const char *path);
 long mini_sys_fchdir(int fd);
 long mini_sys_fork(void);
+long mini_sys_execve(const char *path, char *const argv[], char *const envp[]);
 long mini_sys_wait4(int pid, int *status, int options, void *rusage);
 long mini_sys_sched_yield(void);
 long mini_sys_nanosleep(const void *request, void *remaining);

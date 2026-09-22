@@ -25,3 +25,11 @@ pid_t waitpid(pid_t pid, int *status, int options)
     }
     return (pid_t)result;
 }
+
+int execve(const char *path, char *const argv[], char *const envp[])
+{
+    long result = mini_sys_execve(path, argv, envp);
+
+    errno = (int)-result;
+    return -1;
+}

@@ -21,6 +21,7 @@ int fchdir(int fd);
 int pipe(int pipefd[2]);
 int pipe2(int pipefd[2], int flags);
 pid_t fork(void);
+int execve(const char *path, char *const argv[], char *const envp[]);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 off_t lseek(int fd, off_t offset, int whence);

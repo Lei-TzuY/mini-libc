@@ -192,6 +192,18 @@ fork time. Until that architecture is addressed, the public fork contract in
 this phase is the single-threaded process-orchestration baseline exercised by
 the probe.
 
+`tests/exec_transition_probe.c` closes the program-launch loop. The parent
+creates a close-on-exec pipe and forks. The child duplicates the write end onto
+`STDOUT_FILENO`, duplicates it again onto fixed descriptor 100, marks only fd
+100 `FD_CLOEXEC`, then calls `execve` on a separately linked mini-libc child
+image with explicit argv and envp. The new image re-enters through crt0/start,
+validates its arguments and `getenv` state, proves fd 100 was closed with
+`EBADF`, and writes through the inherited stdout descriptor before returning
+exit status 37. The parent uses `poll`, `read`, and `waitpid` to validate the
+new-image output and exact exit status. A missing-image `execve` failure also
+locks `ENOENT`. Both the parent and child images are built and exercised
+through GCC/Clang, pinned tiny-c-compiler, GNU ld, and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -203,10 +215,10 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, filesystem namespace state, pipe IPC, deterministic `poll`
-readiness, and single-threaded fork/wait orchestration now form one executable
-Unix runtime baseline. The next coherent promotion is **exec transition**:
-`execve` plus inheritance/close-on-exec evidence that turns the current
-fork+pipe+poll+wait pieces into a true parent/child program-launch pipeline.
-Multithreaded fork repair should remain a separate architecture phase rather
-than being implied by the single-threaded baseline.
+Descriptor I/O, filesystem namespace state, pipe IPC, deterministic `poll`,
+single-threaded fork/wait, and `execve` image replacement now form one
+executable Unix process-launch baseline. This launch phase is closed: further
+work should move to a higher-level process architecture such as a bounded
+`posix_spawn` path or explicit multithreaded fork/atfork lock repair, chosen by
+a fresh architecture audit rather than by adding exec-name variants. The
+single-threaded fork safety boundary remains in force until such repair exists.
