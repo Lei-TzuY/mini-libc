@@ -57,7 +57,7 @@ int main(void)
         return 6;
     }
 
-    if (write(1, "tiny-locale-state-ok\n", 21U) != 21) {
+    if (mini_sys_write(1, "tiny-locale-state-ok\n", 21U) != 21L) {
         return 7;
     }
     return 0;
