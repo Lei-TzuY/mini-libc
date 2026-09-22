@@ -30,6 +30,8 @@ FILE *freopen(const char *restrict filename, const char *restrict mode,
 FILE *tmpfile(void);
 int remove(const char *filename);
 int rename(const char *oldname, const char *newname);
+int renameat(int olddirfd, const char *oldpath,
+             int newdirfd, const char *newpath);
 int fclose(FILE *stream);
 int fflush(FILE *stream);
 int setvbuf(FILE *restrict stream, char *restrict buf, int mode, size_t size);
