@@ -59,6 +59,32 @@ int setpgid(pid_t pid, pid_t pgid)
     return 0;
 }
 
+pid_t getsid(pid_t pid)
+{
+    int saved_errno = errno;
+    long result = mini_sys_getsid((int)pid);
+
+    if (result < 0L) {
+        errno = (int)-result;
+        return (pid_t)-1;
+    }
+    errno = saved_errno;
+    return (pid_t)result;
+}
+
+pid_t setsid(void)
+{
+    int saved_errno = errno;
+    long result = mini_sys_setsid();
+
+    if (result < 0L) {
+        errno = (int)-result;
+        return (pid_t)-1;
+    }
+    errno = saved_errno;
+    return (pid_t)result;
+}
+
 pid_t fork(void)
 {
     long result = mini_sys_fork();

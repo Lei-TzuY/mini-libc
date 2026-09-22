@@ -3,6 +3,7 @@
 
 char *strerror(int errnum)
 {
+    static char eperm[] = "Operation not permitted";
     static char enoent[] = "No such file or directory";
     static char esrch[] = "No such process";
     static char eio[] = "Input/output error";
@@ -20,6 +21,8 @@ char *strerror(int errnum)
     static char unknown[] = "Unknown error";
 
     switch (errnum) {
+    case EPERM:
+        return eperm;
     case ENOENT:
         return enoent;
     case ESRCH:

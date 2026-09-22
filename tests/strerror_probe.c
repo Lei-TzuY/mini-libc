@@ -33,7 +33,8 @@ int main(int argc, char **argv, char **envp)
         errno != ERANGE) {
         return 1;
     }
-    if (!same_string(strerror(ENOENT), "No such file or directory") ||
+    if (!same_string(strerror(EPERM), "Operation not permitted") ||
+        !same_string(strerror(ENOENT), "No such file or directory") ||
         !same_string(strerror(ESRCH), "No such process") ||
         !same_string(strerror(ECHILD), "No child processes") ||
         !same_string(strerror(EAGAIN), "Resource temporarily unavailable") ||

@@ -228,6 +228,22 @@ mini_sys_getpgid:
     ret
     .size mini_sys_getpgid, .-mini_sys_getpgid
 
+    .globl mini_sys_setsid
+    .type mini_sys_setsid, @function
+mini_sys_setsid:
+    movl $112, %eax
+    syscall
+    ret
+    .size mini_sys_setsid, .-mini_sys_setsid
+
+    .globl mini_sys_getsid
+    .type mini_sys_getsid, @function
+mini_sys_getsid:
+    movl $124, %eax
+    syscall
+    ret
+    .size mini_sys_getsid, .-mini_sys_getsid
+
     .globl mini_sys_arch_prctl
     .type mini_sys_arch_prctl, @function
 mini_sys_arch_prctl:

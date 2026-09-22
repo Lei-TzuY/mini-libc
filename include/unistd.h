@@ -25,6 +25,8 @@ pid_t getppid(void);
 pid_t getpgrp(void);
 pid_t getpgid(pid_t pid);
 int setpgid(pid_t pid, pid_t pgid);
+pid_t getsid(pid_t pid);
+pid_t setsid(void);
 pid_t fork(void);
 int execve(const char *path, char *const argv[], char *const envp[]);
 int dup(int oldfd);

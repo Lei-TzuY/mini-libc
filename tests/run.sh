@@ -165,6 +165,12 @@ if [ "$group_output" != "process-group-ok" ]; then
     exit 1
 fi
 
+session_output="$(./build/session_hierarchy_probe)"
+if [ "$session_output" != "session-hierarchy-ok" ]; then
+    echo "unexpected session hierarchy output: $session_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
