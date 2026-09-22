@@ -5,11 +5,13 @@ char *strerror(int errnum)
 {
     static char enoent[] = "No such file or directory";
     static char eio[] = "Input/output error";
+    static char eagain[] = "Resource temporarily unavailable";
     static char enomem[] = "Cannot allocate memory";
     static char eexist[] = "File exists";
     static char enotdir[] = "Not a directory";
     static char eisdir[] = "Is a directory";
     static char einval[] = "Invalid argument";
+    static char epipe[] = "Broken pipe";
     static char edom[] = "Numerical argument out of domain";
     static char erange[] = "Numerical result out of range";
     static char eilseq[] = "Invalid or incomplete multibyte or wide character";
@@ -20,6 +22,8 @@ char *strerror(int errnum)
         return enoent;
     case EIO:
         return eio;
+    case EAGAIN:
+        return eagain;
     case ENOMEM:
         return enomem;
     case EEXIST:
@@ -30,6 +34,8 @@ char *strerror(int errnum)
         return eisdir;
     case EINVAL:
         return einval;
+    case EPIPE:
+        return epipe;
     case EDOM:
         return edom;
     case ERANGE:
