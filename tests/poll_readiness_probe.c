@@ -10,6 +10,11 @@ static int has(short value, short bits)
     return (value & bits) == bits;
 }
 
+static int has_any(short value, short bits)
+{
+    return (value & bits) != 0;
+}
+
 int main(void)
 {
     static const char ok[] = "poll-readiness-ok\n";
@@ -48,7 +53,7 @@ int main(void)
     result = poll(fds, 1U, 0);
     if (result != 1 || errno != ERANGE ||
         !has(fds[0].revents, POLLOUT) ||
-        has(fds[0].revents, POLLERR | POLLHUP | POLLNVAL)) {
+        has_any(fds[0].revents, POLLERR | POLLHUP | POLLNVAL)) {
         close(pipefd[0]);
         close(pipefd[1]);
         return 4;
@@ -88,7 +93,7 @@ int main(void)
     result = poll(fds, 1U, 0);
     if (result != 1 || errno != ERANGE ||
         !has(fds[0].revents, POLLIN) ||
-        has(fds[0].revents, POLLNVAL)) {
+        has_any(fds[0].revents, POLLNVAL)) {
         close(pipefd[0]);
         close(pipefd[1]);
         return 7;
@@ -107,7 +112,7 @@ int main(void)
     result = poll(fds, 1U, 0);
     if (result != 1 || errno != ERANGE ||
         !has(fds[0].revents, POLLIN | POLLHUP) ||
-        has(fds[0].revents, POLLNVAL)) {
+        has_any(fds[0].revents, POLLNVAL)) {
         close(pipefd[0]);
         return 9;
     }
@@ -126,7 +131,7 @@ int main(void)
     result = poll(fds, 1U, 0);
     if (result != 1 || errno != ERANGE ||
         !has(fds[0].revents, POLLHUP) ||
-        has(fds[0].revents, POLLIN | POLLNVAL)) {
+        has_any(fds[0].revents, POLLIN | POLLNVAL)) {
         close(pipefd[0]);
         return 11;
     }
