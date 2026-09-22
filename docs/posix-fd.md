@@ -364,6 +364,25 @@ read by the original parent. No host terminal, shell job-control state, or
 sleep-based timing assumptions are required. The same executable runs through
 pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
 
+`<termios.h>` adds a bounded Linux x86-64 line-discipline surface with the
+native 19-control-character `struct termios`, `tcgetattr`, `tcsetattr`, the
+`TCSANOW`/`TCSADRAIN`/`TCSAFLUSH` action selectors, and the canonical-mode
+flags/control characters needed by this phase. The runtime maps those actions
+to `TCGETS`/`TCSETS`/`TCSETSW`/`TCSETSF` over the existing raw `ioctl`
+boundary. Successful attribute queries/updates preserve caller `errno`,
+invalid action selectors fail with `EINVAL`, and non-terminal descriptors
+surface `ENOTTY`.
+
+`tests/termios_canonical_probe.c` reuses a self-contained PTY pair to prove
+real line-discipline behavior. The slave is forced into canonical mode with
+echo disabled; after the master writes `abc` without a newline, a zero-timeout
+`poll` on the slave must report no readable data. Writing the newline then
+makes the slave readable and one read returns exactly `abc\\n`. The probe
+switches the same slave to noncanonical mode with `VMIN=1`/`VTIME=0`, writes a
+single byte without a newline, and proves it becomes immediately readable.
+The original terminal state is restored before teardown. The same executable
+runs through pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -377,11 +396,12 @@ tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
 targeted/group signaling, process groups, sessions, bounded atfork
-coordination, resource enforcement, credentials, and deterministic PTY-backed
-foreground job control now form one executable Unix process-control baseline.
-The controlling-terminal phase is closed at real session/foreground-group/data
-path behavior rather than ioctl breadth. The next promotion should move into a
-new terminal behavior plane—most naturally bounded termios/line-discipline
-state with executable signal or canonical-I/O evidence—rather than add more tty
-ioctl names without new behavior. The async-signal-safe child boundary remains
-explicit after multithreaded fork.
+coordination, resource enforcement, credentials, PTY job control, and
+canonical/noncanonical termios behavior now form one executable Unix
+process-and-terminal baseline. The line-discipline phase is closed at real
+delivery semantics rather than flag breadth. The next promotion should add a
+genuinely new terminal behavior—most naturally signal-generating control
+characters such as `VINTR`/`VSUSP`, with deterministic PTY-backed process-group
+evidence—rather than expand speed/flow-control constants without an executable
+use case. The async-signal-safe child boundary remains explicit after
+multithreaded fork.
