@@ -69,6 +69,11 @@ static int same_string(const char *left, const char *right)
     return *left == *right;
 }
 
+static int c_name(const char *locale)
+{
+    return same_string(locale, "C") || same_string(locale, "POSIX");
+}
+
 static int utf8_name(const char *locale)
 {
     return same_string(locale, "C.UTF-8") || same_string(locale, "C.utf8");
@@ -201,7 +206,7 @@ static int apply_category_unchecked(struct mini_locale_state *state,
         return 0;
     }
 
-    if (same_string(locale, "C")) {
+    if (c_name(locale)) {
         state->category[category] = MINI_LOCALE_MODE_C;
         return 1;
     }
@@ -217,7 +222,7 @@ static int apply_category_unchecked(struct mini_locale_state *state,
 static int apply_lc_all_unchecked(struct mini_locale_state *state,
                                   const char *locale)
 {
-    if (same_string(locale, "C")) {
+    if (c_name(locale)) {
         __mini_locale_state_init(state);
         return 1;
     }
@@ -254,6 +259,20 @@ int __mini_locale_state_apply(struct mini_locale_state *state, int category,
 
     __mini_locale_state_copy(state, &candidate);
     return 1;
+}
+
+int __mini_locale_state_apply_name(struct mini_locale_state *state,
+                                   int category, const char *locale)
+{
+    const char *selected;
+
+    if (state == (struct mini_locale_state *)0 ||
+        locale == (const char *)0 || !valid_category(category)) {
+        return 0;
+    }
+
+    selected = *locale == '\0' ? environment_locale(category) : locale;
+    return __mini_locale_state_apply(state, category, selected);
 }
 
 int __mini_locale_state_is_utf8(const struct mini_locale_state *state)
@@ -302,8 +321,6 @@ size_t __mini_mb_cur_max(void)
 
 char *setlocale(int category, const char *locale)
 {
-    const char *selected;
-
     if (!valid_category(category)) {
         return (char *)0;
     }
@@ -312,8 +329,8 @@ char *setlocale(int category, const char *locale)
         return (char *)__mini_locale_state_query(&mini_process_locale, category);
     }
 
-    selected = *locale == '\0' ? environment_locale(category) : locale;
-    if (!__mini_locale_state_apply(&mini_process_locale, category, selected)) {
+    if (!__mini_locale_state_apply_name(&mini_process_locale, category,
+                                        locale)) {
         return (char *)0;
     }
     return (char *)__mini_locale_state_query(&mini_process_locale, category);

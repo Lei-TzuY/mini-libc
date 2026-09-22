@@ -12,9 +12,12 @@ or stateful encodings.
 ## Public locale surface
 
 `<locale.h>` exposes the standard locale categories used by the x86-64 Linux
-target, `struct lconv`, `setlocale`, `localeconv`, and the first bounded POSIX
-locale-object lifecycle: `locale_t`, `LC_GLOBAL_LOCALE`, `duplocale`,
-`freelocale`, and `uselocale`.
+target, `struct lconv`, `setlocale`, `localeconv`, and the bounded POSIX
+locale-object lifecycle: `locale_t`, `LC_GLOBAL_LOCALE`, `newlocale`,
+`duplocale`, `freelocale`, and `uselocale`. The public category-mask surface is
+limited to the categories mini-libc actually implements:
+`LC_CTYPE_MASK`, `LC_NUMERIC_MASK`, `LC_TIME_MASK`, `LC_COLLATE_MASK`,
+`LC_MONETARY_MASK`, and their `LC_ALL_MASK` union.
 
 The process starts in `"C"`. `LC_CTYPE` and `LC_ALL` additionally accept
 `"C.UTF-8"` and `"C.utf8"`. Each standard category is owned explicitly by
@@ -38,11 +41,20 @@ empty grouping/currency/sign strings, and `CHAR_MAX` for unavailable monetary
 placement/precision fields. The C.UTF-8 promotion changes character encoding,
 not numeric or monetary conventions.
 
-There is still no locale archive, public `newlocale` category-mask mutation,
-collation database, or mutable locale-specific numeric/monetary data.
-Environment lookup is allocation-free and reuses the startup-backed `getenv`
-state; it does not implicitly apply a locale until
-`setlocale(category, "")` is called.
+There is still no locale archive, message locale category, collation database,
+or mutable locale-specific numeric/monetary data. Environment lookup is
+allocation-free and reuses the startup-backed `getenv` state.
+
+`newlocale(mask, name, base)` now constructs or transactionally modifies locale
+objects. A null base starts from the C/POSIX baseline for every unselected
+category. Selected categories accept `"C"`/`"POSIX"`; `LC_CTYPE` additionally
+accepts the bounded `"C.UTF-8"`/`"C.utf8"` mode. An empty name resolves each
+selected category independently through `LC_ALL`, the matching category
+variable, then `LANG`. Unsupported locale data reports `ENOENT`; null names,
+unknown mask bits, invalid base handles, and the mini-libc defensive rejection
+of `LC_GLOBAL_LOCALE` as a base report `EINVAL`. All validation occurs against
+a candidate state before an existing base object is committed, so failure
+leaves the base unchanged.
 
 `duplocale(LC_GLOBAL_LOCALE)` snapshots the process-global locale into an owned
 registry-backed object. `duplocale(object)` creates an independent copy,
@@ -231,8 +243,11 @@ restartable conversion core, and unchanged process-global C behavior.
 C11 threads: global snapshots, object duplication, install/query/switch,
 `LC_GLOBAL_LOCALE`, invalid-handle rejection, child non-inheritance, child
 object installation, UTF-8 conversion, Unicode classification, and unchanged
-parent state. The same probe is compiled by pinned tiny-c-compiler and
-linked/executed through both GNU ld and mini-elf-toolchain.
+parent state. `tests/newlocale_probe.c` separately exercises category masks,
+C/POSIX aliases, C.UTF-8 CTYPE construction, zero-mask/default-C creation,
+existing-base mutation, transactional rollback, invalid masks/handles, and
+isolated environment-driven empty-name construction. Both paths are compiled by
+pinned tiny-c-compiler and linked/executed through GNU ld and mini-elf-toolchain.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -288,17 +303,17 @@ per-thread locale object.
 
 Environment-driven selection, explicit per-category ownership, composite
 `LC_ALL` query/restore, reentrant locale-state operations, TCB-backed
-thread-local adoption, and the first public locale-object lifecycle are now
-part of the executable baseline. Object-backed overrides remain private to the
-calling thread; new threads start against the process-global locale; switching
-to `LC_GLOBAL_LOCALE` resumes tracking later global changes. Locale-sensitive
-conversion and Unicode wide classification use the same active state, while
-already oriented FILE objects retain their orientation-time encoding.
+thread-local adoption, public object lifecycle, and transactional
+`newlocale` category-mask construction are now part of the executable baseline.
+Object-backed overrides remain private to the calling thread; new threads start
+against the process-global locale; switching to `LC_GLOBAL_LOCALE` resumes
+tracking later global changes. Locale-sensitive conversion and Unicode wide
+classification use the same active state, while already oriented FILE objects
+retain their orientation-time encoding.
 
-The next coherent promotion is **category-mask locale construction with
-`newlocale`**. That slice should define the supported `LC_*_MASK` surface,
-C/POSIX and C.UTF-8 category replacement, base-object transactional mutation,
-environment-driven empty-name construction, and exact error behavior before
-adding further `*_l` consumers. Collation and locale-sensitive
-numeric/monetary data remain outside the contract until they have real
-implementation and evidence.
+The next coherent promotion is **explicit locale-object CTYPE consumers**, not a
+broader locale database. That phase should let callers use a `locale_t`
+directly for the already implemented wide classification/simple-case surface
+without first mutating thread state, while preserving object validity and
+Unicode 15.1 behavior. Collation and locale-sensitive numeric/monetary data
+remain outside the contract until they have real implementation and evidence.
