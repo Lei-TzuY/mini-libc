@@ -135,6 +135,12 @@ if [ "$poll_output" != "poll-readiness-ok" ]; then
     exit 1
 fi
 
+process_output="$(./build/process_orchestration_probe)"
+if [ "$process_output" != "process-orchestration-ok" ]; then
+    echo "unexpected process orchestration output: $process_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
