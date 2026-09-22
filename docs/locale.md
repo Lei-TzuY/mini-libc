@@ -83,6 +83,14 @@ without changing process state.
 
 ## Unicode 15.1 wide classification and simple case mapping
 
+`<ctype.h>` now exposes the POSIX explicit-locale byte-classification and case
+conversion family (`is*_l`, `tolower_l`, and `toupper_l`) alongside the ISO C
+surface. Both C and C.UTF-8 deliberately retain the same narrow byte contract:
+ASCII bytes are classified normally, while bytes `0x80..0xff` are not treated
+as standalone Unicode characters. The `_l` family validates and snapshots the
+supplied registered locale object but does not install it or consult the
+calling thread's active locale.
+
 `<wctype.h>` exposes the ISO C wide classification, descriptor, and case
 transformation surface plus the POSIX explicit-locale variants
 `isw*_l`, `wctype_l`/`iswctype_l`, `wctrans_l`/`towctrans_l`, and
@@ -252,12 +260,15 @@ parent state. `tests/newlocale_probe.c` separately exercises category masks,
 C/POSIX aliases, C.UTF-8 CTYPE construction, zero-mask/default-C creation,
 existing-base mutation, transactional rollback, invalid masks/handles, and
 isolated environment-driven empty-name construction. `tests/wctype_locale_probe.c`
-then proves explicit-object CTYPE consumption without thread switching: C and
-C.UTF-8 objects can disagree with the calling thread while direct
+then proves explicit-object wide CTYPE consumption without thread switching: C
+and C.UTF-8 objects can disagree with the calling thread while direct
 classification, descriptors, simple case conversion, and transformation
-descriptors continue to use the supplied object. All three paths are compiled
-by pinned tiny-c-compiler and linked/executed through GNU ld and
-mini-elf-toolchain.
+descriptors continue to use the supplied object. `tests/ctype_locale_probe.c`
+exhaustively checks EOF plus every byte value `0..255` through both C and
+C.UTF-8 objects, preserves errno, and locks the UTF-8 rule that lead and
+continuation bytes remain unclassified as standalone narrow characters. These
+paths are compiled by pinned tiny-c-compiler and linked/executed through GNU ld
+and mini-elf-toolchain.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -320,11 +331,15 @@ thread; direct `isw*_l`/case/descriptor calls can instead consume a locale
 object without installing it. Both paths share the same Unicode 15.1 substrate,
 while already oriented FILE objects retain their orientation-time encoding.
 
-The next coherent promotion is **narrow CTYPE explicit-locale parity and phase
-closure**, not low-value expansion of Unicode corner cases. That slice should
-route the POSIX `is*_l`/`tolower_l`/`toupper_l` byte-classification surface
-through explicit locale objects, verify that UTF-8 continuation bytes do not
-become standalone characters, and then audit whether the locale subsystem is
-mature enough to promote to a different libc frontier. Collation and
-locale-sensitive numeric/monetary data remain outside the contract until they
-have real implementation and evidence.
+The locale/CTYPE phase is now **closed at the bounded C + C.UTF-8 contract**.
+Process-global selection, environment resolution, per-category state,
+locale-object construction/lifecycle, thread-local adoption, multibyte/wide I/O,
+Unicode 15.1 wide CTYPE, and both wide and narrow explicit-locale consumers all
+have executable coverage. Further locale work should not consist of naming
+parity or Unicode corner-case farming. Reopening this subsystem requires a real
+new data/semantic layer such as collation or locale-sensitive numeric/monetary
+behavior with corresponding implementation and evidence.
+
+The next architectural promotion should therefore move **outside locale** and
+be selected from the remaining libc integration gaps rather than extending this
+bounded locale model by inertia.
