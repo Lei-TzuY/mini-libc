@@ -1,0 +1,13 @@
+#ifndef MINI_LIBC_MINI_TTY_IOCTL_H
+#define MINI_LIBC_MINI_TTY_IOCTL_H
+
+/* Linux asm-generic tty ioctl request numbers used by the x86-64 runtime. */
+#define MINI_TIOCSCTTY 0x540EUL
+#define MINI_TIOCGPGRP 0x540FUL
+#define MINI_TIOCSPGRP 0x5410UL
+#define MINI_TIOCGSID 0x5429UL
+#define MINI_TIOCGPTN 0x80045430UL
+#define MINI_TIOCSPTLCK 0x40045431UL
+#define MINI_TIOCGPTPEER 0x5441UL
+
+#endif

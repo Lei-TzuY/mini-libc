@@ -14,6 +14,7 @@
 #define ENOTDIR 20
 #define EISDIR 21
 #define EINVAL 22
+#define ENOTTY 25
 #define EFBIG 27
 #define EPIPE 32
 #define EDOM 33
