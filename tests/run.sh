@@ -107,6 +107,21 @@ if [ -e "$metadata_path" ]; then
     exit 1
 fi
 
+dirent_root=build/dirent-root.tmp
+rm -rf "$dirent_root"
+mkdir -p "$dirent_root/subdir"
+dirent_output="$(./build/dirent_probe "$dirent_root")"
+if [ "$dirent_output" != "dirent-ok" ]; then
+    echo "unexpected dirent probe output: $dirent_output" >&2
+    rm -rf "$dirent_root"
+    exit 1
+fi
+if ! rmdir "$dirent_root"; then
+    echo "dirent probe left filesystem state behind" >&2
+    rm -rf "$dirent_root"
+    exit 1
+fi
+
 memory_output="$(./build/memory_probe)"
 if [ "$memory_output" != "memory-ok" ]; then
     echo "unexpected memory probe output: $memory_output" >&2
