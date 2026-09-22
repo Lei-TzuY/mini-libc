@@ -383,6 +383,27 @@ single byte without a newline, and proves it becomes immediately readable.
 The original terminal state is restored before teardown. The same executable
 runs through pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
 
+`<termios.h>` now exposes the signal-generating control-character slots
+`VINTR` and `VSUSP`; `<signal.h>` exposes the job-control signals needed to
+observe stop/resume behavior, and `<sys/wait.h>` adds `WUNTRACED`,
+`WIFSTOPPED`, and `WSTOPSIG` for stopped-child status. These definitions are
+not standalone API breadth: they are exercised through the existing
+`tcsetattr`, foreground-process-group, signal, and wait runtime.
+
+`tests/tty_control_signal_probe.c` builds a self-contained controlling PTY and
+runs two distinct foreground jobs. For the first job, the line discipline is
+configured with `ISIG`, `VINTR=^C`, and `VSUSP=^Z`; writing `^C` to the PTY
+master must make `waitpid` report that the foreground worker was terminated by
+`SIGINT`. A second foreground worker is then targeted with `^Z`; the session
+leader waits with `WUNTRACED` and must observe `WIFSTOPPED` with
+`WSTOPSIG == SIGTSTP` before it sends `SIGCONT`. Only after that verified
+resume does a command-pipe handshake let the worker write its marker through
+the slave/master PTY data path and exit normally. `SIGTTOU` is ignored only by
+the session leader so it can deterministically move the terminal foreground
+group between the two jobs. No host terminal or sleep-based timing assumption
+is involved. The same executable runs through pinned tiny-c-compiler plus GNU
+ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -396,12 +417,11 @@ tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
 targeted/group signaling, process groups, sessions, bounded atfork
-coordination, resource enforcement, credentials, PTY job control, and
-canonical/noncanonical termios behavior now form one executable Unix
-process-and-terminal baseline. The line-discipline phase is closed at real
-delivery semantics rather than flag breadth. The next promotion should add a
-genuinely new terminal behavior—most naturally signal-generating control
-characters such as `VINTR`/`VSUSP`, with deterministic PTY-backed process-group
-evidence—rather than expand speed/flow-control constants without an executable
-use case. The async-signal-safe child boundary remains explicit after
-multithreaded fork.
+coordination, resource enforcement, credentials, PTY job control, canonical/
+noncanonical delivery, and terminal-generated `SIGINT`/`SIGTSTP` behavior now
+form one executable Unix process-and-terminal baseline. This control-character
+signal phase is closed at foreground-job semantics. The next promotion should
+add a genuinely new job-control policy boundary—most naturally background
+terminal access enforcement with `SIGTTIN`/`SIGTTOU` and `TOSTOP`—rather than
+expand unused termios constants. The async-signal-safe child boundary remains
+explicit after multithreaded fork.
