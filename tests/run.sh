@@ -71,6 +71,28 @@ if [ -e "$posix_fd_path" ]; then
     exit 1
 fi
 
+posix_path_source=build/posix-path-source.tmp
+posix_path_target=build/posix-path-target.tmp
+posix_path_dir=build/posix-path-dir.tmp
+posix_remove_dir=build/posix-remove-dir.tmp
+rm -f "$posix_path_source" "$posix_path_target"
+rmdir "$posix_path_dir" "$posix_remove_dir" 2>/dev/null || true
+mkdir "$posix_path_dir" "$posix_remove_dir"
+posix_path_output="$(./build/posix_path_probe "$posix_path_source"     "$posix_path_target" "$posix_path_dir" "$posix_remove_dir")"
+if [ "$posix_path_output" != "posix-path-ok" ]; then
+    echo "unexpected POSIX pathname output: $posix_path_output" >&2
+    rm -f "$posix_path_source" "$posix_path_target"         "$posix_path_dir/source" "$posix_path_dir/target"
+    rmdir "$posix_path_dir" "$posix_remove_dir" 2>/dev/null || true
+    exit 1
+fi
+if [ -e "$posix_path_source" ] || [ -e "$posix_path_target" ] ||
+   [ -e "$posix_path_dir" ] || [ -e "$posix_remove_dir" ]; then
+    echo "POSIX pathname probe left filesystem state behind" >&2
+    rm -f "$posix_path_source" "$posix_path_target"         "$posix_path_dir/source" "$posix_path_dir/target"
+    rmdir "$posix_path_dir" "$posix_remove_dir" 2>/dev/null || true
+    exit 1
+fi
+
 memory_output="$(./build/memory_probe)"
 if [ "$memory_output" != "memory-ok" ]; then
     echo "unexpected memory probe output: $memory_output" >&2
