@@ -9,6 +9,15 @@
 #define LC_MONETARY 4
 #define LC_ALL 6
 
+#define LC_CTYPE_MASK (1 << LC_CTYPE)
+#define LC_NUMERIC_MASK (1 << LC_NUMERIC)
+#define LC_TIME_MASK (1 << LC_TIME)
+#define LC_COLLATE_MASK (1 << LC_COLLATE)
+#define LC_MONETARY_MASK (1 << LC_MONETARY)
+#define LC_ALL_MASK                                                           \
+    (LC_CTYPE_MASK | LC_NUMERIC_MASK | LC_TIME_MASK | LC_COLLATE_MASK |       \
+     LC_MONETARY_MASK)
+
 struct mini_locale_object;
 typedef struct mini_locale_object *locale_t;
 
@@ -44,6 +53,7 @@ struct lconv {
 char *setlocale(int category, const char *locale);
 struct lconv *localeconv(void);
 
+locale_t newlocale(int category_mask, const char *locale, locale_t base);
 locale_t duplocale(locale_t locobj);
 void freelocale(locale_t locobj);
 locale_t uselocale(locale_t newloc);
