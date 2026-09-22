@@ -171,7 +171,9 @@ int main(int argc, char **argv, char **envp)
     }
 
     errno = EIO;
-    if (setlocale(LC_CTYPE, "C.UTF-8") == (char *)0 || MB_CUR_MAX != 4 ||
+    if (setlocale(LC_CTYPE, "") == (char *)0 ||
+        strcmp(setlocale(LC_CTYPE, (const char *)0), "C.UTF-8") != 0 ||
+        MB_CUR_MAX != 4 ||
         mbstowcs(locale_wide, locale_euro, 4U) != 1U ||
         locale_wide[0] != (wchar_t)0x20ac || locale_wide[1] != 0 ||
         wcstombs(locale_bytes, locale_wide, 4U) != 3U ||

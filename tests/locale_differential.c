@@ -89,6 +89,13 @@ int main(void)
         return 1;
     }
 
+    if (setlocale(LC_CTYPE, "") == NULL ||
+        mini_test_setlocale(LC_CTYPE, "") == NULL ||
+        strcmp(setlocale(LC_CTYPE, NULL),
+               mini_test_setlocale(LC_CTYPE, NULL)) != 0) {
+        return 8;
+    }
+
     if (!compare_single_byte("A", 1U) || !compare_single_byte("", 1U) ||
         !compare_single_byte("A", 0U) || !compare_single_byte(high, 1U)) {
         return 2;

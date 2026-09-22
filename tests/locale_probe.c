@@ -35,6 +35,65 @@ static int check_lconv(void)
            lc->int_p_sign_posn == 127 && lc->int_n_sign_posn == 127;
 }
 
+static int environment_mode(int argc, char **argv)
+{
+    static const char ok[] = "locale-env-ok\n";
+    char *selected;
+    int category;
+
+    if (argc == 3 &&
+        (same_string(argv[1], "env-ctype") || same_string(argv[1], "env-all"))) {
+        category = same_string(argv[1], "env-ctype") ? LC_CTYPE : LC_ALL;
+        errno = EIO;
+        selected = setlocale(category, "");
+        if (selected == (char *)0 || !same_string(selected, argv[2]) ||
+            !same_string(setlocale(category, (const char *)0), argv[2]) ||
+            errno != EIO) {
+            return 30;
+        }
+        if ((same_string(argv[2], "C.UTF-8") && MB_CUR_MAX != 4) ||
+            (same_string(argv[2], "C") && MB_CUR_MAX != 1)) {
+            return 31;
+        }
+        if (mini_sys_write(1, ok, sizeof(ok) - 1U) !=
+            (long)(sizeof(ok) - 1U)) {
+            return 32;
+        }
+        return 0;
+    }
+
+    if (argc == 2 && same_string(argv[1], "env-ctype-fail")) {
+        errno = EIO;
+        if (setlocale(LC_CTYPE, "") != (char *)0 ||
+            !same_string(setlocale(LC_CTYPE, (const char *)0), "C") ||
+            MB_CUR_MAX != 1 || errno != EIO) {
+            return 33;
+        }
+        if (mini_sys_write(1, ok, sizeof(ok) - 1U) !=
+            (long)(sizeof(ok) - 1U)) {
+            return 34;
+        }
+        return 0;
+    }
+
+    if (argc == 2 && same_string(argv[1], "env-numeric-fail")) {
+        errno = EIO;
+        if (setlocale(LC_NUMERIC, "") != (char *)0 ||
+            !same_string(setlocale(LC_NUMERIC, (const char *)0), "C") ||
+            !same_string(setlocale(LC_CTYPE, (const char *)0), "C") ||
+            MB_CUR_MAX != 1 || errno != EIO) {
+            return 35;
+        }
+        if (mini_sys_write(1, ok, sizeof(ok) - 1U) !=
+            (long)(sizeof(ok) - 1U)) {
+            return 36;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
 int main(int argc, char **argv, char **envp)
 {
     static const char ok[] = "locale-ok\n";
@@ -52,15 +111,22 @@ int main(int argc, char **argv, char **envp)
     wchar_t wc = 999;
     char bytes[16] = {'?', '?', '?', '?', '?', '?', '?', '?'};
 
-    (void)argc;
-    (void)argv;
+    {
+        int env_result = environment_mode(argc, argv);
+        if (env_result >= 0) {
+            return env_result;
+        }
+    }
+    if (argc != 1) {
+        return 37;
+    }
     (void)envp;
 
     errno = EIO;
     if (MB_CUR_MAX != 1 || setlocale(LC_ALL, (const char *)0) == (char *)0 ||
         !same_string(setlocale(LC_ALL, (const char *)0), "C") ||
         !same_string(setlocale(LC_CTYPE, "C"), "C") ||
-        !same_string(setlocale(LC_NUMERIC, ""), "C") ||
+        !same_string(setlocale(LC_NUMERIC, "C"), "C") ||
         setlocale(12345, "C") != (char *)0 ||
         setlocale(LC_ALL, "not-a-locale") != (char *)0 ||
         !same_string(setlocale(LC_ALL, (const char *)0), "C") || errno != EIO ||
