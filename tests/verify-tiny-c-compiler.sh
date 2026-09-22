@@ -49,6 +49,10 @@ done
     -o "$OUT/poll-readiness.o"
 "$MINICC" -nostdinc -Iinclude -c tests/process_orchestration_probe.c \
     -o "$OUT/process-orchestration.o"
+"$MINICC" -nostdinc -Iinclude -c tests/exec_child_probe.c \
+    -o "$OUT/exec-child.o"
+"$MINICC" -nostdinc -Iinclude -c tests/exec_transition_probe.c \
+    -o "$OUT/exec-transition.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -103,6 +107,10 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/poll-readiness.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/process-orchestration" \
         "$OUT/process-orchestration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/exec-child" \
+        "$OUT/exec-child.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/exec-transition" \
+        "$OUT/exec-transition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -157,6 +165,10 @@ else
         "$OUT/poll-readiness.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/process-orchestration" \
         "$OUT/process-orchestration.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/exec-child" \
+        "$OUT/exec-child.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/exec-transition" \
+        "$OUT/exec-transition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -306,6 +318,12 @@ fi
 process_output=$("$OUT/process-orchestration")
 if [ "$process_output" != "process-orchestration-ok" ]; then
     echo "unexpected tiny-c process orchestration output: $process_output" >&2
+    exit 1
+fi
+
+exec_output=$("$OUT/exec-transition" "$OUT/exec-child")
+if [ "$exec_output" != "exec-transition-ok" ]; then
+    echo "unexpected tiny-c exec transition output: $exec_output" >&2
     exit 1
 fi
 
@@ -506,6 +524,8 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/pipe-ipc"
 ./tests/verify-no-host-libc.sh "$OUT/poll-readiness"
 ./tests/verify-no-host-libc.sh "$OUT/process-orchestration"
+./tests/verify-no-host-libc.sh "$OUT/exec-child"
+./tests/verify-no-host-libc.sh "$OUT/exec-transition"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
