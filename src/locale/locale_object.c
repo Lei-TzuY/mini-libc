@@ -49,6 +49,31 @@ static int copy_registered_state(locale_t handle,
     return found;
 }
 
+static int replace_registered_state(locale_t handle,
+                                    const struct mini_locale_state *state)
+{
+    struct mini_locale_object *cursor;
+    int replaced = 0;
+
+    if (handle == (locale_t)0 || handle == LC_GLOBAL_LOCALE ||
+        state == (const struct mini_locale_state *)0) {
+        return 0;
+    }
+
+    locale_object_lock();
+    cursor = mini_locale_objects;
+    while (cursor != (struct mini_locale_object *)0) {
+        if ((locale_t)cursor == handle) {
+            __mini_locale_state_copy(&cursor->state, state);
+            replaced = 1;
+            break;
+        }
+        cursor = cursor->next;
+    }
+    locale_object_unlock();
+    return replaced;
+}
+
 static locale_t create_object_from_state(const struct mini_locale_state *state)
 {
     struct mini_locale_object *object;
@@ -65,6 +90,66 @@ static locale_t create_object_from_state(const struct mini_locale_state *state)
     mini_locale_objects = object;
     locale_object_unlock();
     return (locale_t)object;
+}
+
+static int valid_category_mask(int category_mask)
+{
+    return (category_mask & ~LC_ALL_MASK) == 0;
+}
+
+static int apply_category_mask(struct mini_locale_state *state,
+                               int category_mask, const char *locale)
+{
+    int category;
+
+    for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
+        if ((category_mask & (1 << category)) != 0 &&
+            !__mini_locale_state_apply_name(state, category, locale)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+locale_t newlocale(int category_mask, const char *locale, locale_t base)
+{
+    struct mini_locale_state candidate;
+    locale_t result;
+    int saved_errno = errno;
+
+    if (!valid_category_mask(category_mask) ||
+        locale == (const char *)0 || base == LC_GLOBAL_LOCALE) {
+        errno = EINVAL;
+        return (locale_t)0;
+    }
+
+    if (base == (locale_t)0) {
+        __mini_locale_state_init(&candidate);
+    } else if (!copy_registered_state(base, &candidate)) {
+        errno = EINVAL;
+        return (locale_t)0;
+    }
+
+    if (!apply_category_mask(&candidate, category_mask, locale)) {
+        errno = ENOENT;
+        return (locale_t)0;
+    }
+
+    if (base == (locale_t)0) {
+        result = create_object_from_state(&candidate);
+        if (result == (locale_t)0) {
+            return (locale_t)0;
+        }
+    } else {
+        if (!replace_registered_state(base, &candidate)) {
+            errno = EINVAL;
+            return (locale_t)0;
+        }
+        result = base;
+    }
+
+    errno = saved_errno;
+    return result;
 }
 
 locale_t duplocale(locale_t locobj)
