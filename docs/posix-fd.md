@@ -15,8 +15,9 @@ match the native Linux x86-64 UAPI layout. It exposes the standard file-type
 and permission masks plus `S_IS*` predicates, together with public `stat` and
 `fstat` entry points.
 
-`<unistd.h>` exposes `read`, `write`, `close`, `dup`, `dup2`, `getcwd`,
-`chdir`, `fchdir`, `lseek`, `ftruncate`, `unlink`, and `unlinkat`, plus the
+`<unistd.h>` exposes `read`, `write`, `close`, `dup`, `dup2`, `pipe`, `pipe2`,
+`getcwd`, `chdir`, `fchdir`, `lseek`, `ftruncate`, `unlink`, and `unlinkat`,
+plus the
 standard descriptor and seek constants used by those calls. `<stdio.h>`
 retains ISO C `remove`/`rename` and exposes POSIX `renameat`; all pathname
 mutation routes through one shared runtime. `getcwd/chdir/fchdir` add explicit
@@ -48,6 +49,13 @@ translates a negative raw result into the conventional `-1` return and stores
 the positive Linux error number in thread-aware `errno`.
 
 Successful calls do not overwrite an existing `errno` value.
+
+Pipe IPC uses native x86-64 `pipe2` syscall 293 as the single creation
+boundary; `pipe()` is the zero-flag form. `O_NONBLOCK` and `O_CLOEXEC` are
+passed to the kernel atomically. Nonblocking empty reads report `EAGAIN`, while
+read returns zero only after every write descriptor referring to the pipe has
+been closed. Closing all readers causes a writer to receive `SIGPIPE`; when
+that signal is ignored, the public `write` path reports `EPIPE`.
 
 Current-directory state uses native x86-64 `getcwd` (79), `chdir` (80), and
 `fchdir` (81). `chdir` changes the process-relative pathname base, while
@@ -138,6 +146,16 @@ null/zero-size `EINVAL`, and successful-call errno preservation. The same
 executable runs through pinned tiny-c-compiler plus GNU ld and
 mini-elf-toolchain.
 
+`tests/pipe_ipc_probe.c` proves both blocking-default and nonblocking pipe
+semantics. Plain `pipe` transfers bytes and reaches EOF after the writer closes.
+`pipe2(O_NONBLOCK|O_CLOEXEC)` proves descriptor-local close-on-exec state,
+shared nonblocking file status, empty-read `EAGAIN`, and data transfer. A
+duplicated writer keeps EOF suppressed after the original writer closes; once
+the final duplicate closes, read returns zero. The probe then ignores
+`SIGPIPE`, closes the last reader, and verifies write fails with `EPIPE`.
+Unsupported pipe2 flags return `EINVAL`. The same executable runs through
+pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -149,12 +167,10 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, pathname lifecycle, metadata/sizing, directory traversal,
-descriptor control, and process cwd state now form one executable Unix
-filesystem baseline. The next coherent promotion should cross from filesystem
-namespace mechanics into **inter-descriptor communication/readiness**, starting
-with a bounded `pipe/pipe2` slice and only then adding polling semantics that
-can be exercised deterministically. Cwd work should not continue as path-edge
-case farming unless a genuinely new process-state capability is introduced.
-Higher-level stdio should continue sharing this syscall substrate rather than
-growing a second kernel ABI.
+Descriptor I/O, filesystem namespace state, and pipe IPC now form one
+executable Unix runtime baseline. The next coherent promotion is **descriptor
+readiness**: a bounded `poll` surface that can prove readable/writable/hangup
+transitions over real pipes without timing guesses or blocking races. Further
+pipe work should require a genuinely new capability such as atomic flag/control
+semantics, not additional wrapper variants. Higher-level stdio should continue
+sharing this syscall substrate rather than growing a second kernel ABI.
