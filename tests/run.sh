@@ -129,6 +129,12 @@ if [ "$pipe_output" != "pipe-ipc-ok" ]; then
     exit 1
 fi
 
+poll_output="$(./build/poll_readiness_probe)"
+if [ "$poll_output" != "poll-readiness-ok" ]; then
+    echo "unexpected poll readiness output: $poll_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
