@@ -37,10 +37,22 @@ static int create_file_at(int dirfd_value, const char *name,
     return close(fd) == 0;
 }
 
+static int starts_with(const char *text, const char *prefix)
+{
+    while (*prefix != '\0') {
+        if (*text != *prefix) {
+            return 0;
+        }
+        ++text;
+        ++prefix;
+    }
+    return 1;
+}
+
 static int scan_directory(DIR *directory,
                           int *dot_seen, int *dotdot_seen,
                           int *alpha_seen, int *beta_seen,
-                          int *subdir_seen)
+                          int *subdir_seen, int *filler_seen)
 {
     struct dirent *entry;
 
@@ -49,6 +61,7 @@ static int scan_directory(DIR *directory,
     *alpha_seen = 0;
     *beta_seen = 0;
     *subdir_seen = 0;
+    *filler_seen = 0;
 
     for (;;) {
         entry = readdir(directory);
@@ -83,6 +96,11 @@ static int scan_directory(DIR *directory,
             if (entry->d_type != DT_DIR && entry->d_type != DT_UNKNOWN) {
                 return 0;
             }
+        } else if (starts_with(entry->d_name, "filler-")) {
+            ++*filler_seen;
+            if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
+                return 0;
+            }
         }
     }
 }
@@ -99,6 +117,7 @@ int main(int argc, char **argv)
     int alpha_seen;
     int beta_seen;
     int subdir_seen;
+    int filler_seen;
 
     if (argc != 2) {
         return 1;
@@ -139,9 +158,10 @@ int main(int argc, char **argv)
 
     errno = ERANGE;
     if (!scan_directory(directory, &dot_seen, &dotdot_seen,
-                        &alpha_seen, &beta_seen, &subdir_seen) ||
+                        &alpha_seen, &beta_seen, &subdir_seen,
+                        &filler_seen) ||
         !dot_seen || !dotdot_seen || !alpha_seen ||
-        !beta_seen || !subdir_seen) {
+        !beta_seen || !subdir_seen || filler_seen < 180) {
         closedir(directory);
         return 7;
     }
@@ -150,9 +170,10 @@ int main(int argc, char **argv)
     rewinddir(directory);
     if (errno != ERANGE ||
         !scan_directory(directory, &dot_seen, &dotdot_seen,
-                        &alpha_seen, &beta_seen, &subdir_seen) ||
+                        &alpha_seen, &beta_seen, &subdir_seen,
+                        &filler_seen) ||
         !dot_seen || !dotdot_seen || !alpha_seen ||
-        !beta_seen || !subdir_seen) {
+        !beta_seen || !subdir_seen || filler_seen < 180) {
         closedir(directory);
         return 8;
     }
