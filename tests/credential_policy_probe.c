@@ -139,7 +139,7 @@ int main(int argc, char **argv)
         if (dup2(report[1], STDOUT_FILENO) != STDOUT_FILENO) {
             _Exit(94);
         }
-        if (close(report[1]) != 0) {
+        if (report[1] != STDOUT_FILENO && close(report[1]) != 0) {
             _Exit(95);
         }
 
