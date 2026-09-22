@@ -64,6 +64,14 @@ mini_sys_fcntl:
     ret
     .size mini_sys_fcntl, .-mini_sys_fcntl
 
+    .globl mini_sys_ioctl
+    .type mini_sys_ioctl, @function
+mini_sys_ioctl:
+    movl $16, %eax
+    syscall
+    ret
+    .size mini_sys_ioctl, .-mini_sys_ioctl
+
     .globl mini_sys_lseek
     .type mini_sys_lseek, @function
 mini_sys_lseek:
