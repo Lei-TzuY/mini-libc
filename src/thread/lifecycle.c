@@ -251,6 +251,7 @@ static int ensure_reaper_locked(void)
     mini_reaper_control.tcb.errno_value = 0;
     mini_reaper_control.tcb.reserved = 0U;
     __mini_locale_state_init(&mini_reaper_control.tcb.locale_state);
+    mini_reaper_control.tcb.locale_handle = LC_GLOBAL_LOCALE;
     mini_reaper_control.tcb.locale_override_active = 0U;
 
     stack_top = (char *)mini_reaper_control.stack +
@@ -318,7 +319,7 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
     control->tcb.control = control;
     control->tcb.errno_value = 0;
     control->tcb.reserved = 0U;
-    __mini_thread_locale_inherit(&control->tcb);
+    __mini_thread_locale_init_child(&control->tcb);
     for (tss_index = 0U; tss_index < MINI_TSS_MAX_KEYS; ++tss_index) {
         control->tcb.tss_values[tss_index] = (void *)0;
         control->tcb.tss_generations[tss_index] = 0U;

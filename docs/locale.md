@@ -12,7 +12,9 @@ or stateful encodings.
 ## Public locale surface
 
 `<locale.h>` exposes the standard locale categories used by the x86-64 Linux
-target, `struct lconv`, `setlocale`, and `localeconv`.
+target, `struct lconv`, `setlocale`, `localeconv`, and the first bounded POSIX
+locale-object lifecycle: `locale_t`, `LC_GLOBAL_LOCALE`, `duplocale`,
+`freelocale`, and `uselocale`.
 
 The process starts in `"C"`. `LC_CTYPE` and `LC_ALL` additionally accept
 `"C.UTF-8"` and `"C.utf8"`. Each standard category is owned explicitly by
@@ -36,10 +38,19 @@ empty grouping/currency/sign strings, and `CHAR_MAX` for unavailable monetary
 placement/precision fields. The C.UTF-8 promotion changes character encoding,
 not numeric or monetary conventions.
 
-There is still no locale archive, public `locale_t` object, collation
-database, or mutable locale-specific numeric/monetary data. Environment lookup
-is allocation-free and reuses the startup-backed `getenv` state; it does not
-implicitly apply a locale until `setlocale(category, "")` is called.
+There is still no locale archive, public `newlocale` category-mask mutation,
+collation database, or mutable locale-specific numeric/monetary data.
+Environment lookup is allocation-free and reuses the startup-backed `getenv`
+state; it does not implicitly apply a locale until
+`setlocale(category, "")` is called.
+
+`duplocale(LC_GLOBAL_LOCALE)` snapshots the process-global locale into an owned
+registry-backed object. `duplocale(object)` creates an independent copy,
+`freelocale` releases an object after it is no longer in use, and `uselocale`
+installs or queries a locale for only the calling thread.
+`uselocale(LC_GLOBAL_LOCALE)` removes the override so later global `setlocale`
+changes are observed again. Invalid object handles are rejected with `EINVAL`
+rather than dereferenced.
 
 Internally, locale ownership is no longer tied to the process-global object.
 `mini_locale_state` has reentrant init/copy/query/apply helpers, and apply
@@ -49,13 +60,14 @@ classification now consult an active-state provider: freestanding thread
 runtime binds that provider to the current TCB, while hosted differential tests
 retain the process-global fallback.
 
-Each TCB owns an optional locale override value. A thread with no override
-continues to observe the process-global locale; a thread with an override uses
-its private state for `MB_CUR_MAX`, multibyte conversion, formatted text
-encoding, and wide classification/case behavior. `thrd_create` copies a
-parent override into the child, but a parent using the global locale creates a
-child that also follows the global locale. Clearing an override returns that
-thread to global tracking without changing process state.
+Each TCB owns an optional locale override value plus the public object handle
+that installed it. A thread with no override observes the process-global
+locale; a thread with an override uses its private state for `MB_CUR_MAX`,
+multibyte conversion, formatted text encoding, and wide classification/case
+behavior. New C11 threads start in global-locale mode rather than inheriting
+the creating thread's override, matching the POSIX thread-local locale model.
+Switching back to `LC_GLOBAL_LOCALE` returns that thread to global tracking
+without changing process state.
 
 ## Unicode 15.1 wide classification and simple case mapping
 
@@ -215,11 +227,12 @@ and `EILSEQ` failures. `tests/locale_state_probe.c` separately proves the
 reentrant internal boundary: independent C and C.UTF-8 states, copy/query/apply,
 transactional failure, isolated UTF-8 decode/encode through the existing
 restartable conversion core, and unchanged process-global C behavior.
-`tests/thread_locale_probe.c` exercises the TCB adoption layer with real C11
-threads: override inheritance, child clear-to-global behavior, global-mode
-children, UTF-8 conversion, Unicode classification, and unchanged parent state.
-The same probe is compiled by pinned tiny-c-compiler and linked/executed through
-both GNU ld and mini-elf-toolchain.
+`tests/thread_locale_probe.c` exercises the public object lifecycle with real
+C11 threads: global snapshots, object duplication, install/query/switch,
+`LC_GLOBAL_LOCALE`, invalid-handle rejection, child non-inheritance, child
+object installation, UTF-8 conversion, Unicode classification, and unchanged
+parent state. The same probe is compiled by pinned tiny-c-compiler and
+linked/executed through both GNU ld and mini-elf-toolchain.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -274,18 +287,18 @@ mapping, locale-sensitive numeric/monetary data, stateful encoding, or
 per-thread locale object.
 
 Environment-driven selection, explicit per-category ownership, composite
-`LC_ALL` query/restore, reentrant locale-state operations, and TCB-backed
-thread-local locale adoption are now part of the executable baseline. A
-C.UTF-8 override can remain private to one thread and is inherited by children;
-threads without overrides continue to follow process-global `setlocale`.
-Locale-sensitive conversion and Unicode wide classification use the same active
-state, while already oriented FILE objects still retain their orientation-time
-encoding.
+`LC_ALL` query/restore, reentrant locale-state operations, TCB-backed
+thread-local adoption, and the first public locale-object lifecycle are now
+part of the executable baseline. Object-backed overrides remain private to the
+calling thread; new threads start against the process-global locale; switching
+to `LC_GLOBAL_LOCALE` resumes tracking later global changes. Locale-sensitive
+conversion and Unicode wide classification use the same active state, while
+already oriented FILE objects retain their orientation-time encoding.
 
-The next coherent locale promotion is **a bounded public locale-object lifecycle
-over this proven runtime**, not a second state machine. That phase may introduce
-a small `locale_t` / `newlocale` / `duplocale` / `freelocale` /
-`uselocale` subset only after ownership, global-locale sentinel behavior,
-copy/lifetime rules, and thread adoption are executable. Collation and
-locale-sensitive numeric/monetary data remain outside the contract until they
-have real implementation and evidence.
+The next coherent promotion is **category-mask locale construction with
+`newlocale`**. That slice should define the supported `LC_*_MASK` surface,
+C/POSIX and C.UTF-8 category replacement, base-object transactional mutation,
+environment-driven empty-name construction, and exact error behavior before
+adding further `*_l` consumers. Collation and locale-sensitive
+numeric/monetary data remain outside the contract until they have real
+implementation and evidence.

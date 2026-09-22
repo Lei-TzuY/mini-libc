@@ -34,6 +34,7 @@ void __mini_thread_runtime_init_main(long *initial_stack)
     tcb->errno_value = 0;
     tcb->reserved = 0U;
     __mini_locale_state_init(&tcb->locale_state);
+    tcb->locale_handle = LC_GLOBAL_LOCALE;
     tcb->locale_override_active = 0U;
     if (!__mini_thread_tls_prepare(tcb)) {
         mini_sys_exit(MINI_THREAD_INIT_FAILURE);

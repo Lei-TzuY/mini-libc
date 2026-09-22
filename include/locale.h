@@ -9,6 +9,11 @@
 #define LC_MONETARY 4
 #define LC_ALL 6
 
+struct mini_locale_object;
+typedef struct mini_locale_object *locale_t;
+
+#define LC_GLOBAL_LOCALE ((locale_t)-1L)
+
 struct lconv {
     char *decimal_point;
     char *thousands_sep;
@@ -38,5 +43,9 @@ struct lconv {
 
 char *setlocale(int category, const char *locale);
 struct lconv *localeconv(void);
+
+locale_t duplocale(locale_t locobj);
+void freelocale(locale_t locobj);
+locale_t uselocale(locale_t newloc);
 
 #endif

@@ -16,28 +16,24 @@ void __mini_thread_locale_runtime_enable(void)
     __mini_locale_set_state_provider(thread_locale_provider);
 }
 
-void __mini_thread_locale_inherit(struct mini_thread_tcb *child)
+void __mini_thread_locale_init_child(struct mini_thread_tcb *child)
 {
-    struct mini_thread_tcb *parent = __mini_thread_current_tcb();
-
     if (child == (struct mini_thread_tcb *)0) {
         return;
     }
 
     __mini_locale_state_init(&child->locale_state);
+    child->locale_handle = LC_GLOBAL_LOCALE;
     child->locale_override_active = 0U;
-    if (parent != (struct mini_thread_tcb *)0 &&
-        parent->locale_override_active) {
-        __mini_locale_state_copy(&child->locale_state, &parent->locale_state);
-        child->locale_override_active = 1U;
-    }
 }
 
-int __mini_locale_thread_set_current(const struct mini_locale_state *state)
+int __mini_locale_thread_install(locale_t handle,
+                                 const struct mini_locale_state *state)
 {
     struct mini_thread_tcb *tcb;
 
-    if (state == (const struct mini_locale_state *)0) {
+    if (handle == (locale_t)0 || handle == LC_GLOBAL_LOCALE ||
+        state == (const struct mini_locale_state *)0) {
         return 0;
     }
 
@@ -46,8 +42,20 @@ int __mini_locale_thread_set_current(const struct mini_locale_state *state)
         return 0;
     }
     __mini_locale_state_copy(&tcb->locale_state, state);
+    tcb->locale_handle = handle;
     tcb->locale_override_active = 1U;
     return 1;
+}
+
+locale_t __mini_locale_thread_current_handle(void)
+{
+    struct mini_thread_tcb *tcb = __mini_thread_current_tcb();
+
+    if (tcb != (struct mini_thread_tcb *)0 &&
+        tcb->locale_override_active) {
+        return tcb->locale_handle;
+    }
+    return LC_GLOBAL_LOCALE;
 }
 
 void __mini_locale_thread_use_global(void)
@@ -55,6 +63,7 @@ void __mini_locale_thread_use_global(void)
     struct mini_thread_tcb *tcb = __mini_thread_current_tcb();
 
     if (tcb != (struct mini_thread_tcb *)0) {
+        tcb->locale_handle = LC_GLOBAL_LOCALE;
         tcb->locale_override_active = 0U;
     }
 }
