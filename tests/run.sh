@@ -93,6 +93,20 @@ if [ -e "$posix_path_source" ] || [ -e "$posix_path_target" ] ||
     exit 1
 fi
 
+metadata_path=build/metadata-probe.tmp
+rm -f "$metadata_path"
+metadata_output="$(./build/metadata_probe "$metadata_path" build)"
+if [ "$metadata_output" != "metadata-ok" ]; then
+    echo "unexpected metadata probe output: $metadata_output" >&2
+    rm -f "$metadata_path"
+    exit 1
+fi
+if [ -e "$metadata_path" ]; then
+    echo "metadata probe left filesystem state behind" >&2
+    rm -f "$metadata_path"
+    exit 1
+fi
+
 memory_output="$(./build/memory_probe)"
 if [ "$memory_output" != "memory-ok" ]; then
     echo "unexpected memory probe output: $memory_output" >&2
