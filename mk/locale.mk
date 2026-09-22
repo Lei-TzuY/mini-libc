@@ -11,9 +11,9 @@ $(LIBC): $(BUILD)/locale.o $(BUILD)/locale_object.o $(BUILD)/wchar.o \
          $(BUILD)/unicode_props.o $(BUILD)/wctype.o $(BUILD)/wide_stdio.o \
          $(BUILD)/wide_format.o $(BUILD)/wide_scan.o $(BUILD)/multibyte.o
 all: $(BUILD)/locale_probe $(BUILD)/locale_state_probe $(BUILD)/newlocale_probe \
-     $(BUILD)/wctype_locale_probe $(BUILD)/locale_differential \
-     $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
-     $(BUILD)/wide_stdio_probe
+     $(BUILD)/wctype_locale_probe $(BUILD)/ctype_locale_probe \
+     $(BUILD)/locale_differential $(BUILD)/wchar_probe \
+     $(BUILD)/wchar_differential $(BUILD)/wide_stdio_probe
 inspect: locale_inspect
 test: locale_test_run
 
@@ -88,6 +88,14 @@ $(BUILD)/wctype_locale_probe.o: tests/wctype_locale_probe.c include/locale.h \
 $(BUILD)/wctype_locale_probe: $(BUILD)/wctype_locale_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/wctype_locale_probe.o $(CRT0) $(LIBC)
 
+$(BUILD)/ctype_locale_probe.o: tests/ctype_locale_probe.c include/ctype.h \
+                               include/locale.h include/stdio.h \
+                               include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ctype_locale_probe: $(BUILD)/ctype_locale_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/ctype_locale_probe.o $(CRT0) $(LIBC)
+
 $(BUILD)/wchar_probe.o: tests/wchar_probe.c include/wchar.h include/wctype.h include/stddef.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
@@ -124,12 +132,14 @@ $(BUILD)/wchar_differential: $(BUILD)/wchar_differential.o $(BUILD)/wchar_test_i
 
 locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_state_probe \
                  $(BUILD)/newlocale_probe $(BUILD)/wctype_locale_probe \
-                 $(BUILD)/locale_differential $(BUILD)/wchar_probe \
-                 $(BUILD)/wchar_differential $(BUILD)/wide_stdio_probe
+                 $(BUILD)/ctype_locale_probe $(BUILD)/locale_differential \
+                 $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
+                 $(BUILD)/wide_stdio_probe
 	@test "$$($(BUILD)/locale_probe)" = "locale-ok"
 	@test "$$($(BUILD)/locale_state_probe)" = "locale-state-ok"
 	@test "$$($(BUILD)/newlocale_probe)" = "newlocale-ok"
 	@test "$$($(BUILD)/wctype_locale_probe)" = "wctype-l-ok"
+	@test "$$($(BUILD)/ctype_locale_probe)" = "ctype-l-ok"
 	@test "$$(env -i LANG=C LC_CTYPE=C.UTF-8 $(BUILD)/newlocale_probe env C.UTF-8)" = "newlocale-env-ok"
 	@test "$$(env -i LANG=C.UTF-8 LC_CTYPE=C $(BUILD)/newlocale_probe env C)" = "newlocale-env-ok"
 	@test "$$(env -i LANG=C.UTF-8 $(BUILD)/locale_probe env-ctype C.UTF-8)" = "locale-env-ok"
@@ -146,10 +156,12 @@ locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_state_probe \
 
 locale_inspect: $(BUILD)/locale_probe $(BUILD)/locale_state_probe \
                 $(BUILD)/newlocale_probe $(BUILD)/wctype_locale_probe \
-                $(BUILD)/wchar_probe $(BUILD)/wide_stdio_probe
+                $(BUILD)/ctype_locale_probe $(BUILD)/wchar_probe \
+                $(BUILD)/wide_stdio_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/locale_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/locale_state_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/newlocale_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/wctype_locale_probe
+	./tests/verify-no-host-libc.sh $(BUILD)/ctype_locale_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/wchar_probe
 	./tests/verify-no-host-libc.sh $(BUILD)/wide_stdio_probe
