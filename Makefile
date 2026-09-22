@@ -302,8 +302,9 @@ $(BUILD)/session_hierarchy_probe.o: tests/session_hierarchy_probe.c include/unis
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/atfork_probe.o: tests/atfork_probe.c include/pthread.h include/unistd.h \
-                        include/threads.h include/stdatomic.h include/sys/wait.h \
-                        include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
+                        include/signal.h include/threads.h include/stdatomic.h \
+                        include/sys/wait.h include/stdlib.h include/errno.h \
+                        include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
