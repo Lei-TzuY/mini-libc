@@ -204,6 +204,32 @@ new-image output and exact exit status. A missing-image `execve` failure also
 locks `ENOENT`. Both the parent and child images are built and exercised
 through GCC/Clang, pinned tiny-c-compiler, GNU ld, and mini-elf-toolchain.
 
+`<spawn.h>` adds a bounded `posix_spawn` launch surface with a fixed-capacity,
+allocation-free file-actions object. This phase supports ordered `addclose`
+and `adddup2` actions; the action list has eight slots, reports `ENOMEM` when
+full, and its APIs return error numbers without clobbering caller `errno`.
+Non-null spawn attributes, `addopen`, and `posix_spawnp` are intentionally not
+modeled in this slice.
+
+`tests/posix_spawn_probe.c` validates the multithreaded launch boundary. A
+background C11 thread acquires and deliberately holds a mutex while the
+calling thread performs `posix_spawn`. The child does not touch inherited
+libc or application locks: it applies the prebuilt file actions using raw
+`close`/`dup2`, then enters raw `execve`, with raw `exit(127)` on pre-exec or
+exec failure. The actions redirect a close-on-exec pipe writer onto stdout,
+and the separately linked child image validates argv/envp before writing its
+marker and exiting with status 44. The parent joins the still-healthy worker,
+polls/reads the child output, and reaps the exact status. A missing image is
+also verified to produce the documented asynchronous spawn-failure status
+127. The same parent/child pair runs through pinned tiny-c-compiler, GNU ld,
+and mini-elf-toolchain.
+
+This closes the multithreaded **launch** gap without pretending to repair every
+lock after arbitrary `fork()`. The public `fork()` contract still requires a
+multithreaded child to stay on async-signal-safe operations until `execve`;
+`posix_spawn()` makes that discipline an implementation invariant instead of
+leaving it to the caller.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -216,9 +242,9 @@ Bad descriptors, negative lengths, and missing paths exercise
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, pipe IPC, deterministic `poll`,
-single-threaded fork/wait, and `execve` image replacement now form one
-executable Unix process-launch baseline. This launch phase is closed: further
-work should move to a higher-level process architecture such as a bounded
-`posix_spawn` path or explicit multithreaded fork/atfork lock repair, chosen by
-a fresh architecture audit rather than by adding exec-name variants. The
-single-threaded fork safety boundary remains in force until such repair exists.
+fork/wait, explicit `execve`, and bounded multithread-safe `posix_spawn`
+launch now form one executable Unix process baseline. The next promotion
+should move to a genuinely new process capability—such as process identity/
+signaling or an explicit atfork architecture—rather than grow spawn/exec name
+variants without new behavior. Arbitrary post-fork libc use in a multithreaded
+child remains outside the supported contract.

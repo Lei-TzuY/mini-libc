@@ -46,7 +46,8 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
             $(BUILD)/posix_fd.o $(BUILD)/descriptor_control.o \
             $(BUILD)/cwd_state.o $(BUILD)/pipe_ipc.o $(BUILD)/poll.o \
-            $(BUILD)/process.o $(BUILD)/posix_path.o $(BUILD)/metadata.o \
+            $(BUILD)/process.o $(BUILD)/spawn.o $(BUILD)/posix_path.o \
+            $(BUILD)/metadata.o \
             $(BUILD)/dirent.o \
             $(BUILD)/time.o \
             $(BUILD)/errno.o
@@ -62,6 +63,7 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/cwd_state_probe $(BUILD)/pipe_ipc_probe \
             $(BUILD)/poll_readiness_probe $(BUILD)/process_orchestration_probe \
             $(BUILD)/exec_child_probe $(BUILD)/exec_transition_probe \
+            $(BUILD)/spawn_child_probe $(BUILD)/posix_spawn_probe \
             $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
@@ -115,6 +117,10 @@ $(BUILD)/poll.o: src/poll/poll.c include/poll.h include/errno.h \
 
 $(BUILD)/process.o: src/process/process.c include/unistd.h include/sys/wait.h \
                     include/sys/types.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/spawn.o: src/process/spawn.c include/spawn.h include/unistd.h \
+                  include/sys/types.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path.o: src/unistd/path.c include/unistd.h include/fcntl.h \
@@ -259,6 +265,16 @@ $(BUILD)/exec_transition_probe.o: tests/exec_transition_probe.c include/unistd.h
                                 include/fcntl.h include/poll.h include/sys/wait.h \
                                 include/errno.h include/stdlib.h include/string.h \
                                 include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/spawn_child_probe.o: tests/spawn_child_probe.c include/unistd.h \
+                            include/errno.h include/stdlib.h include/string.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/posix_spawn_probe.o: tests/posix_spawn_probe.c include/spawn.h \
+                            include/unistd.h include/fcntl.h include/poll.h \
+                            include/sys/wait.h include/threads.h include/stdatomic.h \
+                            include/errno.h include/string.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
@@ -453,6 +469,12 @@ $(BUILD)/exec_child_probe: $(BUILD)/exec_child_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/exec_transition_probe: $(BUILD)/exec_transition_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/exec_transition_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/spawn_child_probe: $(BUILD)/spawn_child_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/spawn_child_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/posix_spawn_probe: $(BUILD)/posix_spawn_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_spawn_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)

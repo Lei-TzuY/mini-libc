@@ -147,6 +147,12 @@ if [ "$exec_output" != "exec-transition-ok" ]; then
     exit 1
 fi
 
+spawn_output="$(./build/posix_spawn_probe ./build/spawn_child_probe)"
+if [ "$spawn_output" != "posix-spawn-ok" ]; then
+    echo "unexpected posix spawn output: $spawn_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
