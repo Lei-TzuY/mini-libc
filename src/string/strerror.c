@@ -5,6 +5,7 @@ char *strerror(int errnum)
 {
     static char enoent[] = "No such file or directory";
     static char eio[] = "Input/output error";
+    static char echild[] = "No child processes";
     static char eagain[] = "Resource temporarily unavailable";
     static char enomem[] = "Cannot allocate memory";
     static char eexist[] = "File exists";
@@ -22,6 +23,8 @@ char *strerror(int errnum)
         return enoent;
     case EIO:
         return eio;
+    case ECHILD:
+        return echild;
     case EAGAIN:
         return eagain;
     case ENOMEM:

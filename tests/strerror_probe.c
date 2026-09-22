@@ -34,6 +34,7 @@ int main(int argc, char **argv, char **envp)
         return 1;
     }
     if (!same_string(strerror(ENOENT), "No such file or directory") ||
+        !same_string(strerror(ECHILD), "No child processes") ||
         !same_string(strerror(EAGAIN), "Resource temporarily unavailable") ||
         !same_string(strerror(ENOMEM), "Cannot allocate memory") ||
         !same_string(strerror(EEXIST), "File exists") ||

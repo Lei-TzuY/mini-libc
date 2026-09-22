@@ -72,6 +72,23 @@ mini_sys_lseek:
     ret
     .size mini_sys_lseek, .-mini_sys_lseek
 
+    .globl mini_sys_fork
+    .type mini_sys_fork, @function
+mini_sys_fork:
+    movl $57, %eax
+    syscall
+    ret
+    .size mini_sys_fork, .-mini_sys_fork
+
+    .globl mini_sys_wait4
+    .type mini_sys_wait4, @function
+mini_sys_wait4:
+    movq %rcx, %r10
+    movl $61, %eax
+    syscall
+    ret
+    .size mini_sys_wait4, .-mini_sys_wait4
+
     .globl mini_sys_getcwd
     .type mini_sys_getcwd, @function
 mini_sys_getcwd:
