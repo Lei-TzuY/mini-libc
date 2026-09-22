@@ -5,16 +5,6 @@
 #include "locale_internal.h"
 
 #define MINI_CHAR_MAX 127
-#define MINI_CATEGORY_COUNT 5
-
-enum mini_locale_mode {
-    MINI_LOCALE_C = 0,
-    MINI_LOCALE_C_UTF8 = 1
-};
-
-struct mini_locale_state {
-    enum mini_locale_mode category[MINI_CATEGORY_COUNT];
-};
 
 static char mini_locale_c[] = "C";
 static char mini_locale_utf8[] = "C.UTF-8";
@@ -23,7 +13,8 @@ static char mini_locale_mixed[] =
 static char mini_decimal_point[] = ".";
 static char mini_empty[] = "";
 static struct mini_locale_state mini_process_locale = {
-    {MINI_LOCALE_C, MINI_LOCALE_C, MINI_LOCALE_C, MINI_LOCALE_C, MINI_LOCALE_C}
+    {MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C,
+     MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C}
 };
 
 static struct lconv mini_c_locale = {
@@ -132,119 +123,176 @@ static const char *environment_locale(int category)
     return value != (const char *)0 ? value : mini_locale_c;
 }
 
-static int all_categories_c(void)
+void __mini_locale_state_init(struct mini_locale_state *state)
+{
+    int category;
+
+    if (state == (struct mini_locale_state *)0) {
+        return;
+    }
+    for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
+        state->category[category] = MINI_LOCALE_MODE_C;
+    }
+}
+
+void __mini_locale_state_copy(struct mini_locale_state *dst,
+                              const struct mini_locale_state *src)
+{
+    int category;
+
+    if (dst == (struct mini_locale_state *)0 ||
+        src == (const struct mini_locale_state *)0) {
+        return;
+    }
+    for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
+        dst->category[category] = src->category[category];
+    }
+}
+
+static int all_categories_c(const struct mini_locale_state *state)
 {
     int category;
 
     for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
-        if (mini_process_locale.category[category] != MINI_LOCALE_C) {
+        if (state->category[category] != MINI_LOCALE_MODE_C) {
             return 0;
         }
     }
     return 1;
 }
 
-static char *current_category_locale(int category)
+static const char *current_lc_all(const struct mini_locale_state *state)
 {
-    return mini_process_locale.category[category] == MINI_LOCALE_C_UTF8
+    if (all_categories_c(state)) {
+        return mini_locale_c;
+    }
+
+    if (state->category[LC_CTYPE] == MINI_LOCALE_MODE_C_UTF8 &&
+        state->category[LC_NUMERIC] == MINI_LOCALE_MODE_C &&
+        state->category[LC_TIME] == MINI_LOCALE_MODE_C &&
+        state->category[LC_COLLATE] == MINI_LOCALE_MODE_C &&
+        state->category[LC_MONETARY] == MINI_LOCALE_MODE_C) {
+        return mini_locale_mixed;
+    }
+    return (const char *)0;
+}
+
+const char *__mini_locale_state_query(const struct mini_locale_state *state,
+                                      int category)
+{
+    if (state == (const struct mini_locale_state *)0 ||
+        !valid_category(category)) {
+        return (const char *)0;
+    }
+
+    if (category == LC_ALL) {
+        return current_lc_all(state);
+    }
+    return state->category[category] == MINI_LOCALE_MODE_C_UTF8
                ? mini_locale_utf8
                : mini_locale_c;
 }
 
-static char *current_lc_all(void)
-{
-    if (all_categories_c()) {
-        return mini_locale_c;
-    }
-
-    /*
-     * The bounded runtime currently permits only LC_CTYPE to differ from C.
-     * Keep the aggregate name opaque but restorable instead of pretending that
-     * the process is wholly in C.UTF-8.
-     */
-    if (mini_process_locale.category[LC_CTYPE] == MINI_LOCALE_C_UTF8) {
-        return mini_locale_mixed;
-    }
-    return (char *)0;
-}
-
-static char *current_locale(int category)
-{
-    if (category == LC_ALL) {
-        return current_lc_all();
-    }
-    return current_category_locale(category);
-}
-
-static char *apply_category_locale(int category, const char *locale)
+static int apply_category_unchecked(struct mini_locale_state *state,
+                                    int category, const char *locale)
 {
     if (!state_category(category)) {
-        return (char *)0;
+        return 0;
     }
 
     if (same_string(locale, "C")) {
-        mini_process_locale.category[category] = MINI_LOCALE_C;
-        return mini_locale_c;
+        state->category[category] = MINI_LOCALE_MODE_C;
+        return 1;
     }
 
     if (category == LC_CTYPE && utf8_name(locale)) {
-        mini_process_locale.category[category] = MINI_LOCALE_C_UTF8;
-        return mini_locale_utf8;
+        state->category[category] = MINI_LOCALE_MODE_C_UTF8;
+        return 1;
     }
 
-    return (char *)0;
+    return 0;
 }
 
-static char *apply_lc_all(const char *locale)
+static int apply_lc_all_unchecked(struct mini_locale_state *state,
+                                  const char *locale)
 {
-    int category;
-
     if (same_string(locale, "C")) {
-        for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
-            mini_process_locale.category[category] = MINI_LOCALE_C;
-        }
-        return mini_locale_c;
+        __mini_locale_state_init(state);
+        return 1;
     }
 
     if (utf8_name(locale) || same_string(locale, mini_locale_mixed)) {
-        for (category = LC_CTYPE; category <= LC_MONETARY; ++category) {
-            mini_process_locale.category[category] = MINI_LOCALE_C;
-        }
-        mini_process_locale.category[LC_CTYPE] = MINI_LOCALE_C_UTF8;
-        return mini_locale_mixed;
+        __mini_locale_state_init(state);
+        state->category[LC_CTYPE] = MINI_LOCALE_MODE_C_UTF8;
+        return 1;
     }
 
-    return (char *)0;
+    return 0;
+}
+
+int __mini_locale_state_apply(struct mini_locale_state *state, int category,
+                              const char *locale)
+{
+    struct mini_locale_state candidate;
+    int applied;
+
+    if (state == (struct mini_locale_state *)0 || locale == (const char *)0 ||
+        !valid_category(category)) {
+        return 0;
+    }
+
+    __mini_locale_state_copy(&candidate, state);
+    if (category == LC_ALL) {
+        applied = apply_lc_all_unchecked(&candidate, locale);
+    } else {
+        applied = apply_category_unchecked(&candidate, category, locale);
+    }
+    if (!applied) {
+        return 0;
+    }
+
+    __mini_locale_state_copy(state, &candidate);
+    return 1;
+}
+
+int __mini_locale_state_is_utf8(const struct mini_locale_state *state)
+{
+    return state != (const struct mini_locale_state *)0 &&
+           state->category[LC_CTYPE] == MINI_LOCALE_MODE_C_UTF8;
+}
+
+size_t __mini_locale_state_mb_cur_max(const struct mini_locale_state *state)
+{
+    return __mini_locale_state_is_utf8(state) ? 4U : 1U;
 }
 
 int __mini_locale_is_utf8(void)
 {
-    return mini_process_locale.category[LC_CTYPE] == MINI_LOCALE_C_UTF8;
+    return __mini_locale_state_is_utf8(&mini_process_locale);
 }
 
 size_t __mini_mb_cur_max(void)
 {
-    return __mini_locale_is_utf8() ? 4U : 1U;
+    return __mini_locale_state_mb_cur_max(&mini_process_locale);
 }
 
 char *setlocale(int category, const char *locale)
 {
+    const char *selected;
+
     if (!valid_category(category)) {
         return (char *)0;
     }
 
     if (locale == (const char *)0) {
-        return current_locale(category);
+        return (char *)__mini_locale_state_query(&mini_process_locale, category);
     }
 
-    if (*locale == '\0') {
-        locale = environment_locale(category);
+    selected = *locale == '\0' ? environment_locale(category) : locale;
+    if (!__mini_locale_state_apply(&mini_process_locale, category, selected)) {
+        return (char *)0;
     }
-
-    if (category == LC_ALL) {
-        return apply_lc_all(locale);
-    }
-    return apply_category_locale(category, locale);
+    return (char *)__mini_locale_state_query(&mini_process_locale, category);
 }
 
 struct lconv *localeconv(void)
