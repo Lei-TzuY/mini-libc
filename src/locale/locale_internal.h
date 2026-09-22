@@ -27,7 +27,9 @@ struct mini_locale_state *__mini_locale_process_state(void);
 struct mini_locale_state *__mini_locale_current_state(void);
 void __mini_locale_set_state_provider(mini_locale_state_provider_t provider);
 
-int __mini_locale_thread_set_current(const struct mini_locale_state *state);
+int __mini_locale_thread_install(locale_t handle,
+                                 const struct mini_locale_state *state);
+locale_t __mini_locale_thread_current_handle(void);
 void __mini_locale_thread_use_global(void);
 int __mini_locale_thread_override_active(void);
 
