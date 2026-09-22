@@ -171,6 +171,12 @@ if [ "$session_output" != "session-hierarchy-ok" ]; then
     exit 1
 fi
 
+atfork_output="$(./build/atfork_probe)"
+if [ "$atfork_output" != "atfork-coordination-ok" ]; then
+    echo "unexpected atfork coordination output: $atfork_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"

@@ -5,6 +5,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "../internal/atfork.h"
+
 pid_t getpid(void)
 {
     return (pid_t)mini_sys_getpid();
@@ -85,13 +87,64 @@ pid_t setsid(void)
     return (pid_t)result;
 }
 
-pid_t fork(void)
+pid_t _Fork(void)
 {
     long result = mini_sys_fork();
 
     if (result < 0L) {
         errno = (int)-result;
         return (pid_t)-1;
+    }
+    return (pid_t)result;
+}
+
+pid_t fork(void)
+{
+    struct mini_atfork_handler handlers[MINI_ATFORK_CAPACITY];
+    unsigned int count = __mini_atfork_snapshot(handlers);
+    unsigned int index;
+    long result;
+
+    for (index = count; index > 0U; --index) {
+        void (*prepare)(void) = handlers[index - 1U].prepare;
+
+        if (prepare != (void (*)(void))0) {
+            prepare();
+        }
+    }
+
+    result = mini_sys_fork();
+    if (result == 0L) {
+        for (index = 0U; index < count; ++index) {
+            void (*child)(void) = handlers[index].child;
+
+            if (child != (void (*)(void))0) {
+                child();
+            }
+        }
+        return (pid_t)0;
+    }
+
+    if (result < 0L) {
+        int fork_errno = (int)-result;
+
+        for (index = 0U; index < count; ++index) {
+            void (*parent)(void) = handlers[index].parent;
+
+            if (parent != (void (*)(void))0) {
+                parent();
+            }
+        }
+        errno = fork_errno;
+        return (pid_t)-1;
+    }
+
+    for (index = 0U; index < count; ++index) {
+        void (*parent)(void) = handlers[index].parent;
+
+        if (parent != (void (*)(void))0) {
+            parent();
+        }
     }
     return (pid_t)result;
 }
