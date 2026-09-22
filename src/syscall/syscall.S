@@ -24,6 +24,22 @@ mini_sys_close:
     ret
     .size mini_sys_close, .-mini_sys_close
 
+    .globl mini_sys_dup
+    .type mini_sys_dup, @function
+mini_sys_dup:
+    movl $32, %eax
+    syscall
+    ret
+    .size mini_sys_dup, .-mini_sys_dup
+
+    .globl mini_sys_dup2
+    .type mini_sys_dup2, @function
+mini_sys_dup2:
+    movl $33, %eax
+    syscall
+    ret
+    .size mini_sys_dup2, .-mini_sys_dup2
+
     .globl mini_sys_fstat
     .type mini_sys_fstat, @function
 mini_sys_fstat:
@@ -31,6 +47,14 @@ mini_sys_fstat:
     syscall
     ret
     .size mini_sys_fstat, .-mini_sys_fstat
+
+    .globl mini_sys_fcntl
+    .type mini_sys_fcntl, @function
+mini_sys_fcntl:
+    movl $72, %eax
+    syscall
+    ret
+    .size mini_sys_fcntl, .-mini_sys_fcntl
 
     .globl mini_sys_lseek
     .type mini_sys_lseek, @function
