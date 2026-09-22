@@ -20,6 +20,8 @@ int chdir(const char *path);
 int fchdir(int fd);
 int pipe(int pipefd[2]);
 int pipe2(int pipefd[2], int flags);
+pid_t getpid(void);
+pid_t getppid(void);
 pid_t fork(void);
 int execve(const char *path, char *const argv[], char *const envp[]);
 int dup(int oldfd);
