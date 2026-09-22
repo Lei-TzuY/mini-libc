@@ -55,6 +55,7 @@ int main(int argc, char **argv)
     static char missing[] = "mini-libc-spawn-definitely-missing";
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_t destroyed;
+    posix_spawn_file_actions_t full;
     struct worker_state state;
     struct pollfd ready;
     char *child_argv[4];
@@ -85,6 +86,23 @@ int main(int argc, char **argv)
         posix_spawn_file_actions_adddup2(&actions, -1, STDOUT_FILENO) != EBADF ||
         errno != ERANGE) {
         return 2;
+    }
+
+    errno = ERANGE;
+    if (posix_spawn_file_actions_init(&full) != 0 || errno != ERANGE) {
+        return 3;
+    }
+    for (count = 0; count < (int)__MINI_POSIX_SPAWN_ACTION_CAPACITY; ++count) {
+        if (posix_spawn_file_actions_addclose(&full, 20 + count) != 0 ||
+            errno != ERANGE) {
+            return 3;
+        }
+    }
+    if (posix_spawn_file_actions_addclose(&full, 99) != ENOMEM ||
+        errno != ERANGE ||
+        posix_spawn_file_actions_destroy(&full) != 0 ||
+        errno != ERANGE) {
+        return 3;
     }
 
     errno = ERANGE;
