@@ -344,6 +344,26 @@ Saved IDs, supplementary groups, filesystem IDs, capabilities, namespaces,
 and privileged arbitrary-ID transitions remain outside this phase until they
 have independent executable evidence.
 
+`tcgetpgrp` and `tcsetpgrp` add a bounded foreground-job-control surface on
+top of a raw x86-64 `ioctl` boundary. The runtime models the Linux tty ioctl
+requests needed for controlling-terminal acquisition, foreground process-group
+queries/updates, PTY peer creation, and terminal-session correlation. Successful
+foreground-group operations preserve caller `errno`; non-terminal descriptors
+surface `ENOTTY`.
+
+`tests/pty_job_control_probe.c` is a self-contained PTY harness. The parent
+opens `/dev/ptmx`, unlocks the PTY, and forks a child. The child creates a new
+session with `setsid`, safely opens the PTY slave through `TIOCGPTPEER`, and
+claims it as the controlling terminal with `TIOCSCTTY`. `TIOCGSID` must match
+the child's new session ID. The session leader then creates a second process
+group in the same session, switches the terminal foreground group to that
+worker with `tcsetpgrp`, and proves `tcgetpgrp` reports the worker PGID. A
+command-pipe handshake ensures the worker only writes after it is the verified
+foreground group; its marker crosses the slave/master PTY data path and is
+read by the original parent. No host terminal, shell job-control state, or
+sleep-based timing assumptions are required. The same executable runs through
+pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -357,11 +377,11 @@ tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
 targeted/group signaling, process groups, sessions, bounded atfork
-coordination, resource enforcement, and real/effective credential identity now
-form one executable Unix process-control baseline. The credential phase is
-closed at an inheritance/drop/ownership boundary rather than getter breadth.
-The next promotion should cross into a genuinely different control plane—most
-naturally deterministic controlling-terminal/job-control backed by a
-self-contained PTY harness—rather than enumerate more UID/GID variants without
-new behavior. The async-signal-safe child boundary remains explicit after
-multithreaded fork.
+coordination, resource enforcement, credentials, and deterministic PTY-backed
+foreground job control now form one executable Unix process-control baseline.
+The controlling-terminal phase is closed at real session/foreground-group/data
+path behavior rather than ioctl breadth. The next promotion should move into a
+new terminal behavior plane—most naturally bounded termios/line-discipline
+state with executable signal or canonical-I/O evidence—rather than add more tty
+ioctl names without new behavior. The async-signal-safe child boundary remains
+explicit after multithreaded fork.
