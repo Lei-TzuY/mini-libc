@@ -206,6 +206,12 @@ if [ -e "$credential_parent" ] || [ -e "$credential_child" ]; then
     exit 1
 fi
 
+pty_output="$(./build/pty_job_control_probe)"
+if [ "$pty_output" != "pty-job-control-ok" ]; then
+    echo "unexpected PTY job-control output: $pty_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
