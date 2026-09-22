@@ -281,6 +281,29 @@ SID/PGID remain unchanged. A nonexistent PID also locks the `ESRCH` query
 boundary. The same executable runs through pinned tiny-c-compiler plus GNU ld
 and mini-elf-toolchain.
 
+`<pthread.h>` now exposes a deliberately bounded `pthread_atfork` surface.
+The registry stores up to eight handler triplets without allocation and is
+protected for concurrent registration. Each `fork()` takes a snapshot before
+running handlers, so the child never needs to acquire the registry lock.
+Prepare handlers run in reverse registration order; parent and child handlers
+run in registration order. If the raw fork fails, parent handlers still run
+before the actual fork errno is restored. `_Fork()` is exposed separately as
+the raw no-handler process primitive.
+
+`tests/atfork_probe.c` runs with a second C11 thread demonstrably holding a
+mutex while the calling thread forks. Two registered handler sets must produce
+`B.prepare -> A.prepare -> A.parent -> B.parent` in the parent and
+`B.prepare -> A.prepare -> A.child -> B.child` in the child. Six additional
+null registrations fill the fixed registry and a ninth entry must return
+`ENOMEM` without clobbering caller `errno`. A second child created through
+`_Fork()` must observe zero handler activity in both processes. The child-side
+evidence uses only `write`, `close`, and `_Exit` after fork. The same executable
+runs through pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
+This coordination layer does not relax the multithreaded post-fork safety
+boundary: handlers themselves and child code remain responsible for the
+async-signal-safe restrictions that apply until `execve`.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -292,12 +315,12 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, filesystem namespace state, IPC/readiness, fork/wait,
-`execve`, multithread-safe `posix_spawn`, targeted/group signaling,
-process-group topology, and session creation/query now form one executable Unix
-process hierarchy baseline. The next promotion should move beyond hierarchy
-identifiers into a genuinely new control plane—such as controlling-terminal/
-foreground-job semantics when they can be tested without host-dependent tty
-assumptions, or a separately justified atfork architecture. More SID/PGID
-aliases do not qualify as a new phase. Arbitrary post-fork libc use in a
-multithreaded child remains outside the supported contract.
+Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
+targeted/group signaling, process groups, sessions, and bounded atfork
+coordination now form one executable Unix process-control baseline. This
+atfork phase is closed; further work should cross into a genuinely new control
+plane rather than add more fork aliases or handler variants. A fresh audit
+should prefer deterministic controlling-terminal/job-control semantics only if
+a self-contained pseudo-terminal harness is available, otherwise another
+independent process capability such as credentials or resource limits. The
+async-signal-safe child boundary remains explicit after multithreaded fork.
