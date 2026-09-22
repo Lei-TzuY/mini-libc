@@ -71,6 +71,8 @@ done
     -o "$OUT/credential-child.o"
 "$MINICC" -nostdinc -Iinclude -c tests/credential_policy_probe.c \
     -o "$OUT/credential-policy.o"
+"$MINICC" -nostdinc -Iinclude -c tests/pty_job_control_probe.c \
+    -o "$OUT/pty-job-control.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -147,6 +149,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/credential-child.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/credential-policy" \
         "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/pty-job-control" \
+        "$OUT/pty-job-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -223,6 +227,8 @@ else
         "$OUT/credential-child.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/credential-policy" \
         "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/pty-job-control" \
+        "$OUT/pty-job-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -440,6 +446,12 @@ if [ -e "$credential_parent" ] || [ -e "$credential_child_file" ]; then
     exit 1
 fi
 
+pty_output=$("$OUT/pty-job-control")
+if [ "$pty_output" != "pty-job-control-ok" ]; then
+    echo "unexpected tiny-c PTY job-control output: $pty_output" >&2
+    exit 1
+fi
+
 posix_path_source="$OUT/posix-path-source.tmp"
 posix_path_target="$OUT/posix-path-target.tmp"
 posix_path_dir="$OUT/posix-path-dir.tmp"
@@ -648,6 +660,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/resource-limit"
 ./tests/verify-no-host-libc.sh "$OUT/credential-child"
 ./tests/verify-no-host-libc.sh "$OUT/credential-policy"
+./tests/verify-no-host-libc.sh "$OUT/pty-job-control"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
