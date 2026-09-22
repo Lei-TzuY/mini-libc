@@ -61,6 +61,7 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/posix_fd_probe $(BUILD)/descriptor_control_probe \
             $(BUILD)/cwd_state_probe $(BUILD)/pipe_ipc_probe \
             $(BUILD)/poll_readiness_probe $(BUILD)/process_orchestration_probe \
+            $(BUILD)/exec_child_probe $(BUILD)/exec_transition_probe \
             $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
@@ -249,6 +250,17 @@ $(BUILD)/process_orchestration_probe.o: tests/process_orchestration_probe.c \
                                      include/string.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/exec_child_probe.o: tests/exec_child_probe.c include/unistd.h \
+                           include/fcntl.h include/errno.h include/stdlib.h \
+                           include/string.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/exec_transition_probe.o: tests/exec_transition_probe.c include/unistd.h \
+                                include/fcntl.h include/poll.h include/sys/wait.h \
+                                include/errno.h include/stdlib.h include/string.h \
+                                include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
                              include/fcntl.h include/stdio.h include/errno.h \
                              include/string.h include/mini/syscall.h | $(BUILD)
@@ -435,6 +447,12 @@ $(BUILD)/poll_readiness_probe: $(BUILD)/poll_readiness_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/process_orchestration_probe: $(BUILD)/process_orchestration_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/process_orchestration_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/exec_child_probe: $(BUILD)/exec_child_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/exec_child_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/exec_transition_probe: $(BUILD)/exec_transition_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/exec_transition_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
