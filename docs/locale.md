@@ -16,19 +16,23 @@ target, `struct lconv`, `setlocale`, and `localeconv`.
 
 The process starts in `"C"`. `LC_CTYPE` and `LC_ALL` additionally accept
 `"C.UTF-8"` and `"C.utf8"`; querying those categories reports the selected
-mode. The empty locale string selects mini-libc's implementation-native
-`"C"` mode. Other categories retain the C-locale contract and reject named
-non-C locales. Unsupported category values fail without changing the active
-mode.
+mode. An empty locale string resolves environment-driven selection in the order
+`LC_ALL`, the category-specific variable such as `LC_CTYPE`, then `LANG`,
+falling back to `"C"` when each candidate is absent or empty. For `LC_ALL`,
+there is no additional category-specific variable, so the bounded model uses
+`LC_ALL` then `LANG`. Unsupported environment values fail transactionally
+without changing the active mode. Other categories retain the C-locale contract
+and therefore reject a resolved non-C locale.
 
 `localeconv()` remains process-lifetime C-locale data: decimal point `"."`,
 empty grouping/currency/sign strings, and `CHAR_MAX` for unavailable monetary
 placement/precision fields. The C.UTF-8 promotion changes character encoding,
 not numeric or monetary conventions.
 
-There is still no environment-variable locale selection, locale archive,
-per-thread locale object, collation database, or mutable locale-specific
-numeric/monetary data.
+There is still no locale archive, per-thread locale object, collation database,
+or mutable locale-specific numeric/monetary data. Environment lookup is
+allocation-free and reuses the startup-backed `getenv` state; it does not
+implicitly apply a locale until `setlocale(category, "")` is called.
 
 ## Unicode 15.1 wide classification and simple case mapping
 
@@ -181,8 +185,10 @@ reuse the same scanner rather than falling back to encoded-byte membership.
 ## Executable evidence
 
 `tests/locale_probe.c` remains the freestanding baseline for locale selection,
-`lconv`, legacy multibyte behavior, ASCII/NUL boundaries, `0x80` rejection,
-sizing/truncation, errno preservation, and `EILSEQ` failures.
+including `LC_ALL`/category/`LANG` precedence, empty-variable fallback,
+unsupported-environment rollback, `lconv`, legacy multibyte behavior, ASCII/NUL
+boundaries, `0x80` rejection, sizing/truncation, errno preservation, and
+`EILSEQ` failures.
 
 `tests/wchar_probe.c` is a second freestanding probe linked only against
 mini-libc. It directly exercises caller-owned and null restartable state,
@@ -236,11 +242,15 @@ collation database, normalization engine, locale-tailored multi-code-point case
 mapping, locale-sensitive numeric/monetary data, stateful encoding, or
 per-thread locale object.
 
-The next coherent locale promotion is **locale state ownership and
-environment-driven selection**, not more isolated character ranges.
-`setlocale(category, "")` should resolve the supported `"C"` /
-`"C.UTF-8"` choice from `LC_ALL`, the category-specific environment
-variable, and `LANG`, while keeping category state explicit enough to support
-later reentrant/per-thread locale work. That slice must preserve the current
-rule that an already wide-oriented FILE retains its orientation-time encoding
-even when process locale selection later changes.
+Environment-driven selection is now part of the executable baseline:
+`setlocale(category, "")` resolves `LC_ALL`, the category-specific variable,
+and `LANG` with empty-variable fallback and transactional failure. The mutable
+process locale is owned by an explicit locale-state object, while an already
+wide-oriented FILE still retains its orientation-time encoding across later
+process-locale changes.
+
+The next coherent locale promotion is **explicit per-category state and
+composite `LC_ALL` ownership**. That phase should make category state
+independently representable before any reentrant/per-thread locale object or
+collation work, without pretending that unsupported numeric/monetary locale
+data exists.
