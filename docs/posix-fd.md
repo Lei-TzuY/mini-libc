@@ -246,6 +246,23 @@ than normally exited, with `WTERMSIG(status) == SIGTERM`. A Linux-impossible
 pid value also locks the `ESRCH` boundary. The same executable runs through
 pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
 
+`getpgrp`, `getpgid`, and `setpgid` extend process control into explicit
+process-group topology. `getpgrp()` is the current-process `getpgid(0)` form;
+successful group queries and membership changes preserve caller `errno`.
+Existing `kill` and `waitpid` semantics then become group-aware through
+negative pid selectors instead of a second signaling or wait subsystem.
+
+`tests/process_group_probe.c` creates two children that report identity and
+then block on a control pipe. The parent promotes the first child to a new
+process-group leader, joins the second child to that group, and verifies both
+memberships with `getpgid` while its own process group remains unchanged.
+`kill(-pgid, 0)` proves group liveness; `kill(-pgid, SIGTERM)` terminates both
+members in one operation. Two `waitpid(-pgid, ...)` calls must reap exactly
+those two distinct children with `WIFSIGNALED` and `WTERMSIG == SIGTERM`, and
+a third group wait returns `ECHILD`. No sleeps or scheduler timing assumptions
+are used. The same executable runs through pinned tiny-c-compiler plus GNU ld
+and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -258,9 +275,10 @@ Bad descriptors, negative lengths, and missing paths exercise
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, fork/wait,
-`execve`, multithread-safe `posix_spawn`, and explicit process identity/signal
-termination now form one executable Unix process baseline. The next promotion
-should add a genuinely new topology/control capability—such as process-group
-membership and group signaling, or a separately justified atfork architecture—
-rather than farm more single-process signal wrappers. Arbitrary post-fork libc
-use in a multithreaded child remains outside the supported contract.
+`execve`, multithread-safe `posix_spawn`, targeted signaling, and process-group
+topology now form one executable Unix process baseline. The next promotion
+should cross into a genuinely new hierarchy boundary such as sessions
+(`setsid`/`getsid`) and their process-group relationship, or into a separately
+justified atfork architecture. More aliases around pid/group lookup do not
+qualify as a new phase. Arbitrary post-fork libc use in a multithreaded child
+remains outside the supported contract.

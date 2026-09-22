@@ -28,6 +28,37 @@ int kill(pid_t pid, int sig)
     return 0;
 }
 
+pid_t getpgid(pid_t pid)
+{
+    int saved_errno = errno;
+    long result = mini_sys_getpgid((int)pid);
+
+    if (result < 0L) {
+        errno = (int)-result;
+        return (pid_t)-1;
+    }
+    errno = saved_errno;
+    return (pid_t)result;
+}
+
+pid_t getpgrp(void)
+{
+    return getpgid((pid_t)0);
+}
+
+int setpgid(pid_t pid, pid_t pgid)
+{
+    int saved_errno = errno;
+    long result = mini_sys_setpgid((int)pid, (int)pgid);
+
+    if (result < 0L) {
+        errno = (int)-result;
+        return -1;
+    }
+    errno = saved_errno;
+    return 0;
+}
+
 pid_t fork(void)
 {
     long result = mini_sys_fork();
