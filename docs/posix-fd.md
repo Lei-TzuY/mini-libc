@@ -176,6 +176,22 @@ all closed reports `POLLERR`. `poll(NULL, 0, 0)` and successful readiness
 queries preserve sentinel `errno`. The same executable runs through pinned
 tiny-c-compiler plus GNU ld and mini-elf-toolchain.
 
+`tests/process_orchestration_probe.c` establishes a bounded single-threaded
+process baseline. The parent creates a pipe and forks; the child uses only
+`close`, `write`, and `_Exit`, while the parent blocks in `poll`, reads the
+child payload, reaps the exact pid with `waitpid`, verifies
+`WIFEXITED/WEXITSTATUS`, observes EOF/hangup after child descriptor teardown,
+and proves a second reap returns `ECHILD`. Both parent and child also verify
+successful `fork` preserves sentinel `errno`. The same executable runs through
+pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
+This is intentionally **not** a claim of multithreaded POSIX fork safety.
+mini-libc contains allocator, stdio, locale, and thread-runtime locks whose
+post-fork child state is not yet repaired if another thread owned a lock at
+fork time. Until that architecture is addressed, the public fork contract in
+this phase is the single-threaded process-orchestration baseline exercised by
+the probe.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -187,11 +203,10 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, filesystem namespace state, pipe IPC, and deterministic
-`poll` readiness now form one executable Unix runtime baseline. This readiness
-phase is closed; the next architectural promotion should move above descriptor
-multiplexing rather than add `select`/`epoll` wrappers without a new use case.
-A live architecture audit should choose the next process/runtime frontier—such
-as process orchestration around pipes and readiness—only when its fork/exec/wait
-semantics can be exercised end to end. Higher-level stdio should continue
-sharing this syscall substrate rather than growing a second kernel ABI.
+Descriptor I/O, filesystem namespace state, pipe IPC, deterministic `poll`
+readiness, and single-threaded fork/wait orchestration now form one executable
+Unix runtime baseline. The next coherent promotion is **exec transition**:
+`execve` plus inheritance/close-on-exec evidence that turns the current
+fork+pipe+poll+wait pieces into a true parent/child program-launch pipeline.
+Multithreaded fork repair should remain a separate architecture phase rather
+than being implied by the single-threaded baseline.
