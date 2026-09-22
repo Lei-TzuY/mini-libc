@@ -159,6 +159,12 @@ if [ "$control_output" != "process-control-ok" ]; then
     exit 1
 fi
 
+group_output="$(./build/process_group_probe)"
+if [ "$group_output" != "process-group-ok" ]; then
+    echo "unexpected process group output: $group_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
