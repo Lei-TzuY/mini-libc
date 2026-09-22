@@ -16,6 +16,7 @@ typedef int sig_atomic_t;
 #define SIGSEGV 11
 #define SIGPIPE 13
 #define SIGTERM 15
+#define SIGXFSZ 25
 
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
