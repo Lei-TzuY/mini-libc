@@ -57,6 +57,20 @@ if [ "$syscall_output" != "syscall-ok" ]; then
     exit 1
 fi
 
+posix_fd_path=build/posix-fd-probe.tmp
+rm -f "$posix_fd_path"
+posix_fd_output="$(./build/posix_fd_probe "$posix_fd_path")"
+if [ "$posix_fd_output" != "posix-fd-ok" ]; then
+    echo "unexpected POSIX descriptor output: $posix_fd_output" >&2
+    rm -f "$posix_fd_path"
+    exit 1
+fi
+if [ -e "$posix_fd_path" ]; then
+    echo "POSIX descriptor probe left filesystem state behind" >&2
+    rm -f "$posix_fd_path"
+    exit 1
+fi
+
 memory_output="$(./build/memory_probe)"
 if [ "$memory_output" != "memory-ok" ]; then
     echo "unexpected memory probe output: $memory_output" >&2
