@@ -63,6 +63,8 @@ done
     -o "$OUT/newlocale.o"
 "$MINICC" -nostdinc -Iinclude -c tests/wctype_locale_probe.c \
     -o "$OUT/wctype-l.o"
+"$MINICC" -nostdinc -Iinclude -c tests/ctype_locale_probe.c \
+    -o "$OUT/ctype-l.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -97,6 +99,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/newlocale.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/wctype-l" \
         "$OUT/wctype-l.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/ctype-l" \
+        "$OUT/ctype-l.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -131,6 +135,8 @@ else
         "$OUT/newlocale.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/wctype-l" \
         "$OUT/wctype-l.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/ctype-l" \
+        "$OUT/ctype-l.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -276,6 +282,12 @@ if [ "$wctype_l_output" != "wctype-l-ok" ]; then
     exit 1
 fi
 
+ctype_l_output=$("$OUT/ctype-l")
+if [ "$ctype_l_output" != "ctype-l-ok" ]; then
+    echo "unexpected tiny-c explicit-locale ctype output: $ctype_l_output" >&2
+    exit 1
+fi
+
 set +e
 termination_registry_output=$(timeout 5s "$OUT/termination" registry)
 termination_registry_status=$?
@@ -328,5 +340,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/locale-state"
 ./tests/verify-no-host-libc.sh "$OUT/newlocale"
 ./tests/verify-no-host-libc.sh "$OUT/wctype-l"
+./tests/verify-no-host-libc.sh "$OUT/ctype-l"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
