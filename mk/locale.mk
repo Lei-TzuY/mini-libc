@@ -18,7 +18,7 @@ test: locale_test_run
 
 .PHONY: locale_inspect locale_test_run
 
-$(BUILD)/locale.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h | $(BUILD)
+$(BUILD)/locale.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h include/stdlib.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wchar.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
@@ -70,7 +70,7 @@ $(BUILD)/wide_stdio_probe.o: tests/wide_stdio_probe.c include/wchar.h include/st
 $(BUILD)/wide_stdio_probe: $(BUILD)/wide_stdio_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/wide_stdio_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/locale_test_impl.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h | $(BUILD)
+$(BUILD)/locale_test_impl.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h include/stdlib.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LOCALE_RENAMES) -c $< -o $@
 
 $(BUILD)/wchar_test_impl.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
@@ -95,7 +95,14 @@ locale_test_run: $(BUILD)/locale_probe $(BUILD)/locale_differential \
                  $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
                  $(BUILD)/wide_stdio_probe
 	@test "$$($(BUILD)/locale_probe)" = "locale-ok"
-	@test "$$($(BUILD)/locale_differential)" = "locale-differential-ok"
+	@test "$$(env -i LANG=C.UTF-8 $(BUILD)/locale_probe env-ctype C.UTF-8)" = "locale-env-ok"
+	@test "$$(env -i LANG=C LC_CTYPE=C.UTF-8 $(BUILD)/locale_probe env-ctype C.UTF-8)" = "locale-env-ok"
+	@test "$$(env -i LANG=C.UTF-8 LC_CTYPE=C LC_ALL=C.UTF-8 $(BUILD)/locale_probe env-ctype C.UTF-8)" = "locale-env-ok"
+	@test "$$(env -i LANG=C.UTF-8 LC_CTYPE= $(BUILD)/locale_probe env-ctype C.UTF-8)" = "locale-env-ok"
+	@test "$$(env -i LANG=C LC_CTYPE=not-a-locale $(BUILD)/locale_probe env-ctype-fail)" = "locale-env-ok"
+	@test "$$(env -i LANG=C.UTF-8 $(BUILD)/locale_probe env-all C.UTF-8)" = "locale-env-ok"
+	@test "$$(env -i LANG=C LC_NUMERIC=C.UTF-8 $(BUILD)/locale_probe env-numeric-fail)" = "locale-env-ok"
+	@test "$$(env -i LC_ALL=C $(BUILD)/locale_differential)" = "locale-differential-ok"
 	@test "$$($(BUILD)/wchar_probe)" = "wchar-ok"
 	@test "$$($(BUILD)/wchar_differential)" = "wchar-differential-ok"
 	@test "$$(printf '12 34 ROW\n' | $(BUILD)/wide_stdio_probe)" = "!OK:7:2.5wide-stdio-ok"
