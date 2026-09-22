@@ -47,7 +47,7 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/posix_fd.o $(BUILD)/descriptor_control.o \
             $(BUILD)/cwd_state.o $(BUILD)/pipe_ipc.o $(BUILD)/poll.o \
             $(BUILD)/process.o $(BUILD)/atfork.o $(BUILD)/spawn.o \
-            $(BUILD)/resource.o $(BUILD)/posix_path.o \
+            $(BUILD)/resource.o $(BUILD)/credential.o $(BUILD)/posix_path.o \
             $(BUILD)/metadata.o \
             $(BUILD)/dirent.o \
             $(BUILD)/time.o \
@@ -67,7 +67,8 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/spawn_child_probe $(BUILD)/posix_spawn_probe \
             $(BUILD)/process_control_probe $(BUILD)/process_group_probe \
             $(BUILD)/session_hierarchy_probe $(BUILD)/atfork_probe \
-            $(BUILD)/resource_limit_probe $(BUILD)/posix_path_probe \
+            $(BUILD)/resource_limit_probe $(BUILD)/credential_child_probe \
+            $(BUILD)/credential_policy_probe $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
@@ -130,6 +131,10 @@ $(BUILD)/atfork.o: src/process/atfork.c include/pthread.h include/errno.h \
 
 $(BUILD)/resource.o: src/process/resource.c include/sys/resource.h \
                     include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/credential.o: src/process/credential.c include/unistd.h \
+                      include/sys/types.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/spawn.o: src/process/spawn.c include/spawn.h include/unistd.h \
@@ -315,6 +320,19 @@ $(BUILD)/resource_limit_probe.o: tests/resource_limit_probe.c include/sys/resour
                                include/sys/stat.h include/sys/wait.h include/unistd.h \
                                include/fcntl.h include/signal.h include/stdlib.h \
                                include/string.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/credential_child_probe.o: tests/credential_child_probe.c include/unistd.h \
+                                    include/fcntl.h include/sys/stat.h \
+                                    include/sys/types.h include/errno.h \
+                                    include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/credential_policy_probe.o: tests/credential_policy_probe.c include/unistd.h \
+                                     include/fcntl.h include/stdlib.h \
+                                     include/sys/stat.h include/sys/types.h \
+                                     include/sys/wait.h include/errno.h \
+                                     include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
@@ -530,6 +548,12 @@ $(BUILD)/atfork_probe: $(BUILD)/atfork_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/resource_limit_probe: $(BUILD)/resource_limit_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/resource_limit_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/credential_child_probe: $(BUILD)/credential_child_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/credential_child_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/credential_policy_probe: $(BUILD)/credential_policy_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/credential_policy_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)

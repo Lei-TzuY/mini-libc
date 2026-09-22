@@ -191,6 +191,21 @@ if [ -e "$resource_path" ]; then
     exit 1
 fi
 
+credential_parent=build/credential-parent.tmp
+credential_child=build/credential-child.tmp
+rm -f "$credential_parent" "$credential_child"
+credential_output="$(./build/credential_policy_probe ./build/credential_child_probe "$credential_parent" "$credential_child")"
+if [ "$credential_output" != "credential-policy-ok" ]; then
+    echo "unexpected credential policy output: $credential_output" >&2
+    rm -f "$credential_parent" "$credential_child"
+    exit 1
+fi
+if [ -e "$credential_parent" ] || [ -e "$credential_child" ]; then
+    echo "credential policy probe left filesystem state behind" >&2
+    rm -f "$credential_parent" "$credential_child"
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"

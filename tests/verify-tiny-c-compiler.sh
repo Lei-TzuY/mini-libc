@@ -67,6 +67,10 @@ done
     -o "$OUT/atfork.o"
 "$MINICC" -nostdinc -Iinclude -c tests/resource_limit_probe.c \
     -o "$OUT/resource-limit.o"
+"$MINICC" -nostdinc -Iinclude -c tests/credential_child_probe.c \
+    -o "$OUT/credential-child.o"
+"$MINICC" -nostdinc -Iinclude -c tests/credential_policy_probe.c \
+    -o "$OUT/credential-policy.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -139,6 +143,10 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/resource-limit" \
         "$OUT/resource-limit.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/credential-child" \
+        "$OUT/credential-child.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/credential-policy" \
+        "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -211,6 +219,10 @@ else
         "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/resource-limit" \
         "$OUT/resource-limit.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/credential-child" \
+        "$OUT/credential-child.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/credential-policy" \
+        "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -410,6 +422,21 @@ fi
 if [ -e "$resource_path" ]; then
     echo "tiny-c resource limit integration left filesystem state behind" >&2
     rm -f "$resource_path"
+    exit 1
+fi
+
+credential_parent="$OUT/credential-parent.tmp"
+credential_child_file="$OUT/credential-child.tmp"
+rm -f "$credential_parent" "$credential_child_file"
+credential_output=$("$OUT/credential-policy" "$OUT/credential-child" "$credential_parent" "$credential_child_file")
+if [ "$credential_output" != "credential-policy-ok" ]; then
+    echo "unexpected tiny-c credential policy output: $credential_output" >&2
+    rm -f "$credential_parent" "$credential_child_file"
+    exit 1
+fi
+if [ -e "$credential_parent" ] || [ -e "$credential_child_file" ]; then
+    echo "tiny-c credential policy integration left filesystem state behind" >&2
+    rm -f "$credential_parent" "$credential_child_file"
     exit 1
 fi
 
@@ -619,6 +646,8 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/session-hierarchy"
 ./tests/verify-no-host-libc.sh "$OUT/atfork"
 ./tests/verify-no-host-libc.sh "$OUT/resource-limit"
+./tests/verify-no-host-libc.sh "$OUT/credential-child"
+./tests/verify-no-host-libc.sh "$OUT/credential-policy"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
