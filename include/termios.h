@@ -16,9 +16,11 @@ struct termios {
     cc_t c_cc[NCCS];
 };
 
+#define VINTR 0
 #define VEOF 4
 #define VTIME 5
 #define VMIN 6
+#define VSUSP 10
 
 #define ISIG 0x00001U
 #define ICANON 0x00002U

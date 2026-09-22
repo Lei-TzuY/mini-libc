@@ -218,6 +218,12 @@ if [ "$termios_output" != "termios-canonical-ok" ]; then
     exit 1
 fi
 
+tty_signal_output="$(./build/tty_control_signal_probe)"
+if [ "$tty_signal_output" != "tty-control-signals-ok" ]; then
+    echo "unexpected tty control signal output: $tty_signal_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
