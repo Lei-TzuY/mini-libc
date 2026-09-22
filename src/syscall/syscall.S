@@ -1,5 +1,13 @@
     .text
 
+    .globl mini_sys_poll
+    .type mini_sys_poll, @function
+mini_sys_poll:
+    movl $7, %eax
+    syscall
+    ret
+    .size mini_sys_poll, .-mini_sys_poll
+
     .globl mini_sys_read
     .type mini_sys_read, @function
 mini_sys_read:
