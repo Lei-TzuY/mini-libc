@@ -113,6 +113,7 @@ int main(int argc, char **argv, char **envp)
         (char)0xe2, (char)0x82, (char)0xac, '\0'
     };
     char locale_bytes[4] = {'?', '?', '?', '?'};
+    char locale_snapshot[96];
     wchar_t locale_wide[4] = {9, 9, 9, 9};
     mbstate_t locale_state = {0U, 0U};
     struct lconv *locale_info;
@@ -173,6 +174,8 @@ int main(int argc, char **argv, char **envp)
     errno = EIO;
     if (setlocale(LC_CTYPE, "") == (char *)0 ||
         strcmp(setlocale(LC_CTYPE, (const char *)0), "C.UTF-8") != 0 ||
+        strcmp(setlocale(LC_ALL, (const char *)0),
+               "LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C") != 0 ||
         MB_CUR_MAX != 4 ||
         mbstowcs(locale_wide, locale_euro, 4U) != 1U ||
         locale_wide[0] != (wchar_t)0x20ac || locale_wide[1] != 0 ||
@@ -182,6 +185,14 @@ int main(int argc, char **argv, char **envp)
         (unsigned char)locale_bytes[2] != 0xacU ||
         locale_bytes[3] != '\0' || errno != EIO) {
         return 100;
+    }
+    strcpy(locale_snapshot, setlocale(LC_ALL, (const char *)0));
+    if (setlocale(LC_ALL, "C") == (char *)0 || MB_CUR_MAX != 1 ||
+        setlocale(LC_ALL, locale_snapshot) == (char *)0 ||
+        strcmp(setlocale(LC_CTYPE, (const char *)0), "C.UTF-8") != 0 ||
+        strcmp(setlocale(LC_NUMERIC, (const char *)0), "C") != 0 ||
+        MB_CUR_MAX != 4) {
+        return 104;
     }
     locale_state.__count = 0U;
     locale_state.__value = 0U;

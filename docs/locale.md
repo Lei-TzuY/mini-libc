@@ -15,8 +15,15 @@ or stateful encodings.
 target, `struct lconv`, `setlocale`, and `localeconv`.
 
 The process starts in `"C"`. `LC_CTYPE` and `LC_ALL` additionally accept
-`"C.UTF-8"` and `"C.utf8"`; querying those categories reports the selected
-mode. An empty locale string resolves environment-driven selection in the order
+`"C.UTF-8"` and `"C.utf8"`. Each standard category is owned explicitly by
+the process-locale state even though the bounded runtime currently permits only
+`LC_CTYPE` to differ from `"C"`. Querying `LC_ALL` therefore returns
+`"C"` only when every category is C; a mixed CTYPE=C.UTF-8 state returns an
+opaque composite string that records C for the remaining categories. A copied
+composite string can be passed back to `setlocale(LC_ALL, ...)` to restore the
+same state.
+
+An empty locale string resolves environment-driven selection in the order
 `LC_ALL`, the category-specific variable such as `LC_CTYPE`, then `LANG`,
 falling back to `"C"` when each candidate is absent or empty. For `LC_ALL`,
 there is no additional category-specific variable, so the bounded model uses
@@ -242,15 +249,16 @@ collation database, normalization engine, locale-tailored multi-code-point case
 mapping, locale-sensitive numeric/monetary data, stateful encoding, or
 per-thread locale object.
 
-Environment-driven selection is now part of the executable baseline:
-`setlocale(category, "")` resolves `LC_ALL`, the category-specific variable,
-and `LANG` with empty-variable fallback and transactional failure. The mutable
-process locale is owned by an explicit locale-state object, while an already
-wide-oriented FILE still retains its orientation-time encoding across later
-process-locale changes.
+Environment-driven selection, explicit per-category ownership, and composite
+`LC_ALL` query/restore are now part of the executable baseline. A C.UTF-8
+`LC_CTYPE` no longer causes `LC_ALL` to misreport that unsupported numeric,
+time, collation, or monetary locale data exists. The aggregate return string is
+opaque and restorable, and invalid aggregate strings fail without mutating the
+current process locale. An already wide-oriented FILE still retains its
+orientation-time encoding across later process-locale changes.
 
-The next coherent locale promotion is **explicit per-category state and
-composite `LC_ALL` ownership**. That phase should make category state
-independently representable before any reentrant/per-thread locale object or
-collation work, without pretending that unsupported numeric/monetary locale
-data exists.
+The next coherent locale promotion is **locale object isolation and reentrant
+selection boundaries**. That phase should separate process-global locale state
+from an explicit locale object before per-thread adoption, while keeping
+collation and locale-sensitive numeric/monetary data outside the contract until
+they have real implementation and executable evidence.

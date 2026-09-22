@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+static const char mixed_locale[] =
+    "LC_CTYPE=C.UTF-8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C";
+
 static int same_string(const char *left, const char *right)
 {
     while (*left != '\0' && *right != '\0') {
@@ -12,6 +15,21 @@ static int same_string(const char *left, const char *right)
         ++right;
     }
     return *left == *right;
+}
+
+static int copy_string(char *dst, size_t capacity, const char *src)
+{
+    size_t index = 0U;
+
+    while (src[index] != '\0') {
+        if (index + 1U >= capacity) {
+            return 0;
+        }
+        dst[index] = src[index];
+        ++index;
+    }
+    dst[index] = '\0';
+    return 1;
 }
 
 static int check_lconv(void)
@@ -46,10 +64,16 @@ static int environment_mode(int argc, char **argv)
         category = same_string(argv[1], "env-ctype") ? LC_CTYPE : LC_ALL;
         errno = EIO;
         selected = setlocale(category, "");
-        if (selected == (char *)0 || !same_string(selected, argv[2]) ||
-            !same_string(setlocale(category, (const char *)0), argv[2]) ||
-            errno != EIO) {
-            return 30;
+        {
+            const char *expected = argv[2];
+            if (category == LC_ALL && same_string(expected, "C.UTF-8")) {
+                expected = mixed_locale;
+            }
+            if (selected == (char *)0 || !same_string(selected, expected) ||
+                !same_string(setlocale(category, (const char *)0), expected) ||
+                errno != EIO) {
+                return 30;
+            }
         }
         if ((same_string(argv[2], "C.UTF-8") && MB_CUR_MAX != 4) ||
             (same_string(argv[2], "C") && MB_CUR_MAX != 1)) {
@@ -110,6 +134,8 @@ int main(int argc, char **argv, char **envp)
     wchar_t invalid_wide[] = {'A', 0x80, 0};
     wchar_t wc = 999;
     char bytes[16] = {'?', '?', '?', '?', '?', '?', '?', '?'};
+    char saved_locale[96];
+    char *aggregate;
 
     {
         int env_result = environment_mode(argc, argv);
@@ -214,6 +240,35 @@ int main(int argc, char **argv, char **envp)
     if (!same_string(setlocale(LC_CTYPE, "C.utf8"), "C.UTF-8") ||
         MB_CUR_MAX != 4) {
         return 15;
+    }
+
+    aggregate = setlocale(LC_ALL, (const char *)0);
+    if (aggregate == (char *)0 || !same_string(aggregate, mixed_locale) ||
+        !same_string(setlocale(LC_NUMERIC, (const char *)0), "C") ||
+        !copy_string(saved_locale, sizeof(saved_locale), aggregate)) {
+        return 22;
+    }
+    if (!same_string(setlocale(LC_ALL, "C"), "C") || MB_CUR_MAX != 1 ||
+        !same_string(setlocale(LC_CTYPE, (const char *)0), "C") ||
+        !same_string(setlocale(LC_NUMERIC, (const char *)0), "C")) {
+        return 23;
+    }
+    aggregate = setlocale(LC_ALL, saved_locale);
+    if (aggregate == (char *)0 || !same_string(aggregate, mixed_locale) ||
+        !same_string(setlocale(LC_CTYPE, (const char *)0), "C.UTF-8") ||
+        !same_string(setlocale(LC_NUMERIC, (const char *)0), "C") ||
+        MB_CUR_MAX != 4) {
+        return 24;
+    }
+    if (setlocale(LC_ALL, "LC_CTYPE=C.UTF-8;LC_NUMERIC=bad") != (char *)0 ||
+        !same_string(setlocale(LC_ALL, (const char *)0), mixed_locale) ||
+        MB_CUR_MAX != 4) {
+        return 25;
+    }
+    aggregate = setlocale(LC_ALL, "C.UTF-8");
+    if (aggregate == (char *)0 || !same_string(aggregate, mixed_locale) ||
+        MB_CUR_MAX != 4) {
+        return 26;
     }
 
     errno = EIO;
