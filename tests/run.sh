@@ -110,12 +110,18 @@ fi
 dirent_root=build/dirent-root.tmp
 rm -rf "$dirent_root"
 mkdir -p "$dirent_root/subdir"
+dirent_i=0
+while [ "$dirent_i" -lt 180 ]; do
+    : > "$dirent_root/filler-$dirent_i"
+    dirent_i=$((dirent_i + 1))
+done
 dirent_output="$(./build/dirent_probe "$dirent_root")"
 if [ "$dirent_output" != "dirent-ok" ]; then
     echo "unexpected dirent probe output: $dirent_output" >&2
     rm -rf "$dirent_root"
     exit 1
 fi
+rm -f "$dirent_root"/filler-*
 if ! rmdir "$dirent_root"; then
     echo "dirent probe left filesystem state behind" >&2
     rm -rf "$dirent_root"
