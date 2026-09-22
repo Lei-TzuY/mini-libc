@@ -63,6 +63,8 @@ done
     -o "$OUT/process-group.o"
 "$MINICC" -nostdinc -Iinclude -c tests/session_hierarchy_probe.c \
     -o "$OUT/session-hierarchy.o"
+"$MINICC" -nostdinc -Iinclude -c tests/atfork_probe.c \
+    -o "$OUT/atfork.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -131,6 +133,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/process-group.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/session-hierarchy" \
         "$OUT/session-hierarchy.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/atfork" \
+        "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -199,6 +203,8 @@ else
         "$OUT/process-group.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/session-hierarchy" \
         "$OUT/session-hierarchy.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/atfork" \
+        "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -378,6 +384,12 @@ fi
 session_output=$("$OUT/session-hierarchy")
 if [ "$session_output" != "session-hierarchy-ok" ]; then
     echo "unexpected tiny-c session hierarchy output: $session_output" >&2
+    exit 1
+fi
+
+atfork_output=$("$OUT/atfork")
+if [ "$atfork_output" != "atfork-coordination-ok" ]; then
+    echo "unexpected tiny-c atfork coordination output: $atfork_output" >&2
     exit 1
 fi
 
@@ -585,6 +597,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/process-control"
 ./tests/verify-no-host-libc.sh "$OUT/process-group"
 ./tests/verify-no-host-libc.sh "$OUT/session-hierarchy"
+./tests/verify-no-host-libc.sh "$OUT/atfork"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
