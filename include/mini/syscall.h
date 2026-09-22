@@ -19,6 +19,9 @@ long mini_sys_dup2(int oldfd, int newfd);
 long mini_sys_fstat(int fd, void *statbuf);
 long mini_sys_fcntl(int fd, int cmd, unsigned long arg);
 long mini_sys_lseek(int fd, long offset, int whence);
+long mini_sys_getcwd(char *buf, unsigned long size);
+long mini_sys_chdir(const char *path);
+long mini_sys_fchdir(int fd);
 long mini_sys_sched_yield(void);
 long mini_sys_nanosleep(const void *request, void *remaining);
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,

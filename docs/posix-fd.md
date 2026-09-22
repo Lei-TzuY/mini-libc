@@ -15,11 +15,12 @@ match the native Linux x86-64 UAPI layout. It exposes the standard file-type
 and permission masks plus `S_IS*` predicates, together with public `stat` and
 `fstat` entry points.
 
-`<unistd.h>` exposes `read`, `write`, `close`, `dup`, `dup2`, `lseek`,
-`ftruncate`, `unlink`, and `unlinkat`, plus the standard descriptor and seek
-constants used by those calls. `<stdio.h>` retains ISO C `remove`/`rename`
-and exposes POSIX `renameat`; all pathname mutation routes through one shared
-runtime.
+`<unistd.h>` exposes `read`, `write`, `close`, `dup`, `dup2`, `getcwd`,
+`chdir`, `fchdir`, `lseek`, `ftruncate`, `unlink`, and `unlinkat`, plus the
+standard descriptor and seek constants used by those calls. `<stdio.h>`
+retains ISO C `remove`/`rename` and exposes POSIX `renameat`; all pathname
+mutation routes through one shared runtime. `getcwd/chdir/fchdir` add explicit
+process working-directory state to the same relative-path namespace model.
 
 `<fcntl.h>` exposes `open`, `openat`, and a bounded descriptor-control
 `fcntl` surface. Supported commands are `F_DUPFD`, `F_GETFD`, `F_SETFD`, and
@@ -47,6 +48,13 @@ translates a negative raw result into the conventional `-1` return and stores
 the positive Linux error number in thread-aware `errno`.
 
 Successful calls do not overwrite an existing `errno` value.
+
+Current-directory state uses native x86-64 `getcwd` (79), `chdir` (80), and
+`fchdir` (81). `chdir` changes the process-relative pathname base, while
+`fchdir` rebinds it to an already-open directory descriptor. The public
+`getcwd` wrapper returns the caller buffer on success and rejects null/zero
+buffers with the bounded `EINVAL` contract; kernel size failures surface as
+`ERANGE`.
 
 Descriptor duplication/control uses native x86-64 `dup` (32), `dup2` (33),
 and `fcntl` (72). Duplicated descriptors share one open-file description, so
@@ -118,6 +126,18 @@ returns the descriptor unchanged. The probe also locks `EBADF` and bounded
 command `EINVAL` behavior and runs through pinned tiny-c-compiler plus GNU ld
 and mini-elf-toolchain.
 
+`tests/cwd_state_probe.c` saves the original cwd as both a pathname and an open
+directory descriptor, changes into a harness-created tree, and correlates the
+new cwd with pathname metadata by device/inode. Relative `open`, `stat`, and
+`opendir` then create/read/enumerate namespace state beneath the new cwd. The
+probe descends into a child directory, accesses the parent through `..`, proves
+missing/non-directory `chdir` errors leave cwd unchanged, locks bad-fd
+`fchdir`, and finally restores the exact original cwd through the saved
+descriptor. It also exercises `getcwd` success, short-buffer `ERANGE`, bounded
+null/zero-size `EINVAL`, and successful-call errno preservation. The same
+executable runs through pinned tiny-c-compiler plus GNU ld and
+mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -129,13 +149,12 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, pathname lifecycle, metadata/sizing, directory traversal, and
-descriptor duplication/control now form one executable Unix filesystem
-baseline. The next coherent promotion should move above basic descriptor
-mechanics rather than farm additional fcntl command numbers. A higher-value
-frontier is **process-facing filesystem/runtime state** such as
-`getcwd/chdir/fchdir` with relative-path integration, or a separately bounded
-pipe/readiness capability once its blocking semantics can be exercised
-deterministically. Further directory work should wait for a genuinely new
-capability rather than readdir variants. Higher-level stdio should continue
-sharing this syscall substrate rather than growing a second kernel ABI.
+Descriptor I/O, pathname lifecycle, metadata/sizing, directory traversal,
+descriptor control, and process cwd state now form one executable Unix
+filesystem baseline. The next coherent promotion should cross from filesystem
+namespace mechanics into **inter-descriptor communication/readiness**, starting
+with a bounded `pipe/pipe2` slice and only then adding polling semantics that
+can be exercised deterministically. Cwd work should not continue as path-edge
+case farming unless a genuinely new process-state capability is introduced.
+Higher-level stdio should continue sharing this syscall substrate rather than
+growing a second kernel ABI.

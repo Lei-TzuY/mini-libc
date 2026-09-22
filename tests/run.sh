@@ -108,6 +108,21 @@ if [ -e "$descriptor_source" ] || [ -e "$descriptor_target" ]; then
     exit 1
 fi
 
+cwd_root=build/cwd-state-root.tmp
+rm -rf "$cwd_root"
+mkdir -p "$cwd_root/child"
+cwd_output="$(./build/cwd_state_probe "$cwd_root")"
+if [ "$cwd_output" != "cwd-state-ok" ]; then
+    echo "unexpected cwd state output: $cwd_output" >&2
+    rm -rf "$cwd_root"
+    exit 1
+fi
+if ! rmdir "$cwd_root/child" "$cwd_root"; then
+    echo "cwd state probe left filesystem state behind" >&2
+    rm -rf "$cwd_root"
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
