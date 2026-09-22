@@ -55,6 +55,8 @@ done
     -o "$OUT/atomic-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_math_integration.c \
     -o "$OUT/math-test.o"
+"$MINICC" -nostdinc -Iinclude -c tests/tiny_locale_state_integration.c \
+    -o "$OUT/locale-state.o"
 
 if [ -n "${MINI_ELF_LINKER:-}" ]; then
     "$MINI_ELF_LINKER" link -o "$OUT/integration" \
@@ -81,6 +83,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/math-test" \
         "$OUT/math-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/locale-state" \
+        "$OUT/locale-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="mini-elf-toolchain"
 else
     "$LD" -static -e _start --build-id=none -o "$OUT/integration" \
@@ -107,6 +111,8 @@ else
         "$OUT/atomic-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/math-test" \
         "$OUT/math-test.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/locale-state" \
+        "$OUT/locale-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     linker_name="GNU ld"
 fi
 
@@ -221,6 +227,12 @@ if [ "$math_output" != "tiny-math-ok" ]; then
     exit 1
 fi
 
+locale_state_output=$("$OUT/locale-state")
+if [ "$locale_state_output" != "tiny-locale-state-ok" ]; then
+    echo "unexpected tiny-c locale state output: $locale_state_output" >&2
+    exit 1
+fi
+
 set +e
 termination_registry_output=$(timeout 5s "$OUT/termination" registry)
 termination_registry_status=$?
@@ -269,5 +281,6 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/mutex"
 ./tests/verify-no-host-libc.sh "$OUT/atomic-test"
 ./tests/verify-no-host-libc.sh "$OUT/math-test"
+./tests/verify-no-host-libc.sh "$OUT/locale-state"
 
 echo "tiny-c-compiler -> mini-libc -> $linker_name integration passed"
