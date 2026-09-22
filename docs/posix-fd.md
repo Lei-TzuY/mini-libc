@@ -86,13 +86,15 @@ and are separately compiled by pinned tiny-c-compiler then linked/executed
 through both GNU ld and mini-elf-toolchain.
 
 `tests/dirent_probe.c` builds a real namespace beneath a directory descriptor,
-then verifies `opendir/readdir` observe `.`, `..`, two regular files, and a
-subdirectory with coherent inode/type/name records. It correlates `dirfd`
-metadata with pathname metadata, proves EOF preserves `errno`, rewinds and
-enumerates the same namespace again, checks missing-path `ENOENT` and
-non-directory `ENOTDIR`, and cleans every child so the harness can remove the
-root directory. The same executable runs through pinned tiny-c-compiler and
-both GNU ld and mini-elf-toolchain.
+then verifies `opendir/readdir` observe `.`, `..`, two named regular files,
+a subdirectory, and at least 180 deterministic filler entries with coherent
+inode/type/name records. The filler set intentionally exceeds the 4 KiB stream
+buffer so both the first traversal and the post-`rewinddir` traversal require
+multiple `getdents64` refills. The probe correlates `dirfd` metadata with
+pathname metadata, proves EOF preserves `errno`, checks missing-path `ENOENT`
+and non-directory `ENOTDIR`, and cleans the owned entries so the harness can
+remove the root directory after removing the filler set. The same executable
+runs through pinned tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 ## Next architectural promotion
 
