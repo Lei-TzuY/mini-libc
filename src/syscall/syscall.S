@@ -196,6 +196,22 @@ mini_sys_getpid:
     ret
     .size mini_sys_getpid, .-mini_sys_getpid
 
+    .globl mini_sys_kill
+    .type mini_sys_kill, @function
+mini_sys_kill:
+    movl $62, %eax
+    syscall
+    ret
+    .size mini_sys_kill, .-mini_sys_kill
+
+    .globl mini_sys_getppid
+    .type mini_sys_getppid, @function
+mini_sys_getppid:
+    movl $110, %eax
+    syscall
+    ret
+    .size mini_sys_getppid, .-mini_sys_getppid
+
     .globl mini_sys_arch_prctl
     .type mini_sys_arch_prctl, @function
 mini_sys_arch_prctl:
