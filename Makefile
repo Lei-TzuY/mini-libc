@@ -46,7 +46,8 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
             $(BUILD)/posix_fd.o $(BUILD)/descriptor_control.o \
             $(BUILD)/cwd_state.o $(BUILD)/pipe_ipc.o $(BUILD)/poll.o \
-            $(BUILD)/process.o $(BUILD)/spawn.o $(BUILD)/posix_path.o \
+            $(BUILD)/process.o $(BUILD)/atfork.o $(BUILD)/spawn.o \
+            $(BUILD)/posix_path.o \
             $(BUILD)/metadata.o \
             $(BUILD)/dirent.o \
             $(BUILD)/time.o \
@@ -65,7 +66,8 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/exec_child_probe $(BUILD)/exec_transition_probe \
             $(BUILD)/spawn_child_probe $(BUILD)/posix_spawn_probe \
             $(BUILD)/process_control_probe $(BUILD)/process_group_probe \
-            $(BUILD)/session_hierarchy_probe $(BUILD)/posix_path_probe \
+            $(BUILD)/session_hierarchy_probe $(BUILD)/atfork_probe \
+            $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
@@ -117,7 +119,13 @@ $(BUILD)/poll.o: src/poll/poll.c include/poll.h include/errno.h \
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/process.o: src/process/process.c include/unistd.h include/sys/wait.h \
-                    include/sys/types.h include/errno.h include/mini/syscall.h | $(BUILD)
+                    include/sys/types.h include/errno.h include/mini/syscall.h \
+                    src/internal/atfork.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/atfork.o: src/process/atfork.c include/pthread.h include/errno.h \
+                   src/internal/atfork.h src/internal/futex_lock.h \
+                   include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/spawn.o: src/process/spawn.c include/spawn.h include/unistd.h \
@@ -291,6 +299,11 @@ $(BUILD)/process_group_probe.o: tests/process_group_probe.c include/unistd.h \
 $(BUILD)/session_hierarchy_probe.o: tests/session_hierarchy_probe.c include/unistd.h \
                                   include/signal.h include/sys/types.h include/sys/wait.h \
                                   include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/atfork_probe.o: tests/atfork_probe.c include/pthread.h include/unistd.h \
+                        include/threads.h include/stdatomic.h include/sys/wait.h \
+                        include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
@@ -500,6 +513,9 @@ $(BUILD)/process_group_probe: $(BUILD)/process_group_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/session_hierarchy_probe: $(BUILD)/session_hierarchy_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/session_hierarchy_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/atfork_probe: $(BUILD)/atfork_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/atfork_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
