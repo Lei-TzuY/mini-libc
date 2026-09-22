@@ -69,6 +69,7 @@ static _Noreturn void session_child(int master, int phase_write)
     errno = ERANGE;
     if (mini_sys_ioctl(slave, MINI_TIOCSCTTY, 0UL) < 0L ||
         errno != ERANGE ||
+        tcsetpgrp(slave, self) != 0 || errno != ERANGE ||
         tcgetpgrp(slave) != self || errno != ERANGE ||
         tcgetattr(slave, &original) != 0 || errno != ERANGE) {
         _Exit(94);
