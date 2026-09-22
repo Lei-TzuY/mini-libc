@@ -7,9 +7,9 @@ MULTIBYTE_RENAMES := -Dmblen=mini_test_mblen -Dmbtowc=mini_test_mbtowc \
                      -Dwctomb=mini_test_wctomb -Dmbstowcs=mini_test_mbstowcs \
                      -Dwcstombs=mini_test_wcstombs
 
-$(LIBC): $(BUILD)/locale.o $(BUILD)/wchar.o $(BUILD)/unicode_props.o $(BUILD)/wctype.o \
-         $(BUILD)/wide_stdio.o $(BUILD)/wide_format.o $(BUILD)/wide_scan.o \
-         $(BUILD)/multibyte.o
+$(LIBC): $(BUILD)/locale.o $(BUILD)/locale_object.o $(BUILD)/wchar.o \
+         $(BUILD)/unicode_props.o $(BUILD)/wctype.o $(BUILD)/wide_stdio.o \
+         $(BUILD)/wide_format.o $(BUILD)/wide_scan.o $(BUILD)/multibyte.o
 all: $(BUILD)/locale_probe $(BUILD)/locale_state_probe $(BUILD)/locale_differential \
      $(BUILD)/wchar_probe $(BUILD)/wchar_differential \
      $(BUILD)/wide_stdio_probe
@@ -19,6 +19,11 @@ test: locale_test_run
 .PHONY: locale_inspect locale_test_run
 
 $(BUILD)/locale.o: src/locale/locale.c src/locale/locale_internal.h include/locale.h include/stddef.h include/stdlib.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/locale_object.o: src/locale/locale_object.c src/locale/locale_internal.h \
+                          src/internal/futex_lock.h include/locale.h \
+                          include/stdlib.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/wchar.o: src/wchar/wchar.c src/wchar/wchar_internal.h src/locale/locale_internal.h include/wchar.h include/stddef.h include/errno.h | $(BUILD)
