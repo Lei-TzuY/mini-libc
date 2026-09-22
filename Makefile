@@ -279,7 +279,7 @@ $(BUILD)/posix_spawn_probe.o: tests/posix_spawn_probe.c include/spawn.h \
 
 $(BUILD)/process_control_probe.o: tests/process_control_probe.c include/unistd.h \
                                  include/signal.h include/sys/types.h include/sys/wait.h \
-                                 include/errno.h include/mini/syscall.h | $(BUILD)
+                                 include/stdlib.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
