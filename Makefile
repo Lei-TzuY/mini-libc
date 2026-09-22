@@ -69,7 +69,7 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/session_hierarchy_probe $(BUILD)/atfork_probe \
             $(BUILD)/resource_limit_probe $(BUILD)/credential_child_probe \
             $(BUILD)/credential_policy_probe $(BUILD)/pty_job_control_probe \
-            $(BUILD)/posix_path_probe \
+            $(BUILD)/termios_canonical_probe $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
@@ -112,8 +112,9 @@ $(BUILD)/cwd_state.o: src/unistd/cwd.c include/unistd.h include/stddef.h \
                       include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/tty.o: src/unistd/tty.c include/unistd.h include/sys/types.h \
-                   include/errno.h include/mini/syscall.h include/mini/tty_ioctl.h | $(BUILD)
+$(BUILD)/tty.o: src/unistd/tty.c include/unistd.h include/termios.h \
+                   include/sys/types.h include/errno.h include/mini/syscall.h \
+                   include/mini/tty_ioctl.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/pipe_ipc.o: src/unistd/pipe.c include/unistd.h include/errno.h \
@@ -347,6 +348,12 @@ $(BUILD)/pty_job_control_probe.o: tests/pty_job_control_probe.c include/unistd.h
                                  include/mini/tty_ioctl.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/termios_canonical_probe.o: tests/termios_canonical_probe.c \
+                                    include/unistd.h include/fcntl.h include/poll.h \
+                                    include/termios.h include/errno.h \
+                                    include/mini/syscall.h include/mini/tty_ioctl.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
                              include/fcntl.h include/stdio.h include/errno.h \
                              include/string.h include/mini/syscall.h | $(BUILD)
@@ -569,6 +576,9 @@ $(BUILD)/credential_policy_probe: $(BUILD)/credential_policy_probe.o $(CRT0) $(L
 
 $(BUILD)/pty_job_control_probe: $(BUILD)/pty_job_control_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/pty_job_control_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/termios_canonical_probe: $(BUILD)/termios_canonical_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/termios_canonical_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
