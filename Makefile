@@ -89,7 +89,7 @@ $(BUILD)/string.o: src/string/string.c include/string.h include/stddef.h | $(BUI
 $(BUILD)/strerror.o: src/string/strerror.c include/string.h include/errno.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ctype.o: src/ctype/ctype.c include/ctype.h | $(BUILD)
+$(BUILD)/ctype.o: src/ctype/ctype.c src/locale/locale_internal.h include/ctype.h include/locale.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/atoi.o: src/stdlib/atoi.c include/stdlib.h | $(BUILD)
