@@ -228,6 +228,22 @@ mini_sys_getpgid:
     ret
     .size mini_sys_getpgid, .-mini_sys_getpgid
 
+    .globl mini_sys_getrlimit
+    .type mini_sys_getrlimit, @function
+mini_sys_getrlimit:
+    movl $97, %eax
+    syscall
+    ret
+    .size mini_sys_getrlimit, .-mini_sys_getrlimit
+
+    .globl mini_sys_setrlimit
+    .type mini_sys_setrlimit, @function
+mini_sys_setrlimit:
+    movl $160, %eax
+    syscall
+    ret
+    .size mini_sys_setrlimit, .-mini_sys_setrlimit
+
     .globl mini_sys_setsid
     .type mini_sys_setsid, @function
 mini_sys_setsid:
