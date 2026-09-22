@@ -80,6 +80,14 @@ mini_sys_fork:
     ret
     .size mini_sys_fork, .-mini_sys_fork
 
+    .globl mini_sys_execve
+    .type mini_sys_execve, @function
+mini_sys_execve:
+    movl $59, %eax
+    syscall
+    ret
+    .size mini_sys_execve, .-mini_sys_execve
+
     .globl mini_sys_wait4
     .type mini_sys_wait4, @function
 mini_sys_wait4:
