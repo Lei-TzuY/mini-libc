@@ -64,7 +64,7 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/poll_readiness_probe $(BUILD)/process_orchestration_probe \
             $(BUILD)/exec_child_probe $(BUILD)/exec_transition_probe \
             $(BUILD)/spawn_child_probe $(BUILD)/posix_spawn_probe \
-            $(BUILD)/posix_path_probe \
+            $(BUILD)/process_control_probe $(BUILD)/posix_path_probe \
             $(BUILD)/metadata_probe \
             $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
@@ -277,6 +277,11 @@ $(BUILD)/posix_spawn_probe.o: tests/posix_spawn_probe.c include/spawn.h \
                             include/errno.h include/string.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/process_control_probe.o: tests/process_control_probe.c include/unistd.h \
+                                 include/signal.h include/sys/types.h include/sys/wait.h \
+                                 include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
                              include/fcntl.h include/stdio.h include/errno.h \
                              include/string.h include/mini/syscall.h | $(BUILD)
@@ -475,6 +480,9 @@ $(BUILD)/spawn_child_probe: $(BUILD)/spawn_child_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_spawn_probe: $(BUILD)/posix_spawn_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_spawn_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/process_control_probe: $(BUILD)/process_control_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/process_control_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
