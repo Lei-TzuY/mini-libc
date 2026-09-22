@@ -36,6 +36,7 @@ long mini_sys_ftruncate(int fd, long length);
 long mini_sys_getdents64(int fd, void *dirp, unsigned long count);
 long mini_sys_openat(int dirfd, const char *path, int flags, unsigned int mode);
 long mini_sys_newfstatat(int dirfd, const char *path, void *statbuf, int flags);
+long mini_sys_pipe2(int pipefd[2], int flags);
 long mini_sys_unlinkat(int dirfd, const char *path, int flags);
 long mini_sys_renameat(int olddirfd, const char *oldpath,
                        int newdirfd, const char *newpath);
