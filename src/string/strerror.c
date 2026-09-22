@@ -7,6 +7,7 @@ char *strerror(int errnum)
     static char eio[] = "Input/output error";
     static char enomem[] = "Cannot allocate memory";
     static char eexist[] = "File exists";
+    static char enotdir[] = "Not a directory";
     static char eisdir[] = "Is a directory";
     static char einval[] = "Invalid argument";
     static char edom[] = "Numerical argument out of domain";
@@ -23,6 +24,8 @@ char *strerror(int errnum)
         return enomem;
     case EEXIST:
         return eexist;
+    case ENOTDIR:
+        return enotdir;
     case EISDIR:
         return eisdir;
     case EINVAL:
