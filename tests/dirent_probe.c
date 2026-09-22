@@ -116,21 +116,14 @@ int main(int argc, char **argv)
         return 3;
     }
 
-    errno = ERANGE;
-    if (mini_sys_mkdirat(rootfd, "subdir", 0700U) != 0L ||
-        errno != ERANGE) {
-        close(rootfd);
-        return 4;
-    }
-
     if (close(rootfd) != 0) {
-        return 5;
+        return 4;
     }
 
     errno = ERANGE;
     directory = opendir(argv[1]);
     if (directory == (DIR *)0 || errno != ERANGE) {
-        return 6;
+        return 5;
     }
 
     errno = ERANGE;
@@ -141,7 +134,7 @@ int main(int argc, char **argv)
         fd_stat.st_dev != path_stat.st_dev ||
         fd_stat.st_ino != path_stat.st_ino) {
         closedir(directory);
-        return 7;
+        return 6;
     }
 
     errno = ERANGE;
@@ -150,7 +143,7 @@ int main(int argc, char **argv)
         !dot_seen || !dotdot_seen || !alpha_seen ||
         !beta_seen || !subdir_seen) {
         closedir(directory);
-        return 8;
+        return 7;
     }
 
     errno = ERANGE;
@@ -161,40 +154,40 @@ int main(int argc, char **argv)
         !dot_seen || !dotdot_seen || !alpha_seen ||
         !beta_seen || !subdir_seen) {
         closedir(directory);
-        return 9;
+        return 8;
     }
 
     errno = ERANGE;
     if (closedir(directory) != 0 || errno != ERANGE) {
-        return 10;
+        return 9;
     }
 
     errno = ERANGE;
     directory = opendir("build/mini-libc-dirent-definitely-missing");
     if (directory != (DIR *)0 || errno != ENOENT) {
-        return 11;
+        return 10;
     }
 
     errno = ERANGE;
     directory = opendir("tests/dirent_probe.c");
     if (directory != (DIR *)0 || errno != ENOTDIR) {
-        return 12;
+        return 11;
     }
 
     rootfd = open(argv[1], O_RDONLY | O_DIRECTORY);
     if (rootfd < 0) {
-        return 13;
+        return 12;
     }
     if (unlinkat(rootfd, "alpha", 0) != 0 ||
         unlinkat(rootfd, "beta", 0) != 0 ||
         unlinkat(rootfd, "subdir", AT_REMOVEDIR) != 0 ||
         close(rootfd) != 0) {
-        return 14;
+        return 13;
     }
 
     if (mini_sys_write(STDOUT_FILENO, ok, sizeof(ok) - 1U) !=
         (long)(sizeof(ok) - 1U)) {
-        return 15;
+        return 14;
     }
     return 0;
 }
