@@ -31,13 +31,13 @@ $(BUILD)/tss.o: src/thread/tss.c src/internal/thread_runtime.h include/threads.h
 $(BUILD)/tls.o: src/thread/tls.c src/internal/thread_runtime.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/thread_runtime.o: src/thread/runtime.c src/internal/thread_runtime.h src/locale/locale_internal.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/thread_runtime.o: src/thread/runtime.c src/internal/thread_runtime.h src/locale/locale_internal.h include/locale.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/thread_locale.o: src/locale/thread_locale.c src/locale/locale_internal.h src/internal/thread_runtime.h | $(BUILD)
+$(BUILD)/thread_locale.o: src/locale/thread_locale.c src/locale/locale_internal.h src/internal/thread_runtime.h include/locale.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/lifecycle.o: src/thread/lifecycle.c src/internal/thread_runtime.h include/threads.h include/mini/syscall.h | $(BUILD)
+$(BUILD)/lifecycle.o: src/thread/lifecycle.c src/internal/thread_runtime.h include/threads.h include/locale.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_entry.o: src/thread/thread_entry.S | $(BUILD)
@@ -49,7 +49,7 @@ $(BUILD)/thread_probe.o: tests/thread_probe.c include/threads.h include/stdatomi
 $(BUILD)/thread_probe: $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/thread_probe.o $(CRT0) $(LIBC)
 
-$(BUILD)/thread_locale_probe.o: tests/thread_locale_probe.c include/threads.h include/locale.h include/stdlib.h include/wchar.h include/wctype.h include/errno.h include/mini/syscall.h src/locale/locale_internal.h | $(BUILD)
+$(BUILD)/thread_locale_probe.o: tests/thread_locale_probe.c include/threads.h include/locale.h include/stdlib.h include/wchar.h include/wctype.h include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/thread_locale_probe: $(BUILD)/thread_locale_probe.o $(CRT0) $(LIBC)
