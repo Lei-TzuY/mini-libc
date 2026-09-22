@@ -16,6 +16,7 @@ static struct mini_locale_state mini_process_locale = {
     {MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C,
      MINI_LOCALE_MODE_C, MINI_LOCALE_MODE_C}
 };
+static mini_locale_state_provider_t mini_locale_state_provider;
 
 static struct lconv mini_c_locale = {
     mini_decimal_point,
@@ -266,14 +267,37 @@ size_t __mini_locale_state_mb_cur_max(const struct mini_locale_state *state)
     return __mini_locale_state_is_utf8(state) ? 4U : 1U;
 }
 
+struct mini_locale_state *__mini_locale_process_state(void)
+{
+    return &mini_process_locale;
+}
+
+struct mini_locale_state *__mini_locale_current_state(void)
+{
+    struct mini_locale_state *state;
+
+    if (mini_locale_state_provider != (mini_locale_state_provider_t)0) {
+        state = mini_locale_state_provider();
+        if (state != (struct mini_locale_state *)0) {
+            return state;
+        }
+    }
+    return &mini_process_locale;
+}
+
+void __mini_locale_set_state_provider(mini_locale_state_provider_t provider)
+{
+    mini_locale_state_provider = provider;
+}
+
 int __mini_locale_is_utf8(void)
 {
-    return __mini_locale_state_is_utf8(&mini_process_locale);
+    return __mini_locale_state_is_utf8(__mini_locale_current_state());
 }
 
 size_t __mini_mb_cur_max(void)
 {
-    return __mini_locale_state_mb_cur_max(&mini_process_locale);
+    return __mini_locale_state_mb_cur_max(__mini_locale_current_state());
 }
 
 char *setlocale(int category, const char *locale)
