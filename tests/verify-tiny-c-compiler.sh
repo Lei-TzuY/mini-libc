@@ -73,6 +73,8 @@ done
     -o "$OUT/credential-policy.o"
 "$MINICC" -nostdinc -Iinclude -c tests/pty_job_control_probe.c \
     -o "$OUT/pty-job-control.o"
+"$MINICC" -nostdinc -Iinclude -c tests/termios_canonical_probe.c \
+    -o "$OUT/termios-canonical.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -151,6 +153,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/pty-job-control" \
         "$OUT/pty-job-control.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/termios-canonical" \
+        "$OUT/termios-canonical.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -229,6 +233,8 @@ else
         "$OUT/credential-policy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/pty-job-control" \
         "$OUT/pty-job-control.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/termios-canonical" \
+        "$OUT/termios-canonical.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -452,6 +458,12 @@ if [ "$pty_output" != "pty-job-control-ok" ]; then
     exit 1
 fi
 
+termios_output=$("$OUT/termios-canonical")
+if [ "$termios_output" != "termios-canonical-ok" ]; then
+    echo "unexpected tiny-c termios canonical output: $termios_output" >&2
+    exit 1
+fi
+
 posix_path_source="$OUT/posix-path-source.tmp"
 posix_path_target="$OUT/posix-path-target.tmp"
 posix_path_dir="$OUT/posix-path-dir.tmp"
@@ -661,6 +673,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/credential-child"
 ./tests/verify-no-host-libc.sh "$OUT/credential-policy"
 ./tests/verify-no-host-libc.sh "$OUT/pty-job-control"
+./tests/verify-no-host-libc.sh "$OUT/termios-canonical"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
