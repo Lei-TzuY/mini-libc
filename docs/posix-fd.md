@@ -321,6 +321,29 @@ the path. Invalid resource lookup also locks the `EINVAL` boundary. The same
 executable runs through pinned tiny-c-compiler plus GNU ld and
 mini-elf-toolchain.
 
+`getuid`, `geteuid`, `getgid`, `getegid`, `setuid`, and `setgid` add a
+bounded credential-identity plane. Identity getters map directly to the Linux
+x86-64 credential syscalls and leave caller `errno` untouched. Successful
+UID/GID transitions preserve caller `errno`; failed transitions translate the
+kernel errno through the normal mini-libc boundary.
+
+`tests/credential_policy_probe.c` correlates credentials across process and
+filesystem layers. The parent snapshots real/effective UID/GID and creates a
+file whose `st_uid`/`st_gid` must match its effective credentials. A fork child
+first proves exact credential inheritance, then performs the permitted
+`setgid(real_gid)` followed by `setuid(real_uid)` drop and proves effective IDs
+now equal real IDs. The child reports both inherited and dropped snapshots,
+execs a separately linked mini-libc image, and that new image proves the
+dropped identity survived `execve`. The executed image creates another file;
+the parent verifies its ownership matches the post-drop effective UID/GID and
+also proves its own credentials never changed. The same parent/child images
+run through pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
+This is intentionally not a claim of complete Linux credential management.
+Saved IDs, supplementary groups, filesystem IDs, capabilities, namespaces,
+and privileged arbitrary-ID transitions remain outside this phase until they
+have independent executable evidence.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -334,11 +357,11 @@ tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
 targeted/group signaling, process groups, sessions, bounded atfork
-coordination, and per-process resource limits now form one executable Unix
-process-control baseline. The resource-limit phase is closed at a real kernel
-enforcement boundary rather than API breadth. The next promotion should move
-to another independent control plane—credentials/identity policy, or
-deterministic controlling-terminal/job-control once a self-contained PTY
-harness exists—rather than enumerate more rlimit constants without executable
-need. The async-signal-safe child boundary remains explicit after
+coordination, resource enforcement, and real/effective credential identity now
+form one executable Unix process-control baseline. The credential phase is
+closed at an inheritance/drop/ownership boundary rather than getter breadth.
+The next promotion should cross into a genuinely different control plane—most
+naturally deterministic controlling-terminal/job-control backed by a
+self-contained PTY harness—rather than enumerate more UID/GID variants without
+new behavior. The async-signal-safe child boundary remains explicit after
 multithreaded fork.
