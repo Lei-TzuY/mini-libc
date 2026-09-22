@@ -47,6 +47,8 @@ done
     -o "$OUT/setjmp-test.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_thread_integration.c \
     -o "$OUT/thread.o"
+"$MINICC" -nostdinc -Iinclude -c tests/thread_locale_probe.c \
+    -o "$OUT/thread-locale.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_condition_integration.c \
     -o "$OUT/condition.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_mutex_integration.c \
@@ -75,6 +77,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/setjmp-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/thread" \
         "$OUT/thread.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/thread-locale" \
+        "$OUT/thread-locale.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/condition" \
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/mutex" \
@@ -103,6 +107,8 @@ else
         "$OUT/setjmp-test.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/thread" \
         "$OUT/thread.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/thread-locale" \
+        "$OUT/thread-locale.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/condition" \
         "$OUT/condition.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/mutex" \
@@ -203,6 +209,12 @@ if [ "$thread_output" != "tiny-threads-ok" ]; then
     exit 1
 fi
 
+thread_locale_output=$("$OUT/thread-locale")
+if [ "$thread_locale_output" != "thread-locale-ok" ]; then
+    echo "unexpected tiny-c thread locale output: $thread_locale_output" >&2
+    exit 1
+fi
+
 condition_output=$("$OUT/condition")
 if [ "$condition_output" != "tiny-conditions-ok" ]; then
     echo "unexpected tiny-c condition output: $condition_output" >&2
@@ -277,6 +289,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/termination"
 ./tests/verify-no-host-libc.sh "$OUT/setjmp-test"
 ./tests/verify-no-host-libc.sh "$OUT/thread"
+./tests/verify-no-host-libc.sh "$OUT/thread-locale"
 ./tests/verify-no-host-libc.sh "$OUT/condition"
 ./tests/verify-no-host-libc.sh "$OUT/mutex"
 ./tests/verify-no-host-libc.sh "$OUT/atomic-test"

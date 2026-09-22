@@ -33,6 +33,8 @@ void __mini_thread_runtime_init_main(long *initial_stack)
     tcb->control = (void *)0;
     tcb->errno_value = 0;
     tcb->reserved = 0U;
+    __mini_locale_state_init(&tcb->locale_state);
+    tcb->locale_override_active = 0U;
     if (!__mini_thread_tls_prepare(tcb)) {
         mini_sys_exit(MINI_THREAD_INIT_FAILURE);
     }
@@ -43,4 +45,5 @@ void __mini_thread_runtime_init_main(long *initial_stack)
     }
 
     __mini_errno_set_provider(thread_errno_location);
+    __mini_thread_locale_runtime_enable();
 }
