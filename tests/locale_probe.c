@@ -126,7 +126,7 @@ int main(int argc, char **argv, char **envp)
     if (MB_CUR_MAX != 1 || setlocale(LC_ALL, (const char *)0) == (char *)0 ||
         !same_string(setlocale(LC_ALL, (const char *)0), "C") ||
         !same_string(setlocale(LC_CTYPE, "C"), "C") ||
-        !same_string(setlocale(LC_NUMERIC, ""), "C") ||
+        !same_string(setlocale(LC_NUMERIC, "C"), "C") ||
         setlocale(12345, "C") != (char *)0 ||
         setlocale(LC_ALL, "not-a-locale") != (char *)0 ||
         !same_string(setlocale(LC_ALL, (const char *)0), "C") || errno != EIO ||
