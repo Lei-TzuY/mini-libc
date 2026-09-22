@@ -41,6 +41,8 @@ done
     -o "$OUT/posix-fd.o"
 "$MINICC" -nostdinc -Iinclude -c tests/descriptor_control_probe.c \
     -o "$OUT/descriptor-control.o"
+"$MINICC" -nostdinc -Iinclude -c tests/cwd_state_probe.c \
+    -o "$OUT/cwd-state.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -87,6 +89,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/descriptor-control" \
         "$OUT/descriptor-control.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/cwd-state" \
+        "$OUT/cwd-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -133,6 +137,8 @@ else
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/descriptor-control" \
         "$OUT/descriptor-control.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/cwd-state" \
+        "$OUT/cwd-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -249,6 +255,21 @@ fi
 if [ -e "$descriptor_source" ] || [ -e "$descriptor_target" ]; then
     echo "tiny-c descriptor control integration left filesystem state behind" >&2
     rm -f "$descriptor_source" "$descriptor_target"
+    exit 1
+fi
+
+cwd_root="$OUT/cwd-state-root.tmp"
+rm -rf "$cwd_root"
+mkdir -p "$cwd_root/child"
+cwd_output=$("$OUT/cwd-state" "$cwd_root")
+if [ "$cwd_output" != "cwd-state-ok" ]; then
+    echo "unexpected tiny-c cwd state output: $cwd_output" >&2
+    rm -rf "$cwd_root"
+    exit 1
+fi
+if ! rmdir "$cwd_root/child" "$cwd_root"; then
+    echo "tiny-c cwd state integration left filesystem state behind" >&2
+    rm -rf "$cwd_root"
     exit 1
 fi
 
@@ -445,6 +466,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
 ./tests/verify-no-host-libc.sh "$OUT/posix-fd"
 ./tests/verify-no-host-libc.sh "$OUT/descriptor-control"
+./tests/verify-no-host-libc.sh "$OUT/cwd-state"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
