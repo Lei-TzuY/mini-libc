@@ -37,6 +37,8 @@ done
     -o "$OUT/buffering.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_pathname_integration.c \
     -o "$OUT/pathname.o"
+"$MINICC" -nostdinc -Iinclude -c tests/posix_fd_probe.c \
+    -o "$OUT/posix-fd.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_rebind_integration.c \
     -o "$OUT/rebind.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_time_integration.c \
@@ -73,6 +75,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/pathname" \
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/posix-fd" \
+        "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/time" \
@@ -109,6 +113,8 @@ else
         "$OUT/buffering.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/pathname" \
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/posix-fd" \
+        "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/time" \
@@ -190,6 +196,20 @@ if [ -e "$pathname_source" ] || [ -e "$pathname_target" ] || [ -e "$pathname_dir
     echo "tiny-c pathname integration left filesystem state behind" >&2
     rm -f "$pathname_source" "$pathname_target"
     rmdir "$pathname_dir" 2>/dev/null || true
+    exit 1
+fi
+
+posix_fd_path="$OUT/posix-fd.tmp"
+rm -f "$posix_fd_path"
+posix_fd_output=$("$OUT/posix-fd" "$posix_fd_path")
+if [ "$posix_fd_output" != "posix-fd-ok" ]; then
+    echo "unexpected tiny-c POSIX descriptor output: $posix_fd_output" >&2
+    rm -f "$posix_fd_path"
+    exit 1
+fi
+if [ -e "$posix_fd_path" ]; then
+    echo "tiny-c POSIX descriptor integration left filesystem state behind" >&2
+    rm -f "$posix_fd_path"
     exit 1
 fi
 
@@ -327,6 +347,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/integration"
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
+./tests/verify-no-host-libc.sh "$OUT/posix-fd"
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
 ./tests/verify-no-host-libc.sh "$OUT/time"
 ./tests/verify-no-host-libc.sh "$OUT/termination"
