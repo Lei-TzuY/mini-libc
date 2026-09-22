@@ -11,6 +11,7 @@
 #define O_EXCL 128
 #define O_TRUNC 512
 #define O_APPEND 1024
+#define O_NOCTTY 256
 #define O_NONBLOCK (1 << 11)
 #define O_DIRECTORY (1 << 16)
 #define O_CLOEXEC (1 << 19)
