@@ -6,8 +6,6 @@
 #include "stdio_internal.h"
 
 #define MINI_AT_FDCWD (-100)
-#define MINI_AT_REMOVEDIR 512
-#define MINI_EISDIR 21
 #define MINI_O_RDONLY 0
 #define MINI_O_WRONLY 1
 #define MINI_O_RDWR 2
@@ -330,51 +328,6 @@ FILE *tmpfile(void)
                                 MINI_FILE_OWNED);
     return stream;
 }
-
-/*
- * The hosted FILE-object harness compiles this translation unit with
- * mini_sys_openat macro-renamed to a deterministic fake and intentionally
- * isolates stream ownership/buffering from pathname mutation. Real-kernel and
- * cross-toolchain probes exercise the public pathname operations below.
- */
-#ifndef mini_sys_openat
-int remove(const char *filename)
-{
-    long result;
-
-    if (filename == (const char *)0) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    result = mini_sys_unlinkat(MINI_AT_FDCWD, filename, 0);
-    if (result == -MINI_EISDIR) {
-        result = mini_sys_unlinkat(MINI_AT_FDCWD, filename, MINI_AT_REMOVEDIR);
-    }
-    if (result < 0) {
-        errno = (int)-result;
-        return -1;
-    }
-    return 0;
-}
-
-int rename(const char *oldname, const char *newname)
-{
-    long result;
-
-    if (oldname == (const char *)0 || newname == (const char *)0) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    result = mini_sys_renameat(MINI_AT_FDCWD, oldname, MINI_AT_FDCWD, newname);
-    if (result < 0) {
-        errno = (int)-result;
-        return -1;
-    }
-    return 0;
-}
-#endif
 
 int fclose(FILE *stream)
 {
