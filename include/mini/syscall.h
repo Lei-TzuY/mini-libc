@@ -36,6 +36,8 @@ long mini_sys_setpgid(int pid, int pgid);
 long mini_sys_getpgid(int pid);
 long mini_sys_setsid(void);
 long mini_sys_getsid(int pid);
+long mini_sys_getrlimit(int resource, void *rlim);
+long mini_sys_setrlimit(int resource, const void *rlim);
 long mini_sys_arch_prctl(int code, unsigned long address);
 long mini_sys_gettid(void);
 long mini_sys_futex(volatile int *uaddr, int op, int value,
