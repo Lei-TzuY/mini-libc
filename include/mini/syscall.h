@@ -30,6 +30,12 @@ long mini_sys_nanosleep(const void *request, void *remaining);
 long mini_sys_rt_sigaction(int sig, const void *act, void *oldact,
                            unsigned long sigsetsize);
 long mini_sys_getpid(void);
+long mini_sys_getuid(void);
+long mini_sys_getgid(void);
+long mini_sys_setuid(unsigned int uid);
+long mini_sys_setgid(unsigned int gid);
+long mini_sys_geteuid(void);
+long mini_sys_getegid(void);
 long mini_sys_getppid(void);
 long mini_sys_kill(int pid, int sig);
 long mini_sys_setpgid(int pid, int pgid);
