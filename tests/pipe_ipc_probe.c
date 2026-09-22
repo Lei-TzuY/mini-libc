@@ -30,6 +30,9 @@ int main(void)
     char buffer[8];
     void (*previous)(int);
 
+    broken[0] = -1;
+    broken[1] = -1;
+
     errno = ERANGE;
     if (pipe(plain) != 0 || errno != ERANGE) {
         return 1;
