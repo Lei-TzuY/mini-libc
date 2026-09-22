@@ -238,6 +238,14 @@ mini_sys_newfstatat:
     ret
     .size mini_sys_newfstatat, .-mini_sys_newfstatat
 
+    .globl mini_sys_pipe2
+    .type mini_sys_pipe2, @function
+mini_sys_pipe2:
+    movl $293, %eax
+    syscall
+    ret
+    .size mini_sys_pipe2, .-mini_sys_pipe2
+
     .globl mini_sys_unlinkat
     .type mini_sys_unlinkat, @function
 mini_sys_unlinkat:

@@ -123,6 +123,12 @@ if ! rmdir "$cwd_root/child" "$cwd_root"; then
     exit 1
 fi
 
+pipe_output="$(./build/pipe_ipc_probe)"
+if [ "$pipe_output" != "pipe-ipc-ok" ]; then
+    echo "unexpected pipe IPC output: $pipe_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"

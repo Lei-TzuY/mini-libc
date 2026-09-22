@@ -45,8 +45,9 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/scan.o $(BUILD)/float_parse.o $(BUILD)/scan_entry.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
             $(BUILD)/posix_fd.o $(BUILD)/descriptor_control.o \
-            $(BUILD)/cwd_state.o $(BUILD)/posix_path.o $(BUILD)/metadata.o \
-            $(BUILD)/dirent.o $(BUILD)/time.o $(BUILD)/errno.o
+            $(BUILD)/cwd_state.o $(BUILD)/pipe_ipc.o $(BUILD)/posix_path.o \
+            $(BUILD)/metadata.o $(BUILD)/dirent.o $(BUILD)/time.o \
+            $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -56,8 +57,9 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
             $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe \
             $(BUILD)/posix_fd_probe $(BUILD)/descriptor_control_probe \
-            $(BUILD)/cwd_state_probe $(BUILD)/posix_path_probe \
-            $(BUILD)/metadata_probe $(BUILD)/dirent_probe $(BUILD)/time_probe
+            $(BUILD)/cwd_state_probe $(BUILD)/pipe_ipc_probe \
+            $(BUILD)/posix_path_probe $(BUILD)/metadata_probe \
+            $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
@@ -96,6 +98,10 @@ $(BUILD)/descriptor_control.o: src/unistd/control.c include/unistd.h \
 
 $(BUILD)/cwd_state.o: src/unistd/cwd.c include/unistd.h include/stddef.h \
                       include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/pipe_ipc.o: src/unistd/pipe.c include/unistd.h include/errno.h \
+                     include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path.o: src/unistd/path.c include/unistd.h include/fcntl.h \
@@ -213,6 +219,11 @@ $(BUILD)/cwd_state_probe.o: tests/cwd_state_probe.c include/unistd.h \
                             include/dirent.h include/fcntl.h include/errno.h \
                             include/string.h include/sys/stat.h \
                             include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/pipe_ipc_probe.o: tests/pipe_ipc_probe.c include/unistd.h \
+                           include/fcntl.h include/errno.h include/signal.h \
+                           include/string.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
@@ -392,6 +403,9 @@ $(BUILD)/descriptor_control_probe: $(BUILD)/descriptor_control_probe.o $(CRT0) $
 
 $(BUILD)/cwd_state_probe: $(BUILD)/cwd_state_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/cwd_state_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/pipe_ipc_probe: $(BUILD)/pipe_ipc_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/pipe_ipc_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)

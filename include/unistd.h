@@ -18,6 +18,8 @@ int close(int fd);
 char *getcwd(char *buf, size_t size);
 int chdir(const char *path);
 int fchdir(int fd);
+int pipe(int pipefd[2]);
+int pipe2(int pipefd[2], int flags);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 off_t lseek(int fd, off_t offset, int whence);
