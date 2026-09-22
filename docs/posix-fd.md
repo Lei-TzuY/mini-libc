@@ -33,6 +33,10 @@ opening retains `AT_FDCWD`, `AT_REMOVEDIR`, and the bounded flag set:
 This is intentionally not a claim that every POSIX/Linux open or fcntl
 command is present.
 
+`<poll.h>` exposes native-layout `struct pollfd`, `nfds_t`, `poll`, and the
+bounded readiness bits `POLLIN`, `POLLPRI`, `POLLOUT`, `POLLERR`, `POLLHUP`,
+and `POLLNVAL`. This surface maps directly to the Linux x86-64 poll ABI.
+
 `<dirent.h>` adds buffered directory traversal with opaque `DIR` streams,
 `opendir`, `readdir`, `closedir`, `rewinddir`, and `dirfd`. The public
 `struct dirent` contains inode, offset, record length, Linux d_type, and a
@@ -49,6 +53,12 @@ translates a negative raw result into the conventional `-1` return and stores
 the positive Linux error number in thread-aware `errno`.
 
 Successful calls do not overwrite an existing `errno` value.
+
+Readiness uses native x86-64 `poll` syscall 7. The caller-owned `pollfd`
+array is passed directly to the kernel; mini-libc only translates negative
+syscall returns into `-1` plus thread-aware `errno`. Zero-timeout polling is
+used for deterministic probes, and readiness result bits are reported through
+`revents` exactly as the kernel supplies them.
 
 Pipe IPC uses native x86-64 `pipe2` syscall 293 as the single creation
 boundary; `pipe()` is the zero-flag form. `O_NONBLOCK` and `O_CLOEXEC` are
@@ -156,6 +166,16 @@ the final duplicate closes, read returns zero. The probe then ignores
 Unsupported pipe2 flags return `EINVAL`. The same executable runs through
 pinned tiny-c-compiler plus GNU ld and mini-elf-toolchain.
 
+`tests/poll_readiness_probe.c` drives a real pipe through deterministic
+zero-timeout states. An empty read end is not readable, the write end reports
+`POLLOUT`, written bytes transition the read end to `POLLIN`, and closing the
+writer while data remains yields readable-plus-hangup before draining to a
+pure `POLLHUP` state. A closed descriptor reports `POLLNVAL`, negative
+descriptors are ignored with cleared `revents`, and a writer whose readers are
+all closed reports `POLLERR`. `poll(NULL, 0, 0)` and successful readiness
+queries preserve sentinel `errno`. The same executable runs through pinned
+tiny-c-compiler plus GNU ld and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -167,10 +187,11 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, filesystem namespace state, and pipe IPC now form one
-executable Unix runtime baseline. The next coherent promotion is **descriptor
-readiness**: a bounded `poll` surface that can prove readable/writable/hangup
-transitions over real pipes without timing guesses or blocking races. Further
-pipe work should require a genuinely new capability such as atomic flag/control
-semantics, not additional wrapper variants. Higher-level stdio should continue
+Descriptor I/O, filesystem namespace state, pipe IPC, and deterministic
+`poll` readiness now form one executable Unix runtime baseline. This readiness
+phase is closed; the next architectural promotion should move above descriptor
+multiplexing rather than add `select`/`epoll` wrappers without a new use case.
+A live architecture audit should choose the next process/runtime frontier—such
+as process orchestration around pipes and readiness—only when its fork/exec/wait
+semantics can be exercised end to end. Higher-level stdio should continue
 sharing this syscall substrate rather than growing a second kernel ABI.
