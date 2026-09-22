@@ -29,11 +29,11 @@ static int read_exact_path(const char *path, const char *expected, size_t length
         return 0;
     }
     count = read(fd, buffer, length);
-    if (count != (ssize_t)length || !same_bytes(buffer, expected, length) ||
-        close(fd) != 0) {
+    if (count != (ssize_t)length || !same_bytes(buffer, expected, length)) {
+        (void)close(fd);
         return 0;
     }
-    return 1;
+    return close(fd) == 0;
 }
 
 int main(int argc, char **argv)
