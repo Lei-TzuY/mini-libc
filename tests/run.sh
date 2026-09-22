@@ -212,6 +212,12 @@ if [ "$pty_output" != "pty-job-control-ok" ]; then
     exit 1
 fi
 
+termios_output="$(./build/termios_canonical_probe)"
+if [ "$termios_output" != "termios-canonical-ok" ]; then
+    echo "unexpected termios canonical output: $termios_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
