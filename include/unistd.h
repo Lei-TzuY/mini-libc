@@ -15,6 +15,9 @@
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
+char *getcwd(char *buf, size_t size);
+int chdir(const char *path);
+int fchdir(int fd);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 off_t lseek(int fd, off_t offset, int whence);
