@@ -1,6 +1,8 @@
 #ifndef MINI_LIBC_SIGNAL_H
 #define MINI_LIBC_SIGNAL_H
 
+#include <sys/types.h>
+
 typedef int sig_atomic_t;
 
 #define SIG_DFL ((void (*)(int))0)
@@ -17,5 +19,6 @@ typedef int sig_atomic_t;
 
 void (*signal(int sig, void (*func)(int)))(int);
 int raise(int sig);
+int kill(pid_t pid, int sig);
 
 #endif
