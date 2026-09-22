@@ -24,6 +24,14 @@ mini_sys_close:
     ret
     .size mini_sys_close, .-mini_sys_close
 
+    .globl mini_sys_fstat
+    .type mini_sys_fstat, @function
+mini_sys_fstat:
+    movl $5, %eax
+    syscall
+    ret
+    .size mini_sys_fstat, .-mini_sys_fstat
+
     .globl mini_sys_lseek
     .type mini_sys_lseek, @function
 mini_sys_lseek:
@@ -148,6 +156,14 @@ mini_sys_tgkill:
     ret
     .size mini_sys_tgkill, .-mini_sys_tgkill
 
+    .globl mini_sys_ftruncate
+    .type mini_sys_ftruncate, @function
+mini_sys_ftruncate:
+    movl $77, %eax
+    syscall
+    ret
+    .size mini_sys_ftruncate, .-mini_sys_ftruncate
+
     .globl mini_sys_openat
     .type mini_sys_openat, @function
 mini_sys_openat:
@@ -156,6 +172,15 @@ mini_sys_openat:
     syscall
     ret
     .size mini_sys_openat, .-mini_sys_openat
+
+    .globl mini_sys_newfstatat
+    .type mini_sys_newfstatat, @function
+mini_sys_newfstatat:
+    movq %rcx, %r10
+    movl $262, %eax
+    syscall
+    ret
+    .size mini_sys_newfstatat, .-mini_sys_newfstatat
 
     .globl mini_sys_unlinkat
     .type mini_sys_unlinkat, @function

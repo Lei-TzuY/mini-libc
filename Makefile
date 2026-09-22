@@ -44,8 +44,8 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/stdio.o $(BUILD)/format.o $(BUILD)/format_entry.o \
             $(BUILD)/scan.o $(BUILD)/float_parse.o $(BUILD)/scan_entry.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
-            $(BUILD)/posix_fd.o $(BUILD)/posix_path.o $(BUILD)/time.o \
-            $(BUILD)/errno.o
+            $(BUILD)/posix_fd.o $(BUILD)/posix_path.o $(BUILD)/metadata.o \
+            $(BUILD)/time.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -55,7 +55,7 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
             $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe \
             $(BUILD)/posix_fd_probe $(BUILD)/posix_path_probe \
-            $(BUILD)/time_probe
+            $(BUILD)/metadata_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
@@ -89,6 +89,11 @@ $(BUILD)/posix_fd.o: src/unistd/fd.c include/unistd.h include/fcntl.h \
 
 $(BUILD)/posix_path.o: src/unistd/path.c include/unistd.h include/fcntl.h \
                        include/stdio.h include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/metadata.o: src/unistd/metadata.c include/unistd.h include/fcntl.h \
+                     include/sys/stat.h include/sys/types.h include/time.h \
+                     include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/memory.o: src/string/memory.c include/string.h include/stddef.h | $(BUILD)
@@ -185,6 +190,12 @@ $(BUILD)/posix_fd_probe.o: tests/posix_fd_probe.c include/unistd.h include/fcntl
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
                              include/fcntl.h include/stdio.h include/errno.h \
                              include/string.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/metadata_probe.o: tests/metadata_probe.c include/unistd.h \
+                           include/fcntl.h include/sys/stat.h \
+                           include/sys/types.h include/errno.h include/string.h \
+                           include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/memory_probe.o: tests/memory_probe.c include/mini/syscall.h include/string.h include/stddef.h include/errno.h | $(BUILD)
@@ -345,6 +356,9 @@ $(BUILD)/posix_fd_probe: $(BUILD)/posix_fd_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/metadata_probe: $(BUILD)/metadata_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/metadata_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/memory_probe: $(BUILD)/memory_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/memory_probe.o $(CRT0) $(LIBC)

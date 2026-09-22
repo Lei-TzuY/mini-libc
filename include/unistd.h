@@ -16,6 +16,7 @@ ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int close(int fd);
 off_t lseek(int fd, off_t offset, int whence);
+int ftruncate(int fd, off_t length);
 int unlink(const char *path);
 int unlinkat(int dirfd, const char *path, int flags);
 

@@ -41,6 +41,8 @@ done
     -o "$OUT/posix-fd.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
+"$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
+    -o "$OUT/metadata.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_rebind_integration.c \
     -o "$OUT/rebind.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_time_integration.c \
@@ -81,6 +83,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
+        "$OUT/metadata.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/time" \
@@ -121,6 +125,8 @@ else
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
+        "$OUT/metadata.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/time" \
@@ -238,6 +244,20 @@ if [ -e "$posix_path_source" ] || [ -e "$posix_path_target" ] ||
     echo "tiny-c POSIX pathname integration left filesystem state behind" >&2
     rm -f "$posix_path_source" "$posix_path_target"         "$posix_path_dir/source" "$posix_path_dir/target"
     rmdir "$posix_path_dir" "$posix_remove_dir" 2>/dev/null || true
+    exit 1
+fi
+
+metadata_path="$OUT/metadata.tmp"
+rm -f "$metadata_path"
+metadata_output=$("$OUT/metadata" "$metadata_path" "$OUT")
+if [ "$metadata_output" != "metadata-ok" ]; then
+    echo "unexpected tiny-c metadata output: $metadata_output" >&2
+    rm -f "$metadata_path"
+    exit 1
+fi
+if [ -e "$metadata_path" ]; then
+    echo "tiny-c metadata integration left filesystem state behind" >&2
+    rm -f "$metadata_path"
     exit 1
 fi
 
@@ -377,6 +397,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
 ./tests/verify-no-host-libc.sh "$OUT/posix-fd"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
+./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
 ./tests/verify-no-host-libc.sh "$OUT/time"
 ./tests/verify-no-host-libc.sh "$OUT/termination"
