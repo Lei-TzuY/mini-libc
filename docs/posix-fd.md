@@ -5,14 +5,19 @@ of the existing raw Linux x86-64 syscall boundary.
 
 ## Public surface
 
-`<sys/types.h>` provides the ABI types used by this layer:
+`<sys/types.h>` provides the ABI types used by this layer. In addition to
+`ssize_t`, `off_t`, and `mode_t`, the filesystem metadata surface exposes the
+x86-64-width `dev_t`, `ino_t`, `nlink_t`, `uid_t`, `gid_t`, `blksize_t`, and
+`blkcnt_t` aliases required by `struct stat`.
 
-- `ssize_t` and `off_t` are signed 64-bit `long` values on the x86-64 target.
-- `mode_t` is an unsigned 32-bit integer.
+`<sys/stat.h>` defines a 144-byte `struct stat` whose field order and widths
+match the native Linux x86-64 UAPI layout. It exposes the standard file-type
+and permission masks plus `S_IS*` predicates, together with public `stat` and
+`fstat` entry points.
 
-`<unistd.h>` exposes `read`, `write`, `close`, `lseek`, `unlink`, and
-`unlinkat`, plus the standard descriptor and seek constants used by those
-calls. `<stdio.h>` retains ISO C `remove`/`rename` and now exposes POSIX
+`<unistd.h>` exposes `read`, `write`, `close`, `lseek`, `ftruncate`, `unlink`,
+and `unlinkat`, plus the standard descriptor and seek constants used by those
+calls. `<stdio.h>` retains ISO C `remove`/`rename` and exposes POSIX
 `renameat`; all pathname mutation routes through one shared runtime.
 
 `<fcntl.h>` exposes `open` and `openat`, `AT_FDCWD`, `AT_REMOVEDIR`, and the
@@ -34,7 +39,11 @@ Successful calls do not overwrite an existing `errno` value.
 
 `open` is implemented through the same `openat(AT_FDCWD, ...)` boundary, so
 pathname opening has one kernel contract. A mode argument is consumed only when
-`O_CREAT` is present in this bounded flag set. Likewise, `unlink` maps to
+`O_CREAT` is present in this bounded flag set. `stat` is implemented through
+native x86-64 `newfstatat(AT_FDCWD, ..., 0)`, while `fstat` and `ftruncate`
+use their native descriptor syscalls. These wrappers share the same negative
+kernel return to `-1` plus thread-aware `errno` translation and leave `errno`
+untouched on success. Likewise, `unlink` maps to
 `unlinkat(AT_FDCWD, ..., 0)` and `rename` maps to `renameat(AT_FDCWD, ...,
 AT_FDCWD, ...)`. `remove` shares the same raw unlinkat helper but preserves its
 ISO C file-or-empty-directory behavior by retrying an `EISDIR` result with
@@ -63,9 +72,17 @@ through both GNU ld and mini-elf-toolchain.
 
 ## Next architectural promotion
 
-Descriptor opening/I/O and pathname lifecycle are now one executable filesystem
-baseline. The next coherent promotion is **file sizing and metadata**:
-`ftruncate` plus a bounded `stat`/`fstat` ABI after the required Linux x86-64
-kernel structures are modeled explicitly and checked with real regular files,
-directories, sizes, modes, and errno behavior. Higher-level stdio should
-continue sharing this syscall substrate rather than growing a second kernel ABI.
+Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
+one executable filesystem baseline. `tests/metadata_probe.c` verifies the
+native 144-byte stat ABI against real regular files and directories, correlates
+pathname and descriptor metadata by device/inode, and proves both shrinking
+and extending files through `ftruncate`, including zero-filled growth.
+Bad descriptors, negative lengths, and missing paths exercise
+`EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
+tiny-c-compiler and both GNU ld and mini-elf-toolchain.
+
+The next coherent promotion should move above basic metadata rather than farm
+more stat fields. Candidate frontiers are descriptor duplication/control
+(`dup`/`dup2`/bounded `fcntl`) and directory traversal once a stable public
+`dirent`/getdents64 contract is modeled. Higher-level stdio should continue
+sharing this syscall substrate rather than growing a second kernel ABI.
