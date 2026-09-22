@@ -31,6 +31,7 @@ int main(int argc, char **argv)
     char *child_argv[4];
     char *child_envp[2];
     char *missing_argv[2];
+    char *missing_envp[1];
     struct pollfd ready;
     char buffer[32];
     int pipefd[2];
@@ -45,8 +46,9 @@ int main(int argc, char **argv)
 
     missing_argv[0] = missing;
     missing_argv[1] = (char *)0;
+    missing_envp[0] = (char *)0;
     errno = ERANGE;
-    if (execve(missing, missing_argv, (char *const *)0) != -1 ||
+    if (execve(missing, missing_argv, missing_envp) != -1 ||
         errno != ENOENT) {
         return 2;
     }
