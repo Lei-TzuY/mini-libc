@@ -87,29 +87,38 @@ int main(int argc, char **argv)
     }
 
     errno = ERANGE;
+    fd = open(argv[1], O_WRONLY | O_TRUNC);
+    if (fd < 0 || errno != ERANGE ||
+        write(fd, "ab", 2U) != 2 || errno != ERANGE ||
+        close(fd) != 0 || errno != ERANGE) {
+        cleanup(argv[1]);
+        return 9;
+    }
+
+    errno = ERANGE;
     fd = openat(AT_FDCWD, argv[1], O_WRONLY | O_APPEND);
     if (fd < 0 || errno != ERANGE) {
         cleanup(argv[1]);
-        return 9;
+        return 10;
     }
     if (write(fd, tail, sizeof(tail) - 1U) !=
             (ssize_t)(sizeof(tail) - 1U) ||
         errno != ERANGE || close(fd) != 0 || errno != ERANGE) {
         cleanup(argv[1]);
-        return 10;
+        return 11;
     }
 
     errno = ERANGE;
     fd = open(argv[1], O_RDONLY);
     if (fd < 0 || errno != ERANGE) {
         cleanup(argv[1]);
-        return 11;
+        return 12;
     }
-    count = read(fd, buffer, 9U);
-    if (count != 9 || !same_bytes(buffer, "ab12efXYZ", 9U) ||
+    count = read(fd, buffer, 5U);
+    if (count != 5 || !same_bytes(buffer, "abXYZ", 5U) ||
         errno != ERANGE || close(fd) != 0 || errno != ERANGE) {
         cleanup(argv[1]);
-        return 12;
+        return 13;
     }
 
     errno = ERANGE;
