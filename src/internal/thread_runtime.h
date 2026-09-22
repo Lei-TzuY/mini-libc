@@ -13,6 +13,7 @@ struct mini_thread_tcb {
     int errno_value;
     unsigned int reserved;
     struct mini_locale_state locale_state;
+    locale_t locale_handle;
     unsigned int locale_override_active;
     void *tss_values[MINI_TSS_MAX_KEYS];
     unsigned int tss_generations[MINI_TSS_MAX_KEYS];
@@ -25,6 +26,6 @@ void __mini_tss_run_destructors(void);
 int __mini_thread_tls_discover(long *initial_stack);
 int __mini_thread_tls_prepare(struct mini_thread_tcb *tcb);
 void __mini_thread_locale_runtime_enable(void);
-void __mini_thread_locale_inherit(struct mini_thread_tcb *child);
+void __mini_thread_locale_init_child(struct mini_thread_tcb *child);
 
 #endif
