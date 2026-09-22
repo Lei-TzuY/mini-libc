@@ -141,6 +141,12 @@ if [ "$process_output" != "process-orchestration-ok" ]; then
     exit 1
 fi
 
+exec_output="$(./build/exec_transition_probe ./build/exec_child_probe)"
+if [ "$exec_output" != "exec-transition-ok" ]; then
+    echo "unexpected exec transition output: $exec_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
