@@ -14,7 +14,10 @@
 long mini_sys_read(int fd, void *buf, unsigned long count);
 long mini_sys_write(int fd, const void *buf, unsigned long count);
 long mini_sys_close(int fd);
+long mini_sys_dup(int oldfd);
+long mini_sys_dup2(int oldfd, int newfd);
 long mini_sys_fstat(int fd, void *statbuf);
+long mini_sys_fcntl(int fd, int cmd, unsigned long arg);
 long mini_sys_lseek(int fd, long offset, int whence);
 long mini_sys_sched_yield(void);
 long mini_sys_nanosleep(const void *request, void *remaining);

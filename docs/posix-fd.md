@@ -15,17 +15,21 @@ match the native Linux x86-64 UAPI layout. It exposes the standard file-type
 and permission masks plus `S_IS*` predicates, together with public `stat` and
 `fstat` entry points.
 
-`<unistd.h>` exposes `read`, `write`, `close`, `lseek`, `ftruncate`, `unlink`,
-and `unlinkat`, plus the standard descriptor and seek constants used by those
-calls. `<stdio.h>` retains ISO C `remove`/`rename` and exposes POSIX
-`renameat`; all pathname mutation routes through one shared runtime.
+`<unistd.h>` exposes `read`, `write`, `close`, `dup`, `dup2`, `lseek`,
+`ftruncate`, `unlink`, and `unlinkat`, plus the standard descriptor and seek
+constants used by those calls. `<stdio.h>` retains ISO C `remove`/`rename`
+and exposes POSIX `renameat`; all pathname mutation routes through one shared
+runtime.
 
-`<fcntl.h>` exposes `open` and `openat`, `AT_FDCWD`, `AT_REMOVEDIR`, and the
-bounded flag set already used by mini-libc's stdio runtime:
+`<fcntl.h>` exposes `open`, `openat`, and a bounded descriptor-control
+`fcntl` surface. Supported commands are `F_DUPFD`, `F_GETFD`, `F_SETFD`, and
+`F_GETFL`, with `FD_CLOEXEC` for descriptor-local close-on-exec state. Path
+opening retains `AT_FDCWD`, `AT_REMOVEDIR`, and the bounded flag set:
 `O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_ACCMODE`, `O_CREAT`, `O_EXCL`,
-`O_TRUNC`, and `O_APPEND`.
+`O_TRUNC`, `O_APPEND`, `O_DIRECTORY`, and `O_CLOEXEC`.
 
-This is intentionally not a claim that every POSIX/Linux open flag is present.
+This is intentionally not a claim that every POSIX/Linux open or fcntl
+command is present.
 
 `<dirent.h>` adds buffered directory traversal with opaque `DIR` streams,
 `opendir`, `readdir`, `closedir`, `rewinddir`, and `dirfd`. The public
@@ -43,6 +47,13 @@ translates a negative raw result into the conventional `-1` return and stores
 the positive Linux error number in thread-aware `errno`.
 
 Successful calls do not overwrite an existing `errno` value.
+
+Descriptor duplication/control uses native x86-64 `dup` (32), `dup2` (33),
+and `fcntl` (72). Duplicated descriptors share one open-file description, so
+file offset and file status flags are shared while `FD_CLOEXEC` remains
+descriptor-local. `dup2` retains native replacement and same-fd semantics.
+The bounded `fcntl` wrapper consumes a variadic argument only for `F_DUPFD`
+and `F_SETFD`; unmodeled commands fail with `EINVAL`.
 
 Directory streams reuse the same descriptor and allocator substrate.
 `opendir` opens with `O_DIRECTORY|O_CLOEXEC`, allocates one buffered stream,
@@ -96,6 +107,17 @@ and non-directory `ENOTDIR`, and cleans the owned entries so the harness can
 remove the root directory after removing the filler set. The same executable
 runs through pinned tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
+`tests/descriptor_control_probe.c` proves the Unix descriptor model with real
+files. A descriptor and its `dup` share read offset; `F_GETFL` reports the
+same open-file status flags on both. `F_SETFD` changes `FD_CLOEXEC` only on
+the selected descriptor, while `F_DUPFD` creates a descriptor at or above the
+requested minimum with close-on-exec cleared and the same shared offset.
+`dup2` replaces an existing descriptor with the source open-file description
+without changing the replaced descriptor's pathname, and same-fd `dup2`
+returns the descriptor unchanged. The probe also locks `EBADF` and bounded
+command `EINVAL` behavior and runs through pinned tiny-c-compiler plus GNU ld
+and mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -107,12 +129,13 @@ Bad descriptors, negative lengths, and missing paths exercise
 `EBADF`/`EINVAL`/`ENOENT` boundaries. The same probe runs through pinned
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
-Descriptor I/O, pathname lifecycle, metadata/sizing, and directory traversal now
-form one executable filesystem namespace baseline. The next coherent promotion
-should move to **descriptor duplication and control**: `dup`, `dup2`, and a
-bounded `fcntl` surface that proves shared open-file-description offsets,
-descriptor-local close-on-exec flags, replacement semantics, and errno
-boundaries. Further directory work should wait for a genuinely new capability
-such as seek/tell directory positions or mutation APIs, not readdir variants.
-Higher-level stdio should continue sharing this syscall substrate rather than
-growing a second kernel ABI.
+Descriptor I/O, pathname lifecycle, metadata/sizing, directory traversal, and
+descriptor duplication/control now form one executable Unix filesystem
+baseline. The next coherent promotion should move above basic descriptor
+mechanics rather than farm additional fcntl command numbers. A higher-value
+frontier is **process-facing filesystem/runtime state** such as
+`getcwd/chdir/fchdir` with relative-path integration, or a separately bounded
+pipe/readiness capability once its blocking semantics can be exercised
+deterministically. Further directory work should wait for a genuinely new
+capability rather than readdir variants. Higher-level stdio should continue
+sharing this syscall substrate rather than growing a second kernel ABI.

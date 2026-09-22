@@ -14,10 +14,18 @@
 #define O_DIRECTORY (1 << 16)
 #define O_CLOEXEC (1 << 19)
 
+#define F_DUPFD 0
+#define F_GETFD 1
+#define F_SETFD 2
+#define F_GETFL 3
+
+#define FD_CLOEXEC 1
+
 #define AT_FDCWD (-100)
 #define AT_REMOVEDIR 512
 
 int open(const char *path, int oflag, ...);
 int openat(int fd, const char *path, int oflag, ...);
+int fcntl(int fd, int cmd, ...);
 
 #endif

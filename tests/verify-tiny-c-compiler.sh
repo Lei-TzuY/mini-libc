@@ -39,6 +39,8 @@ done
     -o "$OUT/pathname.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_fd_probe.c \
     -o "$OUT/posix-fd.o"
+"$MINICC" -nostdinc -Iinclude -c tests/descriptor_control_probe.c \
+    -o "$OUT/descriptor-control.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -83,6 +85,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-fd" \
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/descriptor-control" \
+        "$OUT/descriptor-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -127,6 +131,8 @@ else
         "$OUT/pathname.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-fd" \
         "$OUT/posix-fd.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/descriptor-control" \
+        "$OUT/descriptor-control.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -228,6 +234,21 @@ fi
 if [ -e "$posix_fd_path" ]; then
     echo "tiny-c POSIX descriptor integration left filesystem state behind" >&2
     rm -f "$posix_fd_path"
+    exit 1
+fi
+
+descriptor_source="$OUT/descriptor-control-source.tmp"
+descriptor_target="$OUT/descriptor-control-target.tmp"
+rm -f "$descriptor_source" "$descriptor_target"
+descriptor_output=$("$OUT/descriptor-control" "$descriptor_source" "$descriptor_target")
+if [ "$descriptor_output" != "descriptor-control-ok" ]; then
+    echo "unexpected tiny-c descriptor control output: $descriptor_output" >&2
+    rm -f "$descriptor_source" "$descriptor_target"
+    exit 1
+fi
+if [ -e "$descriptor_source" ] || [ -e "$descriptor_target" ]; then
+    echo "tiny-c descriptor control integration left filesystem state behind" >&2
+    rm -f "$descriptor_source" "$descriptor_target"
     exit 1
 fi
 
@@ -423,6 +444,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/buffering"
 ./tests/verify-no-host-libc.sh "$OUT/pathname"
 ./tests/verify-no-host-libc.sh "$OUT/posix-fd"
+./tests/verify-no-host-libc.sh "$OUT/descriptor-control"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"

@@ -93,6 +93,21 @@ if [ -e "$posix_path_source" ] || [ -e "$posix_path_target" ] ||
     exit 1
 fi
 
+descriptor_source=build/descriptor-control-source.tmp
+descriptor_target=build/descriptor-control-target.tmp
+rm -f "$descriptor_source" "$descriptor_target"
+descriptor_output="$(./build/descriptor_control_probe "$descriptor_source" "$descriptor_target")"
+if [ "$descriptor_output" != "descriptor-control-ok" ]; then
+    echo "unexpected descriptor control output: $descriptor_output" >&2
+    rm -f "$descriptor_source" "$descriptor_target"
+    exit 1
+fi
+if [ -e "$descriptor_source" ] || [ -e "$descriptor_target" ]; then
+    echo "descriptor control probe left filesystem state behind" >&2
+    rm -f "$descriptor_source" "$descriptor_target"
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"

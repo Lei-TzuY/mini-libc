@@ -44,8 +44,9 @@ LIB_OBJS := $(BUILD)/start.o $(BUILD)/termination.o $(BUILD)/syscall.o \
             $(BUILD)/stdio.o $(BUILD)/format.o $(BUILD)/format_entry.o \
             $(BUILD)/scan.o $(BUILD)/float_parse.o $(BUILD)/scan_entry.o \
             $(BUILD)/file_stream.o $(BUILD)/block_io.o $(BUILD)/position.o \
-            $(BUILD)/posix_fd.o $(BUILD)/posix_path.o $(BUILD)/metadata.o \
-            $(BUILD)/dirent.o $(BUILD)/time.o $(BUILD)/errno.o
+            $(BUILD)/posix_fd.o $(BUILD)/descriptor_control.o \
+            $(BUILD)/posix_path.o $(BUILD)/metadata.o $(BUILD)/dirent.o \
+            $(BUILD)/time.o $(BUILD)/errno.o
 PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/memory_probe $(BUILD)/string_probe $(BUILD)/strtok_probe \
             $(BUILD)/strerror_probe $(BUILD)/ctype_probe $(BUILD)/bsearch_probe \
@@ -54,8 +55,9 @@ PROGRAMS := $(BUILD)/hello $(BUILD)/runtime_probe $(BUILD)/syscall_probe \
             $(BUILD)/allocator_probe $(BUILD)/calloc_probe \
             $(BUILD)/realloc_probe $(BUILD)/getenv_probe $(BUILD)/stdio_probe \
             $(BUILD)/file_stream_probe $(BUILD)/block_io_probe $(BUILD)/scan_probe \
-            $(BUILD)/posix_fd_probe $(BUILD)/posix_path_probe \
-            $(BUILD)/metadata_probe $(BUILD)/dirent_probe $(BUILD)/time_probe
+            $(BUILD)/posix_fd_probe $(BUILD)/descriptor_control_probe \
+            $(BUILD)/posix_path_probe $(BUILD)/metadata_probe \
+            $(BUILD)/dirent_probe $(BUILD)/time_probe
 HOST_TESTS := $(BUILD)/memory_differential $(BUILD)/string_differential \
               $(BUILD)/strtok_differential $(BUILD)/bsearch_differential \
               $(BUILD)/atoi_differential $(BUILD)/strtol_differential \
@@ -85,6 +87,11 @@ $(BUILD)/syscall.o: src/syscall/syscall.S | $(BUILD)
 $(BUILD)/posix_fd.o: src/unistd/fd.c include/unistd.h include/fcntl.h \
                      include/sys/types.h include/stdarg.h include/stddef.h \
                      include/errno.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/descriptor_control.o: src/unistd/control.c include/unistd.h \
+                               include/fcntl.h include/stdarg.h \
+                               include/errno.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path.o: src/unistd/path.c include/unistd.h include/fcntl.h \
@@ -190,6 +197,12 @@ $(BUILD)/syscall_probe.o: tests/syscall_probe.c include/mini/syscall.h | $(BUILD
 $(BUILD)/posix_fd_probe.o: tests/posix_fd_probe.c include/unistd.h include/fcntl.h \
                            include/sys/types.h include/errno.h include/stdio.h \
                            include/string.h include/mini/syscall.h | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/descriptor_control_probe.o: tests/descriptor_control_probe.c \
+                                    include/unistd.h include/fcntl.h \
+                                    include/errno.h include/string.h \
+                                    include/sys/stat.h include/mini/syscall.h | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/posix_path_probe.o: tests/posix_path_probe.c include/unistd.h \
@@ -363,6 +376,9 @@ $(BUILD)/syscall_probe: $(BUILD)/syscall_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_fd_probe: $(BUILD)/posix_fd_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_fd_probe.o $(CRT0) $(LIBC)
+
+$(BUILD)/descriptor_control_probe: $(BUILD)/descriptor_control_probe.o $(CRT0) $(LIBC)
+	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/descriptor_control_probe.o $(CRT0) $(LIBC)
 
 $(BUILD)/posix_path_probe: $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
 	$(LD) -static -e _start --build-id=none -o $@ $(BUILD)/posix_path_probe.o $(CRT0) $(LIBC)
