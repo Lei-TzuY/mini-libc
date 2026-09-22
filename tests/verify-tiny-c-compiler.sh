@@ -43,6 +43,8 @@ done
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
     -o "$OUT/metadata.o"
+"$MINICC" -nostdinc -Iinclude -c tests/dirent_probe.c \
+    -o "$OUT/dirent.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_rebind_integration.c \
     -o "$OUT/rebind.o"
 "$MINICC" -nostdinc -Iinclude -c tests/tiny_time_integration.c \
@@ -85,6 +87,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
         "$OUT/metadata.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/dirent" \
+        "$OUT/dirent.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/time" \
@@ -127,6 +131,8 @@ else
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
         "$OUT/metadata.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/dirent" \
+        "$OUT/dirent.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/rebind" \
         "$OUT/rebind.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/time" \
@@ -258,6 +264,27 @@ fi
 if [ -e "$metadata_path" ]; then
     echo "tiny-c metadata integration left filesystem state behind" >&2
     rm -f "$metadata_path"
+    exit 1
+fi
+
+dirent_root="$OUT/dirent-root.tmp"
+rm -rf "$dirent_root"
+mkdir -p "$dirent_root/subdir"
+dirent_i=0
+while [ "$dirent_i" -lt 180 ]; do
+    : > "$dirent_root/filler-$dirent_i"
+    dirent_i=$((dirent_i + 1))
+done
+dirent_output=$("$OUT/dirent" "$dirent_root")
+if [ "$dirent_output" != "dirent-ok" ]; then
+    echo "unexpected tiny-c dirent output: $dirent_output" >&2
+    rm -rf "$dirent_root"
+    exit 1
+fi
+rm -f "$dirent_root"/filler-*
+if ! rmdir "$dirent_root"; then
+    echo "tiny-c dirent integration left filesystem state behind" >&2
+    rm -rf "$dirent_root"
     exit 1
 fi
 
@@ -398,6 +425,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/posix-fd"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
+./tests/verify-no-host-libc.sh "$OUT/dirent"
 ./tests/verify-no-host-libc.sh "$OUT/rebind"
 ./tests/verify-no-host-libc.sh "$OUT/time"
 ./tests/verify-no-host-libc.sh "$OUT/termination"

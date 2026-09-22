@@ -27,6 +27,7 @@ long mini_sys_futex(volatile int *uaddr, int op, int value,
                     const void *timeout, volatile int *uaddr2, int value3);
 long mini_sys_tgkill(int tgid, int tid, int sig);
 long mini_sys_ftruncate(int fd, long length);
+long mini_sys_getdents64(int fd, void *dirp, unsigned long count);
 long mini_sys_openat(int dirfd, const char *path, int flags, unsigned int mode);
 long mini_sys_newfstatat(int dirfd, const char *path, void *statbuf, int flags);
 long mini_sys_unlinkat(int dirfd, const char *path, int flags);

@@ -164,6 +164,14 @@ mini_sys_ftruncate:
     ret
     .size mini_sys_ftruncate, .-mini_sys_ftruncate
 
+    .globl mini_sys_getdents64
+    .type mini_sys_getdents64, @function
+mini_sys_getdents64:
+    movl $217, %eax
+    syscall
+    ret
+    .size mini_sys_getdents64, .-mini_sys_getdents64
+
     .globl mini_sys_openat
     .type mini_sys_openat, @function
 mini_sys_openat:

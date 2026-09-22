@@ -7,6 +7,7 @@
 #define EBADF 9
 #define ENOMEM 12
 #define EEXIST 17
+#define ENOTDIR 20
 #define EISDIR 21
 #define EINVAL 22
 #define EDOM 33
