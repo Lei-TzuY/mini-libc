@@ -153,6 +153,12 @@ if [ "$spawn_output" != "posix-spawn-ok" ]; then
     exit 1
 fi
 
+control_output="$(./build/process_control_probe)"
+if [ "$control_output" != "process-control-ok" ]; then
+    echo "unexpected process control output: $control_output" >&2
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"
