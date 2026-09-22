@@ -304,6 +304,23 @@ This coordination layer does not relax the multithreaded post-fork safety
 boundary: handlers themselves and child code remain responsible for the
 async-signal-safe restrictions that apply until `execve`.
 
+`<sys/resource.h>` adds a bounded file-size resource-control surface with
+`getrlimit`, `setrlimit`, `struct rlimit`, `rlim_t`, `RLIMIT_FSIZE`, and
+`RLIM_INFINITY`. The x86-64 backend uses the native `getrlimit` and `setrlimit`
+syscalls, preserves caller `errno` on success, and exposes `EFBIG` plus
+`SIGXFSZ` for executable file-growth enforcement.
+
+`tests/resource_limit_probe.c` isolates limit mutation inside a fork child.
+The child first proves it inherited the parent's `RLIMIT_FSIZE`, lowers only
+the soft limit to four bytes, confirms an invalid soft-greater-than-hard limit
+fails with `EINVAL`, and ignores `SIGXFSZ`. A four-byte write then succeeds,
+the next byte fails with `EFBIG`, and `fstat` proves the file remains exactly
+four bytes. After reaping the child, the parent proves its own original limit
+is unchanged, reopens the file, verifies the exact `ABCD` contents, and cleans
+the path. Invalid resource lookup also locks the `EINVAL` boundary. The same
+executable runs through pinned tiny-c-compiler plus GNU ld and
+mini-elf-toolchain.
+
 ## Next architectural promotion
 
 Descriptor opening/I/O, pathname lifecycle, file sizing, and metadata now form
@@ -316,11 +333,12 @@ Bad descriptors, negative lengths, and missing paths exercise
 tiny-c-compiler and both GNU ld and mini-elf-toolchain.
 
 Descriptor I/O, filesystem namespace state, IPC/readiness, process launch,
-targeted/group signaling, process groups, sessions, and bounded atfork
-coordination now form one executable Unix process-control baseline. This
-atfork phase is closed; further work should cross into a genuinely new control
-plane rather than add more fork aliases or handler variants. A fresh audit
-should prefer deterministic controlling-terminal/job-control semantics only if
-a self-contained pseudo-terminal harness is available, otherwise another
-independent process capability such as credentials or resource limits. The
-async-signal-safe child boundary remains explicit after multithreaded fork.
+targeted/group signaling, process groups, sessions, bounded atfork
+coordination, and per-process resource limits now form one executable Unix
+process-control baseline. The resource-limit phase is closed at a real kernel
+enforcement boundary rather than API breadth. The next promotion should move
+to another independent control plane—credentials/identity policy, or
+deterministic controlling-terminal/job-control once a self-contained PTY
+harness exists—rather than enumerate more rlimit constants without executable
+need. The async-signal-safe child boundary remains explicit after
+multithreaded fork.

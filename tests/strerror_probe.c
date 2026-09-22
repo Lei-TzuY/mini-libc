@@ -43,6 +43,7 @@ int main(int argc, char **argv, char **envp)
         !same_string(strerror(ENOTDIR), "Not a directory") ||
         !same_string(strerror(EISDIR), "Is a directory") ||
         !same_string(strerror(EINVAL), "Invalid argument") ||
+        !same_string(strerror(EFBIG), "File too large") ||
         !same_string(strerror(EPIPE), "Broken pipe") ||
         !same_string(strerror(EDOM), "Numerical argument out of domain") ||
         !same_string(strerror(ERANGE), "Numerical result out of range") ||

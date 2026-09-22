@@ -177,6 +177,20 @@ if [ "$atfork_output" != "atfork-coordination-ok" ]; then
     exit 1
 fi
 
+resource_path=build/resource-limit.tmp
+rm -f "$resource_path"
+resource_output="$(./build/resource_limit_probe "$resource_path")"
+if [ "$resource_output" != "resource-limit-ok" ]; then
+    echo "unexpected resource limit output: $resource_output" >&2
+    rm -f "$resource_path"
+    exit 1
+fi
+if [ -e "$resource_path" ]; then
+    echo "resource limit probe left filesystem state behind" >&2
+    rm -f "$resource_path"
+    exit 1
+fi
+
 metadata_path=build/metadata-probe.tmp
 rm -f "$metadata_path"
 metadata_output="$(./build/metadata_probe "$metadata_path" build)"

@@ -65,6 +65,8 @@ done
     -o "$OUT/session-hierarchy.o"
 "$MINICC" -nostdinc -Iinclude -c tests/atfork_probe.c \
     -o "$OUT/atfork.o"
+"$MINICC" -nostdinc -Iinclude -c tests/resource_limit_probe.c \
+    -o "$OUT/resource-limit.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -135,6 +137,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/session-hierarchy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/atfork" \
         "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/resource-limit" \
+        "$OUT/resource-limit.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -205,6 +209,8 @@ else
         "$OUT/session-hierarchy.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/atfork" \
         "$OUT/atfork.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/resource-limit" \
+        "$OUT/resource-limit.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -390,6 +396,20 @@ fi
 atfork_output=$("$OUT/atfork")
 if [ "$atfork_output" != "atfork-coordination-ok" ]; then
     echo "unexpected tiny-c atfork coordination output: $atfork_output" >&2
+    exit 1
+fi
+
+resource_path="$OUT/resource-limit.tmp"
+rm -f "$resource_path"
+resource_output=$("$OUT/resource-limit" "$resource_path")
+if [ "$resource_output" != "resource-limit-ok" ]; then
+    echo "unexpected tiny-c resource limit output: $resource_output" >&2
+    rm -f "$resource_path"
+    exit 1
+fi
+if [ -e "$resource_path" ]; then
+    echo "tiny-c resource limit integration left filesystem state behind" >&2
+    rm -f "$resource_path"
     exit 1
 fi
 
@@ -598,6 +618,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/process-group"
 ./tests/verify-no-host-libc.sh "$OUT/session-hierarchy"
 ./tests/verify-no-host-libc.sh "$OUT/atfork"
+./tests/verify-no-host-libc.sh "$OUT/resource-limit"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
