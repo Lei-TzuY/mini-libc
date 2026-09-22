@@ -45,6 +45,8 @@ done
     -o "$OUT/cwd-state.o"
 "$MINICC" -nostdinc -Iinclude -c tests/pipe_ipc_probe.c \
     -o "$OUT/pipe-ipc.o"
+"$MINICC" -nostdinc -Iinclude -c tests/poll_readiness_probe.c \
+    -o "$OUT/poll-readiness.o"
 "$MINICC" -nostdinc -Iinclude -c tests/posix_path_probe.c \
     -o "$OUT/posix-path.o"
 "$MINICC" -nostdinc -Iinclude -c tests/metadata_probe.c \
@@ -95,6 +97,8 @@ if [ -n "${MINI_ELF_LINKER:-}" ]; then
         "$OUT/cwd-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/pipe-ipc" \
         "$OUT/pipe-ipc.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$MINI_ELF_LINKER" link -o "$OUT/poll-readiness" \
+        "$OUT/poll-readiness.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$MINI_ELF_LINKER" link -o "$OUT/metadata" \
@@ -145,6 +149,8 @@ else
         "$OUT/cwd-state.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/pipe-ipc" \
         "$OUT/pipe-ipc.o" "$OUT/crt0.o" "$OUT/libc.a"
+    "$LD" -static -e _start --build-id=none -o "$OUT/poll-readiness" \
+        "$OUT/poll-readiness.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/posix-path" \
         "$OUT/posix-path.o" "$OUT/crt0.o" "$OUT/libc.a"
     "$LD" -static -e _start --build-id=none -o "$OUT/metadata" \
@@ -282,6 +288,12 @@ fi
 pipe_output=$("$OUT/pipe-ipc")
 if [ "$pipe_output" != "pipe-ipc-ok" ]; then
     echo "unexpected tiny-c pipe IPC output: $pipe_output" >&2
+    exit 1
+fi
+
+poll_output=$("$OUT/poll-readiness")
+if [ "$poll_output" != "poll-readiness-ok" ]; then
+    echo "unexpected tiny-c poll readiness output: $poll_output" >&2
     exit 1
 fi
 
@@ -480,6 +492,7 @@ fi
 ./tests/verify-no-host-libc.sh "$OUT/descriptor-control"
 ./tests/verify-no-host-libc.sh "$OUT/cwd-state"
 ./tests/verify-no-host-libc.sh "$OUT/pipe-ipc"
+./tests/verify-no-host-libc.sh "$OUT/poll-readiness"
 ./tests/verify-no-host-libc.sh "$OUT/posix-path"
 ./tests/verify-no-host-libc.sh "$OUT/metadata"
 ./tests/verify-no-host-libc.sh "$OUT/dirent"
