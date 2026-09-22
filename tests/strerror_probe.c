@@ -36,6 +36,7 @@ int main(int argc, char **argv, char **envp)
     if (!same_string(strerror(ENOENT), "No such file or directory") ||
         !same_string(strerror(ENOMEM), "Cannot allocate memory") ||
         !same_string(strerror(EEXIST), "File exists") ||
+        !same_string(strerror(EISDIR), "Is a directory") ||
         !same_string(strerror(EINVAL), "Invalid argument") ||
         !same_string(strerror(EDOM), "Numerical argument out of domain") ||
         !same_string(strerror(ERANGE), "Numerical result out of range") ||
