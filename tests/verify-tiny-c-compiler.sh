@@ -270,12 +270,18 @@ fi
 dirent_root="$OUT/dirent-root.tmp"
 rm -rf "$dirent_root"
 mkdir -p "$dirent_root/subdir"
+dirent_i=0
+while [ "$dirent_i" -lt 180 ]; do
+    : > "$dirent_root/filler-$dirent_i"
+    dirent_i=$((dirent_i + 1))
+done
 dirent_output=$("$OUT/dirent" "$dirent_root")
 if [ "$dirent_output" != "dirent-ok" ]; then
     echo "unexpected tiny-c dirent output: $dirent_output" >&2
     rm -rf "$dirent_root"
     exit 1
 fi
+rm -f "$dirent_root"/filler-*
 if ! rmdir "$dirent_root"; then
     echo "tiny-c dirent integration left filesystem state behind" >&2
     rm -rf "$dirent_root"
