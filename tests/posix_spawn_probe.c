@@ -71,6 +71,9 @@ int main(int argc, char **argv)
     pid_t missing_child;
     thrd_t thread;
 
+    pipefd[0] = -1;
+    pipefd[1] = -1;
+
     if (argc != 2) {
         return 1;
     }
