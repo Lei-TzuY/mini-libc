@@ -64,6 +64,30 @@ mini_sys_lseek:
     ret
     .size mini_sys_lseek, .-mini_sys_lseek
 
+    .globl mini_sys_getcwd
+    .type mini_sys_getcwd, @function
+mini_sys_getcwd:
+    movl $79, %eax
+    syscall
+    ret
+    .size mini_sys_getcwd, .-mini_sys_getcwd
+
+    .globl mini_sys_chdir
+    .type mini_sys_chdir, @function
+mini_sys_chdir:
+    movl $80, %eax
+    syscall
+    ret
+    .size mini_sys_chdir, .-mini_sys_chdir
+
+    .globl mini_sys_fchdir
+    .type mini_sys_fchdir, @function
+mini_sys_fchdir:
+    movl $81, %eax
+    syscall
+    ret
+    .size mini_sys_fchdir, .-mini_sys_fchdir
+
     .globl mini_sys_sched_yield
     .type mini_sys_sched_yield, @function
 mini_sys_sched_yield:
