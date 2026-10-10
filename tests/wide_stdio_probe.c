@@ -3,6 +3,7 @@
 #include <mini/syscall.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include <wchar.h>
 
 static int fail(FILE *stream, int code)
@@ -11,6 +12,103 @@ static int fail(FILE *stream, int code)
         (void)fclose(stream);
     }
     (void)remove("build/wide-stdio-probe.tmp");
+    return code;
+}
+
+static int check_precision_bounds(void)
+{
+    static const wchar_t invalid_tail[] = {'A', (wchar_t)0x110000, 0};
+    char output[16];
+    wchar_t wide_output[16];
+    char *page;
+    char *narrow_edge;
+    wchar_t *wide_edge;
+    long mapping;
+    int code = 0;
+
+    if (setlocale(LC_CTYPE, "C") == (char *)0) {
+        return 200;
+    }
+    errno = ERANGE;
+    if (snprintf(output, sizeof(output), "%.1ls", invalid_tail) != 1 ||
+        output[0] != 'A' || output[1] != '\0' || errno != ERANGE ||
+        swprintf(wide_output, 16U, L"%.1ls", invalid_tail) != 1 ||
+        wide_output[0] != L'A' || wide_output[1] != 0 || errno != ERANGE ||
+        snprintf(output, sizeof(output), "%.0ls", invalid_tail + 1) != 0 ||
+        output[0] != '\0' || errno != ERANGE ||
+        swprintf(wide_output, 16U, L"%.0ls", invalid_tail + 1) != 0 ||
+        wide_output[0] != 0 || errno != ERANGE) {
+        (void)fprintf(stderr, "precision bound converted an unused wide character\n");
+        return 201;
+    }
+    errno = 0;
+    if (snprintf(output, sizeof(output), "%.2ls", invalid_tail) != EOF ||
+        errno != EILSEQ) {
+        return 202;
+    }
+
+    /* Own two native pages, then unmap the second. The nonterminated source
+     * ends at the first page boundary; reading one extra unit must fault. */
+    mapping = mini_sys_mmap((void *)0, 8192UL, 3, 34, -1, 0L);
+    if (mapping < 0) {
+        return 203;
+    }
+    page = (char *)mapping;
+    if (mini_sys_munmap(page + 4096, 4096UL) != 0) {
+        (void)mini_sys_munmap(page, 8192UL);
+        return 204;
+    }
+    narrow_edge = page + 4095;
+    wide_edge = (wchar_t *)(void *)(page + 4096 - sizeof(wchar_t));
+
+    *narrow_edge = 'A';
+    errno = ERANGE;
+    if (snprintf(output, sizeof(output), "[%3.*s]", 1, narrow_edge) != 5 ||
+        strcmp(output, "[  A]") != 0 || errno != ERANGE ||
+        swprintf(wide_output, 16U, L"%.1s", narrow_edge) != 1 ||
+        wide_output[0] != L'A' || wide_output[1] != 0 || errno != ERANGE) {
+        code = 205;
+    }
+    *wide_edge = L'A';
+    errno = ERANGE;
+    if (code == 0 &&
+        (snprintf(output, sizeof(output), "%.1ls", wide_edge) != 1 ||
+         output[0] != 'A' || output[1] != '\0' || errno != ERANGE ||
+         swprintf(wide_output, 16U, L"[%3.*ls]", 1, wide_edge) != 5 ||
+         wcscmp(wide_output, L"[  A]") != 0 || errno != ERANGE)) {
+        code = 206;
+    }
+
+    if (code == 0 && setlocale(LC_CTYPE, "C.UTF-8") == (char *)0) {
+        code = 207;
+    }
+    *wide_edge = (wchar_t)0x03b1;
+    errno = ERANGE;
+    if (code == 0 &&
+        (snprintf(output, sizeof(output), "%.1ls", wide_edge) != 0 ||
+         output[0] != '\0' || errno != ERANGE ||
+         snprintf(output, sizeof(output), "%.2ls", wide_edge) != 2 ||
+         (unsigned char)output[0] != 0xceU ||
+         (unsigned char)output[1] != 0xb1U || output[2] != '\0' ||
+         errno != ERANGE)) {
+        code = 208;
+    }
+    narrow_edge = page + 4094;
+    narrow_edge[0] = (char)0xce;
+    narrow_edge[1] = (char)0xb1;
+    errno = ERANGE;
+    if (code == 0 &&
+        (swprintf(wide_output, 16U, L"%.1s", narrow_edge) != 1 ||
+         wide_output[0] != (wchar_t)0x03b1 || wide_output[1] != 0 ||
+         errno != ERANGE)) {
+        code = 209;
+    }
+    if (mini_sys_munmap(page, 4096UL) != 0 && code == 0) {
+        code = 210;
+    }
+    if (setlocale(LC_CTYPE, "C") == (char *)0 && code == 0) {
+        code = 211;
+    }
     return code;
 }
 
@@ -155,6 +253,13 @@ int main(void)
     FILE *stream;
     int count;
 
+    {
+        int precision_status = check_precision_bounds();
+
+        if (precision_status != 0) {
+            return fail((FILE *)0, precision_status);
+        }
+    }
     (void)remove(path);
     stream = fopen(path, "w+");
     if (stream == (FILE *)0) {

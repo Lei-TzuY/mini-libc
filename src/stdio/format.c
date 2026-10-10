@@ -397,8 +397,8 @@ static size_t string_length_limit(const char *s, int precision_set,
 {
     size_t length = 0;
 
-    while (s[length] != '\0' &&
-           (!precision_set || length < (size_t)precision)) {
+    while ((!precision_set || length < (size_t)precision) &&
+           s[length] != '\0') {
         ++length;
     }
     return length;
@@ -535,20 +535,22 @@ static int emit_wide_string(struct mini_format_sink *sink,
         value = null_text;
     }
 
-    while (value[characters] != 0) {
+    while (!spec->precision_set ||
+           (sink->wide_semantics ? characters : bytes_total) <
+               (size_t)spec->precision) {
         char bytes[4];
-        size_t length = encode_wide_value(value[characters], sink->utf8, bytes);
+        size_t length;
+
+        if (value[characters] == 0) {
+            break;
+        }
+        length = encode_wide_value(value[characters], sink->utf8, bytes);
 
         if (length == (size_t)-1) {
             return EOF;
         }
-        if (sink->wide_semantics) {
-            if (spec->precision_set &&
-                characters >= (size_t)spec->precision) {
-                break;
-            }
-        } else if (spec->precision_set &&
-                   bytes_total + length > (size_t)spec->precision) {
+        if (!sink->wide_semantics && spec->precision_set &&
+            length > (size_t)spec->precision - bytes_total) {
             break;
         }
         if (bytes_total > (size_t)-1 - length) {
@@ -597,9 +599,9 @@ static int emit_multibyte_string_wide(struct mini_format_sink *sink,
     }
 
     cursor = value;
-    while (*cursor != '\0' &&
-           (!spec->precision_set ||
-            characters < (size_t)spec->precision)) {
+    while ((!spec->precision_set ||
+            characters < (size_t)spec->precision) &&
+           *cursor != '\0') {
         size_t length;
 
         if (!decode_multibyte_character(cursor, sink->utf8, &length)) {

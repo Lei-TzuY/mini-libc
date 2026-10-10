@@ -17,6 +17,31 @@ static int tiny_vsnprintf(char *buffer, size_t size, const char *format, ...)
     return result;
 }
 
+static int tiny_precision_bounds(void)
+{
+    static const wchar_t wide[] = {'A', (wchar_t)0x110000, 0};
+    static const wchar_t wide_format[] = {'[', '%', '3', '.', '*', 'l', 's', ']', 0};
+    static const wchar_t narrow_format[] = {'%', '.', '*', 's', 0};
+    static const wchar_t expected[] = {'[', ' ', ' ', 'A', ']', 0};
+    static const char bounded[] = {'A'};
+    char output[16];
+    wchar_t wide_output[16];
+
+    if (tiny_vsnprintf(output, sizeof(output), "[%3.*ls]", 1, wide) != 5 ||
+        strcmp(output, "[  A]") != 0 || errno != EIO ||
+        tiny_vsnprintf(output, sizeof(output), "%.0ls", wide + 1) != 0 ||
+        output[0] != '\0' || errno != EIO ||
+        swprintf(wide_output, 16U, wide_format, 1, wide) != 5 ||
+        wcscmp(wide_output, expected) != 0 || errno != EIO ||
+        tiny_vsnprintf(output, sizeof(output), "%.1s", bounded) != 1 ||
+        strcmp(output, "A") != 0 || errno != EIO ||
+        swprintf(wide_output, 16U, narrow_format, 1, bounded) != 1 ||
+        wide_output[0] != 'A' || wide_output[1] != 0 || errno != EIO) {
+        return 1;
+    }
+    return 0;
+}
+
 static int tiny_vfprintf(FILE *stream, const char *format, ...)
 {
     va_list ap;
@@ -361,6 +386,12 @@ int main(int argc, char **argv, char **envp)
     if (tiny_va_sum(7, 1, 2, 3, 4, 5, 6, 7) != 28 || errno != EIO) {
         free(buffer);
         return 16;
+    }
+
+    if (tiny_precision_bounds() != 0) {
+        (void)fprintf(stderr, "tiny-c precision-bound formatting failed\n");
+        free(buffer);
+        return 48;
     }
 
     formatted = snprintf(format_buffer, sizeof(format_buffer),
